@@ -8,6 +8,17 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+### `STARTUP` — build a machine's boot list at the prompt
+
+A machine file's `startup = [...]` is the operator's keystrokes written down — `MOUNT` the disk,
+`LOAD` the loader, `RUN`. Until now the only way to compose that list was to hand-edit the TOML
+(with the quote-escaping a path with a space needs), because nothing in the monitor wrote to it:
+`CONFIG SAVE` round-tripped whatever was loaded, but a machine loaded without a `startup` block
+saved without one. The new **`STARTUP`** command edits the list in place — `STARTUP ADD <command>`
+appends a line exactly as typed, `STARTUP REMOVE <n>` drops one, `STARTUP CLEAR` empties it, and a
+bare `STARTUP` shows it numbered. `ADD` stores the rest of the line verbatim, quotes and all, so a
+boot sequence you assemble at the prompt is what `CONFIG SAVE` writes and `CONFIG LOAD` reads back.
+
 ### A `telnet:` endpoint, so a human telnets in without the double echo
 
 `CONNECT`ing a unit to a plain `socket:PORT` gives you a raw pipe — which is right for wiring

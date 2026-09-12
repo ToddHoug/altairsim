@@ -1063,6 +1063,32 @@ SNAPSHOT before-boot.snap
 ```
 
 
+### STARTUP — `STA[RTUP]`
+
+```
+STARTUP [ADD <command> | REMOVE <n> | CLEAR]
+```
+The machine's boot list -- the commands a config replays on load, and what CONFIG
+SAVE writes out as startup = [...]. A bare STARTUP shows the list, numbered; the
+rest edit it in place, so you can compose a boot sequence at the prompt and save it:
+
+```
+STARTUP                          show the list, numbered
+STARTUP ADD MOUNT dsk0:drive0 "CP-M 2.2.dsk"   append a line, verbatim
+STARTUP REMOVE 2                 drop line 2
+STARTUP CLEAR                    empty the list
+```
+
+
+ADD takes the REST OF THE LINE exactly as typed -- quotes, spaces and all -- because
+a startup entry is just a command line: anything valid at the prompt is valid in the
+list, so it is stored unchecked, the same as a line you write in the file by hand.
+
+```
+STA ADD RUN FF00
+```
+
+
 ### UNMOUNT — `U[NMOUNT]`
 
 ```
