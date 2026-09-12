@@ -292,7 +292,7 @@ void test_modemline() {
                           while ((r = caller->read(b, sizeof b)) > 0) wire.append((const char*)b, r); }
                       m.pump(); },
                 [&] { return wire.size() >= 4; });
-        const std::string wantWire = {'A', (char)0xFF, (char)0xFF, 'B'};
+        const std::string wantWire = {'A', '\xFF', '\xFF', 'B'};
         CHECK(wire == wantWire, "a data 0xFF is doubled (IAC IAC) on the way out");
 
         m.hangup();

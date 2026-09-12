@@ -104,7 +104,7 @@ void test_telnet() {
                       if (client) resp += drain(client.get()); },
                 [&] { return got.size() >= 5 && resp.size() >= 3; });
 
-        const std::string wantData = {'A', 'B', '\r', (char)0xFF, 'Z'};
+        const std::string wantData = {'A', 'B', '\r', '\xFF', 'Z'};
         CHECK(got == wantData,
               "inbound IAC stripped, CR LF folds to CR, IAC IAC yields one literal 0xFF");
         const std::string wantResp = {(char)IAC, (char)DONT, 24};
@@ -118,7 +118,7 @@ void test_telnet() {
                       if (stream) stream->pump();
                       if (client) wire += drain(client.get()); },
                 [&] { return wire.size() >= 4; });
-        const std::string wantWire = {'X', (char)0xFF, (char)0xFF, 'Y'};
+        const std::string wantWire = {'X', '\xFF', '\xFF', 'Y'};
         CHECK(wire == wantWire, "a data 0xFF is doubled (IAC IAC) on the way out");
     }
 
