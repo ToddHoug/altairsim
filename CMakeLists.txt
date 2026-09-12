@@ -366,6 +366,9 @@ add_library(altair_core STATIC
   # `ENDPOINT|FILE` -- a transparent hex TAP on any line (host/tee_stream.h). A
   # decorator ByteStream: it copies bytes past in both directions and forwards the rest,
   # observe-only and 8-bit clean, so it is exempt from the "one FilterStream" rule.
+  # The Telnet NVT protocol (RFC 854) as a pure byte engine, no sockets -- shared by
+  # the telnet: endpoint and the PMMI modem's answer/dial line (host/telnet_codec.h).
+  src/host/telnet_codec.cpp
   # `telnet:PORT` / `telnet:HOST:PORT` -- socket: plus the Telnet protocol handshake
   # (host/telnet_stream.h). A decorator over TcpStream: on a new session it offers
   # WILL ECHO / SGA so a stock `telnet` client drops its local echo and goes
