@@ -6,6 +6,21 @@ as it is now; this document is the record of how it got there.
 
 ---
 
+## Unreleased
+
+### The PMMI modem answers a real BBS
+
+A PMMI configured to answer (`answer=PORT`) now keeps its phone line **plugged in for the life of
+the machine**, instead of only while the guest is holding DTR high. Answer-mode software that waits
+for a ring with the modem on-hook — CBBS is the canonical example — can finally hear the call: it
+sits in its ring-wait loop with DTR low, and an inbound connection rings it, exactly as a real
+auto-answer modem behaves. Dropping DTR now hangs up the current call but leaves the line listening,
+so a caller who dials in after a previous session is answered rather than refused. A caller who hangs
+up **before** being answered is also cleaned up promptly, so the next call still gets through. Plain
+`socket:` endpoints on any board are unchanged.
+
+---
+
 ## 1.0.0
 
 **1.0.0 is the version that says the simulator is what it set out to be.** Where 0.4.0 filled

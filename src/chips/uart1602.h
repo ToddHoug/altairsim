@@ -134,6 +134,10 @@ public:
     LineParams params() const;
     void       programLine();
 
+    // Queue a line for the card to say out loud (Board::drainLog()) -- used by the board
+    // for host facts it has no other channel for, e.g. a modem answer port it could not bind.
+    void log(std::string msg) { log_.push_back(std::move(msg)); }
+
     // What the wire said back, for the card to say out loud (Board::drainLog()). A
     // cable that cannot do 7 data bits is a fact about the world, not a bug.
     std::vector<std::string> drainLog() {

@@ -358,6 +358,15 @@ void PmmiBoard::syncModem() {
         auto ml = std::make_unique<ModemLine>(dialHost_, dialPort_, answerPort_);
         modem_  = ml.get();
         attachStream(std::move(ml));
+        // Plug the phone line in NOW, for the life of the modem -- not on DTR-set. A
+        // real answer-mode BBS (CBBS) sits on-hook (DTR low) in its ring-wait loop and
+        // only raises DTR to PICK UP; the line has to be listening the whole time or it
+        // could never hear the ring that tells it to answer. DTR gates answering, not
+        // whether the wall jack exists. (idempotent; the socket dies with the ModemLine.)
+        if (canAnswer()) {
+            std::string e;
+            if (!modem_->armAnswer(e) && !e.empty()) u_.log(e);
+        }
     } else if (modem_) {
         modem_ = nullptr;
         attachStream(std::make_unique<NullStream>());
@@ -383,9 +392,9 @@ void PmmiBoard::decodeControl0(uint8_t prev) {
         bool riRose = (out0_ & kRi) && !(prev & kRi);
         bool shRose = (out0_ & kSh) && !(prev & kSh);
 
-        if (riRose && modem_->ringing()) {  // ANSWER the ringing line (§7.4.4.2)
-            modem_->answer();
-            modeOriginate_ = false;
+        if (riRose && (out3_ & kDtr) && modem_->ringing()) {  // ANSWER the ringing line
+            modem_->answer();                                 // (§7.4.4.2) -- but only with
+            modeOriginate_ = false;                           // DTR up: off-hook needs it
         }
         // ORIGINATE, if the modem is already enabled and this SH edge is not an answer.
         if (shRose && (out3_ & kDtr) && canDial() && !(out0_ & kRi) &&
@@ -401,9 +410,11 @@ void PmmiBoard::decodeControl0(uint8_t prev) {
 // DTR edge (OUT BA+3). DTR IS the modem enable and the disconnect control (§7.3.4.7):
 //  - 0->1 arms auto-answer (the only thing that opens a socket on an idle modem) and, if
 //    the guest is already off-hook to originate, places the call.
-//  - 1->0 is the authoritative on-hook: drop the call AND the listener, back to no
-//    sockets. (SH going to 0 is NOT a hangup here -- a correct guest clears it after CTS
-//    and pulses it while dialing; DTR is the wire that hangs up.)
+//  - 1->0 is the authoritative on-hook: hang up a live call. The LISTENER stays bound
+//    (the line is plugged in for the modem's life, armed in syncModem), and a caller who
+//    is only ringing is left ringing -- DTR low means "won't pick up", not "unplug".
+//    (SH going to 0 is NOT a hangup here -- a correct guest clears it after CTS and
+//    pulses it while dialing; DTR is the wire that hangs up.)
 void PmmiBoard::decodeControl3(uint8_t prev) {
     if (modemActive()) {
         std::string e;
@@ -418,12 +429,12 @@ void PmmiBoard::decodeControl3(uint8_t prev) {
                 modeOriginate_ = true;
             }
         }
-        if (dtrFell) {  // ON-HOOK. Everything drops.
-            modem_->hangup();
-            apLow_       = false;
-            ctsClearAt_  = 0;
-            apResetAt_   = 0;
-            hsTimeoutAt_ = 0;
+        if (dtrFell) {  // ON-HOOK. Hang up a live call, but KEEP THE LINE PLUGGED IN --
+            modem_->goOnHook();  // the listener stays bound so the next caller can ring,
+            apLow_       = false;  // and a caller who is only ringing keeps ringing. (DTR
+            ctsClearAt_  = 0;      // is the modem's on-hook, not a disconnect of the wall
+            apResetAt_   = 0;      // jack -- CBBS drops DTR after every call and returns to
+            hsTimeoutAt_ = 0;     // its ring-wait loop expecting the port still open.)
         }
         latchAp();
     }
