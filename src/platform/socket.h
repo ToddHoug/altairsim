@@ -29,6 +29,13 @@ public:
     // from "quiet": this one never comes back, and it is what drops carrier.
     virtual bool closed() const = 0;
 
+    // Has the far end hung up, WITHOUT consuming any pending data? A non-destructive
+    // peek (recv MSG_PEEK): true on EOF or a broken connection, false while the line is
+    // merely quiet (open, no data) or still has bytes waiting. This is how a caller who
+    // drops BEFORE being answered is noticed -- a ringing line is never read(), so the
+    // ordinary read()-drives-EOF path (host/modemline.cpp) would never fire for it.
+    virtual bool peerClosed() = 0;
+
     virtual size_t read(uint8_t* buf, size_t n) = 0;
 
     // Returns what it TOOK, which may be less than n when the send buffer is full.

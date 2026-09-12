@@ -120,8 +120,9 @@ void test_modemline() {
                 [&] { return back.size() >= 2; });
         CHECK(back == "HI", ("the guest's bytes reach the caller (got '" + back + "')").c_str());
 
-        // HANG UP. The call socket closes (the caller sees it) and the listener is
-        // dropped, but describe() still reports the configuration.
+        // HANG UP. The call socket closes (the caller sees it) but the LISTENER stays
+        // bound -- the phone is still plugged into the wall -- so describe() round-trips
+        // and, below, a fresh caller rings without any re-arm.
         m.hangup();
         CHECK(!m.carrier(), "hangup() -> carrier down");
         bool gone = waitFor([&] { if (caller) { caller->poll(); uint8_t b[16]; caller->read(b, sizeof b); } },
@@ -129,6 +130,40 @@ void test_modemline() {
         CHECK(gone, "...and the call socket closed under the caller");
         CHECK(m.describe() == "modem:answer=" + std::to_string(port),
               "describe() still round-trips the config after a hangup");
+
+        // THE LINE STAYS PLUGGED IN. A second caller rings with no armAnswer() in between.
+        auto caller2 = platform::connectTcp("127.0.0.1", port, err);
+        bool rang2   = waitFor([&] { if (caller2) caller2->poll(); m.pump(); },
+                               [&] { return m.ringing(); });
+        CHECK(rang2, "hangup() keeps the listener: the next caller rings without re-arming");
+    }
+
+    // -----------------------------------------------------------------------
+    // GHOST CALLER. A caller who hangs up BEFORE we answer is never read() (the ring
+    // gate holds its bytes in the kernel), so the ordinary read-drives-EOF close never
+    // fires. pump() must peek for the far-end close, or the dead ring wedges the
+    // one-at-a-time listener against every later caller.
+    // -----------------------------------------------------------------------
+    SECTION("ModemLine -- an unanswered caller who drops is cleaned up; the next one rings");
+    {
+        std::string err;
+        uint16_t    port = freePort();
+        ModemLine   m("", 0, port);
+        CHECK(m.armAnswer(err), ("armAnswer binds the port: " + err).c_str());
+
+        auto caller = platform::connectTcp("127.0.0.1", port, err);
+        bool rang   = waitFor([&] { if (caller) caller->poll(); m.pump(); },
+                              [&] { return m.ringing(); });
+        CHECK(rang, "caller #1 rings");
+
+        caller.reset();  // hang up WITHOUT being answered
+        bool cleared = waitFor([&] { m.pump(); }, [&] { return !m.ringing(); });
+        CHECK(cleared, "the unanswered drop is noticed via peek -- no ghost ring");
+
+        auto caller2 = platform::connectTcp("127.0.0.1", port, err);
+        bool rang2   = waitFor([&] { if (caller2) caller2->poll(); m.pump(); },
+                               [&] { return m.ringing(); });
+        CHECK(rang2, "the listener was freed: caller #2 rings");
     }
 
     // -----------------------------------------------------------------------

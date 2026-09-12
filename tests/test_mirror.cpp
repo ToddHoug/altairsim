@@ -34,6 +34,7 @@ struct FakeConn : platform::TcpConn {
 
     bool   established() const override { return established_; }
     bool   closed() const override { return closed_; }
+    bool   peerClosed() override { return closed_ && fromClient.empty(); }
     size_t read(uint8_t* buf, size_t n) override {  // watcher -> mirror
         size_t k = fromClient.size() < n ? fromClient.size() : n;
         std::memcpy(buf, fromClient.data(), k);

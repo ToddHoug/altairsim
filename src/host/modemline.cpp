@@ -85,6 +85,12 @@ void ModemLine::pump() {
     if (!conn_) return;
     conn_->poll();
 
+    // A caller who HANGS UP BEFORE WE ANSWER. While ringing, the gate holds offHook_
+    // false, so the drain loop below never runs and read()-drives-EOF never fires --
+    // the dead ring would sit forever and, one-call-at-a-time, wedge the listener
+    // against the next caller. Peek for the far-end close so it is cleaned up here.
+    if (!offHook_ && conn_->peerClosed()) conn_->close();
+
     // An OUTBOUND dial whose handshake has completed: the far end answered.
     if (dialing_ && conn_->established()) dialing_ = false;
 
@@ -129,11 +135,12 @@ LineStatus ModemLine::status() const {
 void ModemLine::setControl(const LineControl& c) {
     if (c.dtr) sawDtr_ = true;
 
-    // THE GUEST HUNG UP. Dropping DTR after having raised it ends the call. The board
-    // in Phase 2 also calls hangup() explicitly, so this is belt-and-suspenders -- it
-    // closes the current call but LEAVES the listener armed (a DTR blip is not a
-    // reconfiguration of the modem). RTS goes nowhere: TCP does its own flow control.
-    if (sawDtr_ && !c.dtr && conn_) dropCall();
+    // THE GUEST HUNG UP. Dropping DTR after having raised it ends an ANSWERED call. The
+    // board in Phase 2 also calls goOnHook() explicitly, so this is belt-and-suspenders
+    // -- it hangs up the live call but leaves the listener bound and any still-ringing
+    // caller ringing (a DTR blip is not a reconfiguration of the modem). RTS goes
+    // nowhere: TCP does its own flow control.
+    if (sawDtr_ && !c.dtr) goOnHook();
 }
 
 // ---------------------------------------------------------------------------
@@ -181,12 +188,22 @@ void ModemLine::answer() {
     offHook_ = true;
 }
 
-// ON-HOOK. Drop the current call AND the listener -- the modem is no longer waiting
-// for anyone. sawDtr_ is left alone: it records that DTR was once raised, which a
-// subsequent power-on reset, not a hangup, is what clears.
+// HANG UP. Drop the current call (answered, ringing, or dialing) but LEAVE THE LISTENER
+// BOUND -- the phone stays plugged into the wall. A real auto-answer modem does not
+// unplug its line when a call ends; the line is bound for the life of the modem (see
+// armAnswer, called at syncModem) and torn down only when the modem itself goes away
+// (the ModemLine is destroyed, closing the socket via RAII). sawDtr_ is left alone.
 void ModemLine::hangup() {
     dropCall();
-    listener_.reset();
+}
+
+// ON-HOOK via DTR. Hang up an ANSWERED call (carrier drops), but do NOT drop a caller
+// who is merely RINGING: DTR low means "the modem will not pick up", not "unplug the
+// line", so an unanswered caller keeps ringing and the listener stays bound. (An
+// answer-mode guest like CBBS sits on-hook -- DTR low -- in its ring-wait loop; that
+// must not tear the line down, or it could never hear a ring in the first place.)
+void ModemLine::goOnHook() {
+    if (offHook_) dropCall();
 }
 
 void ModemLine::dropCall() {

@@ -486,29 +486,91 @@ void test_pmmi() {
         CHECK(g.modem() == 0x43, "and modem status is the fixed 'ready' stub (fork 6)");
     }
 
-    SECTION("PMMI MM-103 -- idle holds no sockets: the answer port refuses until DTR");
+    SECTION("PMMI MM-103 -- answer= plugs the line in for life: an ON-HOOK guest still rings");
     {
+        // The line is bound when answer= is configured, NOT on DTR-set. A real answer-mode
+        // BBS (CBBS) waits for a ring with the modem ON-HOOK (DTR low) and only raises DTR
+        // to pick up -- so the port must be listening the whole time or it could never hear
+        // the ring. (This reverses the old "idle holds no sockets" rule for the listener.)
         uint16_t port = freePort();
         CHECK(port != 0, "got a free port to answer on");
         ModemRig    g("", std::to_string(port));
         std::string err;
 
-        // DTR is low, so armAnswer() has never run: nothing is bound on the port.
-        auto refused = platform::connectTcp("127.0.0.1", port, err);
-        if (refused) {
-            bool closed = waitFor([&] { refused->poll(); g.pump(); },
-                                  [&] { return refused->closed(); });
-            CHECK(closed, "idle modem (DTR low): the answer port refuses -- no listener");
-        } else {
-            CHECK(true, "the answer port refused synchronously (also correct)");
-        }
+        CHECK((g.modem() & kMsAp) != 0, "sanity: on-hook (AP high) -- DTR low after power-on");
 
-        // Raise DTR -> the listener binds, and now a caller RINGS instead of bouncing.
-        g.modemctl(0x7F);  // DTR on, ST inactive
+        // DTR is LOW, yet the caller RINGS -- the wall jack is plugged in regardless of DTR.
         auto caller = platform::connectTcp("127.0.0.1", port, err);
         bool rang   = waitFor([&] { if (caller) caller->poll(); g.pump(); },
                               [&] { return (g.modem() & kMsRinging) == 0; });
-        CHECK(rang, "DTR armed the listener -> the inbound call rings (bit 1 = 0)");
+        CHECK(rang, "on-hook (DTR low) and still ringing: the line is bound for life (bit 1 = 0)");
+
+        // Answer the way CBBS does: raise DTR to pick up, THEN set answer mode (RI). With
+        // DTR low the ring is never answered; DTR up + RI is the pick-up.
+        g.modemctl(0x7F);  // DTR on, ST inactive -> CONNECT's first OUT
+        g.control(0x5E);   // RI set (answer mode) + 8N2 -> answer()
+        bool up = waitFor([&] { if (caller) caller->poll(); g.pump(); },
+                          [&] { return (g.modem() & kMsAp) == 0; });
+        CHECK(up, "DTR up + RI -> the modem picks up (AP low, off-hook)");
+    }
+
+    SECTION("PMMI MM-103 -- a caller who hangs up BEFORE we answer frees the line for the next");
+    {
+        // The ghost-caller cleanup: while ringing, the gate reads nothing off the socket, so
+        // a far-end close is invisible to the ordinary read()-drives-EOF path. Peek-for-close
+        // in ModemLine::pump() must notice it, or the dead ring wedges the one-at-a-time
+        // listener and no later caller can ever get in.
+        uint16_t port = freePort();
+        ModemRig    g("", std::to_string(port));
+        std::string err;
+
+        auto caller = platform::connectTcp("127.0.0.1", port, err);
+        bool rang   = waitFor([&] { if (caller) caller->poll(); g.pump(); },
+                              [&] { return (g.modem() & kMsRinging) == 0; });
+        CHECK(rang, "caller #1 rings");
+
+        caller.reset();  // caller #1 gives up and hangs up, UNANSWERED
+        bool cleared = waitFor([&] { g.pump(); },
+                               [&] { return (g.modem() & kMsRinging) != 0; });
+        CHECK(cleared, "the unanswered drop is noticed: the line stops ringing a ghost");
+
+        auto caller2 = platform::connectTcp("127.0.0.1", port, err);
+        bool rang2   = waitFor([&] { if (caller2) caller2->poll(); g.pump(); },
+                               [&] { return (g.modem() & kMsRinging) == 0; });
+        CHECK(rang2, "and the NEXT caller rings -- the listener was freed, not wedged");
+    }
+
+    SECTION("PMMI MM-103 -- dropping DTR hangs up the call but keeps the line: the next caller rings");
+    {
+        // The "connection refused after a DTR change" fix. CBBS drops DTR after every call
+        // (HANGUP) and returns to its ring-wait loop -- the listener must survive that, or
+        // the next caller is refused.
+        uint16_t port = freePort();
+        ModemRig    g("", std::to_string(port));
+        std::string err;
+
+        g.modemctl(0x7F);  // DTR on
+        auto caller = platform::connectTcp("127.0.0.1", port, err);
+        bool rang   = waitFor([&] { if (caller) caller->poll(); g.pump(); },
+                              [&] { return (g.modem() & kMsRinging) == 0; });
+        CHECK(rang, "caller #1 rings");
+        g.control(0x5E);  // answer -> off-hook
+        bool up = waitFor([&] { if (caller) caller->poll(); g.pump(); },
+                          [&] { return (g.modem() & kMsAp) == 0; });
+        CHECK(up, "and we pick up (AP low)");
+
+        // HANG UP as CBBS does: clear answer mode, drop DTR.
+        g.control(0x00);   // RI/answer mode off, on-hook shadow
+        g.modemctl(0x10);  // DTR low (ST inactive) -> goOnHook, NOT a listener teardown
+        caller.reset();
+        for (int i = 0; i < 5; ++i) g.pump();
+        CHECK((g.modem() & kMsAp) != 0, "the call is hung up: AP back high (on-hook)");
+
+        // The listener is still bound -- a fresh caller RINGS rather than being refused.
+        auto caller2 = platform::connectTcp("127.0.0.1", port, err);
+        bool rang2   = waitFor([&] { if (caller2) caller2->poll(); g.pump(); },
+                               [&] { return (g.modem() & kMsRinging) == 0; });
+        CHECK(rang2, "after DTR drop the next caller still rings -- the line stayed plugged in");
     }
 
     SECTION("PMMI MM-103 -- the Ringing bit toggles across bursts, so a guest counts rings");
