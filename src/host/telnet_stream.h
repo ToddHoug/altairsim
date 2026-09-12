@@ -14,27 +14,20 @@
 // handshake, and this decorator supplies it.
 //
 // A TelnetStream WRAPS a TcpStream (the same decorator shape as TeeStream and
-// MirrorStream) and adds only the protocol layer:
-//
-//   * On each new session (carrier rising edge) it OFFERS the options a terminal
-//     server offers -- WILL ECHO, WILL SUPPRESS-GO-AHEAD, DO SUPPRESS-GO-AHEAD --
-//     which is what makes a stock client turn OFF its local echo and go
-//     character-at-a-time. A dial-OUT (client) offers the mirror image: it asks
-//     the far end to echo (DO ECHO / DO SGA) and never offers to echo itself.
-//   * It STRIPS inbound IAC commands so the guest never sees a negotiation byte,
-//     answering each with the refusing/agreeing verb ONLY when that changes our
-//     advertised state -- which is what keeps the negotiation loop-free.
-//   * It DOUBLES a data 0xFF on the way out (telnet requires it) and folds the
-//     client's `CR NUL` / `CR LF` down to a bare CR on the way in, which is what
-//     the guest's console code expects from a keypress.
+// MirrorStream) and runs a TelnetCodec (host/telnet_codec.h) over the bytes that
+// cross it: on each new session it offers the terminal-server options, strips
+// inbound IAC, doubles a data 0xFF, and folds the client's CR LF / CR NUL to a bare
+// CR. The codec is shared with the PMMI modem's answer/dial line, so a person
+// telnetting in behaves whether the far end is a `telnet:` port or a `dial=`/`answer=`
+// modem.
 //
 // Everything else -- carrier, CTS backpressure, DTR-hangup, the line rate, SHOW --
 // is the wrapped TcpStream's, forwarded verbatim. describe() echoes `telnet:...`,
 // so SHOW and CONFIG SAVE round-trip it.
 
 #include "host/stream.h"
+#include "host/telnet_codec.h"
 
-#include <array>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -56,7 +49,7 @@ public:
     size_t write(const uint8_t* buf, size_t n) override;
 
     // Readability is about DECODED data, not raw bytes: the far end may have sent
-    // nothing but a negotiation, which the parser eats whole in pump().
+    // nothing but a negotiation, which the codec eats whole in pump().
     bool readable() const override { return !rxClean_.empty(); }
     bool writable() const override { return inner_->writable(); }
     bool pacesItself() const override { return inner_->pacesItself(); }
@@ -76,32 +69,13 @@ public:
     std::vector<std::string> drainLog() override { return inner_->drainLog(); }
 
 private:
-    void onConnect();                              // a fresh session: reset + offer options
-    void consume(const uint8_t* buf, size_t n);    // run inbound bytes through the NVT parser
-    void respond(uint8_t verb, uint8_t opt);       // negotiate one option, loop-free
-
     std::unique_ptr<ByteStream> inner_;
     std::string                 spec_;
     bool                        server_;
+    TelnetCodec                 codec_;
 
-    std::string rxClean_;     // decoded data waiting for the guest
-    std::string pendingOut_;  // telnet commands to send (RAW: their 0xFF is protocol)
-
-    bool wasUp_ = false;      // carrier edge, to spot a new session and renegotiate
-
-    // NVT input parser state, persisted across pump() calls so a command split over a
-    // buffer boundary is still parsed correctly.
-    enum class St { Data, Iac, Opt, Sub, SubIac };
-    St      st_        = St::Data;
-    uint8_t verb_      = 0;      // the DO/DONT/WILL/WONT awaiting its option byte
-    bool    lastWasCR_ = false;  // fold the CR's LF/NUL tail
-
-    // Per-option negotiation state -- what we have TOLD the far end about our options
-    // (myState_) and asked of its (hisState_). Tri-state so "never mentioned" is
-    // distinct from "told WONT"; we send a verb only when the target differs from what
-    // we last told, which is the whole of the loop-avoidance.
-    std::array<uint8_t, 256> myState_{};   // MyUnknown / MyWill / MyWont
-    std::array<uint8_t, 256> hisState_{};  // HisUnknown / HisDo / HisDont
+    std::string rxClean_;  // decoded data waiting for the guest
+    bool        wasUp_ = false;  // carrier edge, to spot a new session and renegotiate
 };
 
 } // namespace altair
