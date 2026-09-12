@@ -110,6 +110,7 @@ const struct {
     {"sbc", test_sbc},
     {"lines", test_lines},
     {"modemline", test_modemline},
+    {"telnet", test_telnet},
     {"wd17xx", test_wd17xx},
     {"i8257", test_i8257},
     {"versafloppy", test_versafloppy},

@@ -366,6 +366,11 @@ add_library(altair_core STATIC
   # `ENDPOINT|FILE` -- a transparent hex TAP on any line (host/tee_stream.h). A
   # decorator ByteStream: it copies bytes past in both directions and forwards the rest,
   # observe-only and 8-bit clean, so it is exempt from the "one FilterStream" rule.
+  # `telnet:PORT` / `telnet:HOST:PORT` -- socket: plus the Telnet protocol handshake
+  # (host/telnet_stream.h). A decorator over TcpStream: on a new session it offers
+  # WILL ECHO / SGA so a stock `telnet` client drops its local echo and goes
+  # character-at-a-time, and it strips inbound IAC. socket: stays a raw pipe.
+  src/host/telnet_stream.cpp
   src/host/tee_stream.cpp
   # `ENDPOINT|socket:PORT` -- a live BIDIRECTIONAL mirror of a line over TCP: a human
   # telnets in, watches the session, and can type back onto the wire (issue #381). The
@@ -789,6 +794,7 @@ add_executable(altair_tests
   tests/test_tapemount.cpp
   tests/test_lines.cpp
   tests/test_modemline.cpp
+  tests/test_telnet.cpp
   tests/test_wd17xx.cpp
   tests/test_i8257.cpp
   tests/test_versafloppy.cpp

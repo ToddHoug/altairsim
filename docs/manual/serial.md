@@ -25,8 +25,10 @@ This table is exhaustive. There are no others.
 | `console` | the host terminal — your keyboard and your screen. |
 | `null` | nowhere. Writes vanish. Reads never come. |
 | `loopback` | itself. What the guest writes comes straight back as a read. |
-| `socket:PORT` | **LISTENS** on that TCP port. This is the telnet-in case. |
-| `socket:HOST:PORT` | **CALLS OUT** to that host and that port. |
+| `socket:PORT` | **LISTENS** on that TCP port, as a raw pipe. |
+| `socket:HOST:PORT` | **CALLS OUT** to that host and that port, as a raw pipe. |
+| `telnet:PORT` | **LISTENS** like `socket:PORT`, but speaks the **Telnet protocol** — so a `telnet` client behaves: no double echo, one key at a time. This is the telnet-in case for a **person**. |
+| `telnet:HOST:PORT` | **CALLS OUT** like `socket:HOST:PORT`, taking the telnet client's part. |
 | `serial:DEVICE` | a real serial port on this host. |
 | `in:PATH` | a host file, read-only — a **paper-tape reader**. The file's bytes feed the board. |
 | `out:PATH` | a host file — a **paper-tape punch**. Whatever the board sends is written to it. |
@@ -78,6 +80,32 @@ $ telnet localhost 2323
 The guest is now talking to that window. Your first terminal still has the monitor and
 `^E` in it. This is how you give a machine two terminals, and it is how you drive a program
 that wants a console that is not the one you are sitting at.
+
+### `telnet:` when a person is at the other end
+
+A `socket:` is a raw pipe: it moves bytes and negotiates nothing. That is right when the far
+end is another program, but when a **person** points `telnet` (or `nc`) at it, their terminal
+is left in its own default — it echoes every key locally *and* the guest echoes it back, so
+each character appears twice, and Enter arrives as a whole line with its carriage return
+turned into a line feed. The fix is not on your keyboard; it is to let the two ends negotiate,
+which is what the Telnet protocol is for.
+
+`telnet:` does that. It is `socket:` in every way but one — it speaks Telnet, offering to echo
+and to send a character at a time, so a stock client drops its own echo and stops buffering
+lines the moment it connects:
+
+```
+altairsim> CONNECT sio0:b telnet:2323
+altairsim> RUN
+```
+
+```
+$ telnet localhost 2323
+```
+
+Now the session reads cleanly: one echo, from the guest, and each key reaches it as you press
+it. Reach for `telnet:` whenever a human telnets into a BBS or a monitor, and keep `socket:`
+for wiring one machine to another or for a line you mirror.
 
 ## A terminal in its own window
 

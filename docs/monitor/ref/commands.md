@@ -735,8 +735,9 @@ at your terminal, a telnet session, a real RS-232 port, or nothing at all. No bo
 in the machine knows what any of these words mean.
 
 Endpoints: console | null | loopback | scripted | socket:PORT | socket:HOST:PORT |
-serial:DEVICE | in:PATH | out:PATH | terminal[?emulation=vt100&size=80x24] |
-printer:QUEUE | <endpoint>|FILE | <endpoint>|socket:PORT
+telnet:PORT | telnet:HOST:PORT | serial:DEVICE | in:PATH | out:PATH |
+terminal[?emulation=vt100&size=80x24] | printer:QUEUE | <endpoint>|FILE |
+<endpoint>|socket:PORT
 
 
 ```
@@ -746,6 +747,10 @@ loopback    the unit's own transmit wired back to its receive, for testing
 scripted    a terminal with a caller in place of a human -- what the MCP tools
             and the test suite type into. No tty need exist.
 socket:     PORT alone LISTENS: that is the telnet-in case. HOST:PORT CALLS OUT.
+            A RAW pipe -- no echo, no protocol.
+telnet:     the same, but speaks the Telnet protocol, so a stock `telnet` client
+            gets the terminal-server handshake: no double echo, keys sent one at a
+            time. Use it in place of socket: when a HUMAN telnets in to a BBS.
 serial:     a real port on this host. It is opened at 9600 8N1 and then
             immediately re-programmed by the board, which is the only thing that
             knows what it is strapped to.
@@ -783,6 +788,7 @@ CONN sio0:a console
 CONN sio0:b null
 CONN sio0:b loopback
 CONN sio0:b socket:2323            `telnet localhost 2323` now reaches the guest
+CONN sio0:b telnet:2323            ...the same, but no double echo for a human
 CONN sio0:b socket:bbs.example:23  the guest dials OUT, to somebody else's port
 CONN sio0:b serial:/dev/tty.usbserial-AL009KFH    a real cable, real hardware
 CONN sio0:b serial:COM3                           ...the same, on Windows
