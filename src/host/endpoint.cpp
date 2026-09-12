@@ -7,6 +7,7 @@
 #include "host/mirror_stream.h"
 #include "host/tcp.h"
 #include "host/tee_stream.h"
+#include "host/telnet_stream.h"
 #include "host/terminal/emulations.h"
 #include "host/terminal/emulator.h"
 #include "host/terminal/stream.h"
@@ -63,7 +64,8 @@ bool parseHostPort(const std::string& spec, std::string& host, uint16_t& port,
 std::string endpointHelp(bool all) {
     std::vector<std::string> parts = {
         "console", "null", "loopback", "scripted", "socket:PORT", "socket:HOST:PORT",
-        "serial:DEVICE", "in:PATH", "out:PATH", "terminal[?emulation=vt100&size=80x24]",
+        "telnet:PORT", "telnet:HOST:PORT", "serial:DEVICE", "in:PATH", "out:PATH",
+        "terminal[?emulation=vt100&size=80x24]",
     };
     // `printer:` only where a host print system was found at build time -- absent, the
     // grammar does not advertise a door it cannot open (docs/printing.md 3.1). The docs
@@ -168,6 +170,45 @@ std::function<std::unique_ptr<ByteStream>(const std::string&, std::string&)> reb
                                                                     std::string&       err) {
         return baseFn(rebaseEndpointPaths(spec, rebaseFn), err);
     };
+}
+
+// The `socket:`/`telnet:` body, shared: `PORT` LISTENS, `HOST:PORT` CALLS OUT. The
+// two schemes differ only in what wraps the result (telnet: adds the protocol layer),
+// so the parse -- and every error message the operator sees -- has one home. `scheme`
+// names the keyword for those messages; `spec` is the operator's full text, kept for
+// describe() and the socket debug trace.
+static std::unique_ptr<ByteStream> makeTcpStream(const std::string& rest,
+                                                 const std::string& spec, const char* scheme,
+                                                 std::string& err) {
+    if (rest.empty()) {
+        err = std::string(scheme) + ": needs a port (" + scheme + ":2323) or a host and port (" +
+              scheme + ":bbs.example:23)";
+        return nullptr;
+    }
+
+    // A bare PORT is a LISTEN; HOST:PORT is a CALL. The colon is the whole of the
+    // distinction, the same one every terminal program has used for forty years.
+    size_t c = rest.rfind(':');
+    if (c == std::string::npos) {
+        uint16_t port = 0;
+        if (!parsePort(rest, port)) {
+            err = "'" + rest + "' is not a TCP port number (1..65535)";
+            return nullptr;
+        }
+        auto l = platform::listenTcp(port, err);
+        if (!l) return nullptr;
+        return std::make_unique<TcpListenStream>(std::move(l), spec);
+    }
+
+    std::string host = rest.substr(0, c);
+    uint16_t    port = 0;
+    if (host.empty() || !parsePort(rest.substr(c + 1), port)) {
+        err = std::string("expected ") + scheme + ":HOST:PORT, got '" + spec + "'";
+        return nullptr;
+    }
+    auto conn = platform::connectTcp(host, port, err);
+    if (!conn) return nullptr;
+    return std::make_unique<TcpConnectStream>(std::move(conn), spec);
 }
 
 std::unique_ptr<ByteStream> resolveEndpoint(const std::string& spec, std::string& err) {
@@ -458,38 +499,21 @@ std::unique_ptr<ByteStream> resolveEndpoint(const std::string& spec, std::string
         return term;
     }
 
-    // ---- socket: -- listen on a port, or call out to a host ----
-    if (spec.rfind("socket:", 0) == 0) {
-        std::string rest = spec.substr(7);
-        if (rest.empty()) {
-            err = "socket: needs a port (socket:2323) or a host and port (socket:bbs.example:23)";
-            return nullptr;
-        }
+    // ---- socket: -- a RAW byte pipe: listen on a port, or call out to a host ----
+    if (spec.rfind("socket:", 0) == 0) return makeTcpStream(spec.substr(7), spec, "socket", err);
 
-        // `socket:2323` is a LISTEN; `socket:host:2323` is a CALL. The colon is the
-        // whole of the distinction, and it is the same one every terminal program has
-        // used for forty years.
-        size_t c = rest.rfind(':');
-        if (c == std::string::npos) {
-            uint16_t port = 0;
-            if (!parsePort(rest, port)) {
-                err = "'" + rest + "' is not a TCP port number (1..65535)";
-                return nullptr;
-            }
-            auto l = platform::listenTcp(port, err);
-            if (!l) return nullptr;
-            return std::make_unique<TcpListenStream>(std::move(l), spec);
-        }
-
-        std::string host = rest.substr(0, c);
-        uint16_t    port = 0;
-        if (host.empty() || !parsePort(rest.substr(c + 1), port)) {
-            err = "expected socket:HOST:PORT, got '" + spec + "'";
-            return nullptr;
-        }
-        auto conn = platform::connectTcp(host, port, err);
-        if (!conn) return nullptr;
-        return std::make_unique<TcpConnectStream>(std::move(conn), spec);
+    // ---- telnet: -- like socket:, but speaks the Telnet protocol (host/telnet_stream.h) ----
+    //
+    // Same grammar as socket: (PORT listens, HOST:PORT calls out), wrapped so a human
+    // with a stock `telnet` client gets the terminal-server handshake -- no local echo,
+    // character-at-a-time -- instead of the raw pipe's double echo. LISTEN is the server
+    // role (we offer to echo); a dial-out is the client role. socket: stays raw for
+    // machine-to-machine CONNECT and the mirror.
+    if (spec.rfind("telnet:", 0) == 0) {
+        auto inner = makeTcpStream(spec.substr(7), spec, "telnet", err);
+        if (!inner) return nullptr;
+        const bool server = spec.substr(7).rfind(':') == std::string::npos;  // bare PORT = listen
+        return std::make_unique<TelnetStream>(std::move(inner), spec, server);
     }
 
     // ---- serial: -- a real port on this host ----

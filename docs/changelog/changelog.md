@@ -6,6 +6,36 @@ as it is now; this document is the record of how it got there.
 
 ---
 
+## Unreleased
+
+### A `telnet:` endpoint, so a human telnets in without the double echo
+
+`CONNECT`ing a unit to a plain `socket:PORT` gives you a raw pipe — which is right for wiring
+one machine to another, but when a person points `telnet` (or `nc`) at it, nothing negotiates
+the terminal: the client echoes every keystroke locally *and* the guest echoes it back, and
+Enter arrives as a whole line with the CR mangled to LF. The new **`telnet:PORT`** endpoint is
+`socket:`'s twin that speaks the Telnet protocol: on connect it offers `WILL ECHO` / `SUPPRESS
+GO AHEAD`, so a stock client drops its local echo and sends one key at a time, and it strips the
+inbound protocol bytes the guest should never see. Use it in place of `socket:` whenever a human
+telnets into a BBS or a monitor; `socket:` stays a raw pipe for machine-to-machine links and the
+live mirror. `telnet:HOST:PORT` dials out as the client, asking the far end to echo.
+
+The PMMI modem's `dial=`/`answer=` line speaks Telnet too, and **by default** — its far end is
+almost always a person's telnet client — so a BBS the PMMI answers behaves the moment someone
+telnets in, with no configuration. Set `telnet=off` on the board for a raw modem link to another
+simulator. Both paths share one protocol engine (`TelnetCodec`).
+
+### The PMMI modem answers a real BBS
+
+A PMMI configured to answer (`answer=PORT`) now keeps its phone line **plugged in for the life of
+the machine**, instead of only while the guest is holding DTR high. Answer-mode software that waits
+for a ring with the modem on-hook — CBBS is the canonical example — can finally hear the call: it
+sits in its ring-wait loop with DTR low, and an inbound connection rings it, exactly as a real
+auto-answer modem behaves. Dropping DTR now hangs up the current call but leaves the line listening,
+so a caller who dials in after a previous session is answered rather than refused. A caller who hangs
+up **before** being answered is also cleaned up promptly, so the next call still gets through. Plain
+`socket:` endpoints on any board are unchanged.
+
 ## 1.0.0
 
 **1.0.0 is the version that says the simulator is what it set out to be.** Where 0.4.0 filled

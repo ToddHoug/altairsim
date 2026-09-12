@@ -2,8 +2,9 @@
 
 namespace altair {
 
-ModemLine::ModemLine(std::string dialHost, uint16_t dialPort, uint16_t answerPort)
-    : dialHost_(std::move(dialHost)), dialPort_(dialPort), answerPort_(answerPort) {}
+ModemLine::ModemLine(std::string dialHost, uint16_t dialPort, uint16_t answerPort, bool telnet)
+    : dialHost_(std::move(dialHost)), dialPort_(dialPort), answerPort_(answerPort),
+      telnet_(telnet) {}
 
 // SHOW / CONFIG SAVE round-trip. Only the modes that are actually configured are
 // named, so `modem:answer=2323` and `modem:dial=bbs.example:23,answer=2323` both
@@ -40,7 +41,12 @@ size_t ModemLine::read(uint8_t* buf, size_t n) {
 // that has not connected. (host/tcp.cpp makes the same call for a dead client.)
 size_t ModemLine::write(const uint8_t* buf, size_t n) {
     if (!(offHook_ && conn_ && conn_->established())) return n;
-    tx_.append((const char*)buf, n);
+    if (telnet_) {
+        codec_.send(buf, n);   // encode (0xFF doubled) onto the wire buffer
+        tx_ += codec_.takeOut();
+    } else {
+        tx_.append((const char*)buf, n);
+    }
     flush();
     return n;
 }
@@ -85,8 +91,21 @@ void ModemLine::pump() {
     if (!conn_) return;
     conn_->poll();
 
-    // An OUTBOUND dial whose handshake has completed: the far end answered.
-    if (dialing_ && conn_->established()) dialing_ = false;
+    // A caller who HANGS UP BEFORE WE ANSWER. While ringing, the gate holds offHook_
+    // false, so the drain loop below never runs and read()-drives-EOF never fires --
+    // the dead ring would sit forever and, one-call-at-a-time, wedge the listener
+    // against the next caller. Peek for the far-end close so it is cleaned up here.
+    if (!offHook_ && conn_->peerClosed()) conn_->close();
+
+    // An OUTBOUND dial whose handshake has completed: the far end answered. In telnet
+    // mode this is where the dialed call takes the CLIENT role and queues its offers.
+    if (dialing_ && conn_->established()) {
+        dialing_ = false;
+        if (telnet_) {
+            codec_.reset(/*server=*/false);
+            tx_ += codec_.takeOut();
+        }
+    }
 
     // Move bytes only on a LIVE, ANSWERED call. A ringing (unanswered) line is held
     // silent on purpose -- see the accept above.
@@ -95,7 +114,15 @@ void ModemLine::pump() {
         for (;;) {
             size_t r = conn_->read(buf, sizeof buf);
             if (r == 0) break;
-            rx_.append((const char*)buf, r);
+            // In telnet mode the far end's bytes are wire bytes: decode them into rx_
+            // (IAC stripped) and let any negotiation reply ride out on tx_. Raw mode
+            // hands them to the guest verbatim.
+            if (telnet_) codec_.recv(buf, r);
+            else rx_.append((const char*)buf, r);
+        }
+        if (telnet_) {
+            rx_ += codec_.takeData();
+            tx_ += codec_.takeOut();
         }
         flush();
     }
@@ -129,11 +156,12 @@ LineStatus ModemLine::status() const {
 void ModemLine::setControl(const LineControl& c) {
     if (c.dtr) sawDtr_ = true;
 
-    // THE GUEST HUNG UP. Dropping DTR after having raised it ends the call. The board
-    // in Phase 2 also calls hangup() explicitly, so this is belt-and-suspenders -- it
-    // closes the current call but LEAVES the listener armed (a DTR blip is not a
-    // reconfiguration of the modem). RTS goes nowhere: TCP does its own flow control.
-    if (sawDtr_ && !c.dtr && conn_) dropCall();
+    // THE GUEST HUNG UP. Dropping DTR after having raised it ends an ANSWERED call. The
+    // board in Phase 2 also calls goOnHook() explicitly, so this is belt-and-suspenders
+    // -- it hangs up the live call but leaves the listener bound and any still-ringing
+    // caller ringing (a DTR blip is not a reconfiguration of the modem). RTS goes
+    // nowhere: TCP does its own flow control.
+    if (sawDtr_ && !c.dtr) goOnHook();
 }
 
 // ---------------------------------------------------------------------------
@@ -179,14 +207,33 @@ void ModemLine::answer() {
     if (!ringing_) return;
     ringing_ = false;
     offHook_ = true;
+
+    // In telnet mode the answered call takes the SERVER role: reset the codec and send
+    // the option offers now, so a stock client drops its local echo the moment it is
+    // picked up. flush() lands them -- conn_ is established at this point.
+    if (telnet_) {
+        codec_.reset(/*server=*/true);
+        tx_ += codec_.takeOut();
+        flush();
+    }
 }
 
-// ON-HOOK. Drop the current call AND the listener -- the modem is no longer waiting
-// for anyone. sawDtr_ is left alone: it records that DTR was once raised, which a
-// subsequent power-on reset, not a hangup, is what clears.
+// HANG UP. Drop the current call (answered, ringing, or dialing) but LEAVE THE LISTENER
+// BOUND -- the phone stays plugged into the wall. A real auto-answer modem does not
+// unplug its line when a call ends; the line is bound for the life of the modem (see
+// armAnswer, called at syncModem) and torn down only when the modem itself goes away
+// (the ModemLine is destroyed, closing the socket via RAII). sawDtr_ is left alone.
 void ModemLine::hangup() {
     dropCall();
-    listener_.reset();
+}
+
+// ON-HOOK via DTR. Hang up an ANSWERED call (carrier drops), but do NOT drop a caller
+// who is merely RINGING: DTR low means "the modem will not pick up", not "unplug the
+// line", so an unanswered caller keeps ringing and the listener stays bound. (An
+// answer-mode guest like CBBS sits on-hook -- DTR low -- in its ring-wait loop; that
+// must not tear the line down, or it could never hear a ring in the first place.)
+void ModemLine::goOnHook() {
+    if (offHook_) dropCall();
 }
 
 void ModemLine::dropCall() {

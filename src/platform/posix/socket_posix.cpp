@@ -73,6 +73,22 @@ public:
         return 0;
     }
 
+    // A NON-DESTRUCTIVE close check. recv(MSG_PEEK) reads without consuming: 0 is EOF
+    // (the far end hung up), a hard error is a dead connection, and EAGAIN/EWOULDBLOCK
+    // is just a quiet-but-open line. Used to notice a caller who drops before we answer,
+    // whose bytes we otherwise never read (host/modemline.cpp's ring gate).
+    bool peerClosed() override {
+        if (fd_ < 0) return true;
+        if (connecting_) return false;  // still handshaking: not a hangup
+        uint8_t b;
+        ssize_t r = ::recv(fd_, &b, 1, MSG_PEEK);
+        if (r > 0) return false;        // data waiting -> still connected
+        if (r == 0) { close(); return true; }
+        if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) return false;
+        close();                        // a real error is a dead line
+        return true;
+    }
+
     size_t write(const uint8_t* buf, size_t n) override {
         if (!established()) return 0;
         ssize_t w = ::send(fd_, buf, n, 0);

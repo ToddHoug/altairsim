@@ -80,6 +80,7 @@ void test_88sio();
 void test_sbc();
 void test_lines();
 void test_modemline();
+void test_telnet();
 void test_wd17xx();
 void test_i8257();
 void test_versafloppy();

@@ -120,8 +120,9 @@ void test_modemline() {
                 [&] { return back.size() >= 2; });
         CHECK(back == "HI", ("the guest's bytes reach the caller (got '" + back + "')").c_str());
 
-        // HANG UP. The call socket closes (the caller sees it) and the listener is
-        // dropped, but describe() still reports the configuration.
+        // HANG UP. The call socket closes (the caller sees it) but the LISTENER stays
+        // bound -- the phone is still plugged into the wall -- so describe() round-trips
+        // and, below, a fresh caller rings without any re-arm.
         m.hangup();
         CHECK(!m.carrier(), "hangup() -> carrier down");
         bool gone = waitFor([&] { if (caller) { caller->poll(); uint8_t b[16]; caller->read(b, sizeof b); } },
@@ -129,6 +130,40 @@ void test_modemline() {
         CHECK(gone, "...and the call socket closed under the caller");
         CHECK(m.describe() == "modem:answer=" + std::to_string(port),
               "describe() still round-trips the config after a hangup");
+
+        // THE LINE STAYS PLUGGED IN. A second caller rings with no armAnswer() in between.
+        auto caller2 = platform::connectTcp("127.0.0.1", port, err);
+        bool rang2   = waitFor([&] { if (caller2) caller2->poll(); m.pump(); },
+                               [&] { return m.ringing(); });
+        CHECK(rang2, "hangup() keeps the listener: the next caller rings without re-arming");
+    }
+
+    // -----------------------------------------------------------------------
+    // GHOST CALLER. A caller who hangs up BEFORE we answer is never read() (the ring
+    // gate holds its bytes in the kernel), so the ordinary read-drives-EOF close never
+    // fires. pump() must peek for the far-end close, or the dead ring wedges the
+    // one-at-a-time listener against every later caller.
+    // -----------------------------------------------------------------------
+    SECTION("ModemLine -- an unanswered caller who drops is cleaned up; the next one rings");
+    {
+        std::string err;
+        uint16_t    port = freePort();
+        ModemLine   m("", 0, port);
+        CHECK(m.armAnswer(err), ("armAnswer binds the port: " + err).c_str());
+
+        auto caller = platform::connectTcp("127.0.0.1", port, err);
+        bool rang   = waitFor([&] { if (caller) caller->poll(); m.pump(); },
+                              [&] { return m.ringing(); });
+        CHECK(rang, "caller #1 rings");
+
+        caller.reset();  // hang up WITHOUT being answered
+        bool cleared = waitFor([&] { m.pump(); }, [&] { return !m.ringing(); });
+        CHECK(cleared, "the unanswered drop is noticed via peek -- no ghost ring");
+
+        auto caller2 = platform::connectTcp("127.0.0.1", port, err);
+        bool rang2   = waitFor([&] { if (caller2) caller2->poll(); m.pump(); },
+                               [&] { return m.ringing(); });
+        CHECK(rang2, "the listener was freed: caller #2 rings");
     }
 
     // -----------------------------------------------------------------------
@@ -205,6 +240,62 @@ void test_modemline() {
 
         m.hangup();
         CHECK(!m.ringing(), "hangup() drops the ring");
+    }
+
+    // -----------------------------------------------------------------------
+    // TELNET MODE. A line built with telnet=true negotiates as the SERVER the instant
+    // it picks up -- offering WILL ECHO / SGA so a stock client drops its local echo --
+    // strips inbound IAC so the guest reads only data, and doubles a data 0xFF on the
+    // way out. This is what the PMMI's `telnet` strap turns on for an answering BBS.
+    // -----------------------------------------------------------------------
+    SECTION("ModemLine -- telnet mode negotiates on answer and strips inbound IAC");
+    {
+        constexpr uint8_t IAC = 255, DO = 253, WILL = 251, ECHO = 1, SGA = 3;
+        std::string       err;
+        uint16_t          port = freePort();
+        ModemLine         m("", 0, port, /*telnet=*/true);
+        CHECK(m.armAnswer(err), ("armAnswer binds the port: " + err).c_str());
+
+        auto caller = platform::connectTcp("127.0.0.1", port, err);
+        bool rang   = waitFor([&] { if (caller) caller->poll(); m.pump(); },
+                              [&] { return m.ringing() && caller && caller->established(); });
+        CHECK(rang, "the caller rings");
+
+        // PICK UP -> the server offers echo/SGA. (Nothing was sent while merely ringing.)
+        m.answer();
+        std::string neg;
+        waitFor([&] { if (caller) { caller->poll();
+                          uint8_t b[64]; size_t r;
+                          while ((r = caller->read(b, sizeof b)) > 0) neg.append((const char*)b, r); }
+                      m.pump(); },
+                [&] { return neg.size() >= 9; });
+        const std::string want = {(char)IAC, (char)WILL, (char)ECHO,
+                                  (char)IAC, (char)WILL, (char)SGA,
+                                  (char)IAC, (char)DO,   (char)SGA};
+        CHECK(neg == want, "answer() sends WILL ECHO, WILL SGA, DO SGA to the telnet client");
+
+        // The client splices an IAC command into its data; the guest sees only data.
+        const std::vector<uint8_t> in = {'H', IAC, DO, ECHO, 'I'};
+        if (caller) caller->write(in.data(), in.size());
+        std::string got;
+        waitFor([&] { if (caller) caller->poll(); m.pump();
+                      uint8_t b[64]; got.append((const char*)b, m.read(b, sizeof b)); },
+                [&] { return got.size() >= 2; });
+        CHECK(got == "HI", "inbound IAC is stripped -- the guest reads only data");
+
+        // Guest output with a 0xFF in it is doubled on the wire.
+        const uint8_t out[] = {'A', 0xFF, 'B'};
+        m.write(out, sizeof out);
+        std::string wire;
+        waitFor([&] { if (caller) { caller->poll();
+                          uint8_t b[64]; size_t r;
+                          while ((r = caller->read(b, sizeof b)) > 0) wire.append((const char*)b, r); }
+                      m.pump(); },
+                [&] { return wire.size() >= 4; });
+        const std::string wantWire = {'A', '\xFF', '\xFF', 'B'};
+        CHECK(wire == wantWire, "a data 0xFF is doubled (IAC IAC) on the way out");
+
+        m.hangup();
     }
 
     // -----------------------------------------------------------------------
