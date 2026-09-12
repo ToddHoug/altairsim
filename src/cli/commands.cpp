@@ -540,6 +540,25 @@ static const std::vector<CommandDef> kCommands = {
      "  SYMBOLS LOAD prog.SYM\n"
      "  SYMBOLS LOAD roms/ALTMON/ALTMON.PRN\n"
      "  SYMBOLS CLEAR"},
+    // STARTUP edits the boot list a config replays on load and CONFIG SAVE writes back as
+    // `startup = [...]`. It is the interactive twin of hand-editing that array; before it,
+    // the only interactive action that reached the saved list was SYMBOLS LOAD, which is why
+    // it sits beside it. A startup entry is an ORDINARY command line, not a second language
+    // (DESIGN.md 10.0), so ADD stores the rest of the line verbatim and checks nothing -- the
+    // loader does not either. STA is free: STEP owns S/ST/STE, and STARTUP is no prefix of it.
+    {"STARTUP", true, nullptr, "STARTUP [ADD <command> | REMOVE <n> | CLEAR]",  // STA
+     "The machine's boot list -- the commands a config replays on load, and what CONFIG\n"
+     "SAVE writes out as startup = [...]. A bare STARTUP shows the list, numbered; the\n"
+     "rest edit it in place, so you can compose a boot sequence at the prompt and save it:\n"
+     "  STARTUP                          show the list, numbered\n"
+     "  STARTUP ADD MOUNT dsk0:drive0 \"CP-M 2.2.dsk\"   append a line, verbatim\n"
+     "  STARTUP REMOVE 2                 drop line 2\n"
+     "  STARTUP CLEAR                    empty the list\n"
+     "\n"
+     "ADD takes the REST OF THE LINE exactly as typed -- quotes, spaces and all -- because\n"
+     "a startup entry is just a command line: anything valid at the prompt is valid in the\n"
+     "list, so it is stored unchecked, the same as a line you write in the file by hand.\n"
+     "  STA ADD RUN FF00"},
     // UNMOUNT, not DISMOUNT (Patrick, 2026-07-11). It is the plain word, it takes U
     // -- which nothing else wanted -- and it gets out of DISASM's way, which drops
     // to DI now that the D-cluster is one shorter.

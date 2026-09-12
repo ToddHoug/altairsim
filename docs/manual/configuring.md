@@ -572,3 +572,20 @@ not load leaves you exactly where you were rather than halfway between two machi
 Which makes it the fastest way to write a machine file. Build the machine at the prompt with
 `BOARDS ADD` and `SET` until it is what you want, then save it, then edit the file down to the
 parts you care about — or give it a `base` and delete the rest.
+
+The one part of the file that is not a board is the **`startup` list** — the commands the machine
+runs on load, `MOUNT` the disk, `LOAD` the loader, `RUN`. You can build that at the prompt too,
+with `STARTUP`:
+
+```
+altairsim> STARTUP ADD MOUNT dsk0:drive0 "CP-M 2.2.dsk"
+altairsim> STARTUP ADD RUN FF00
+altairsim> STARTUP
+  1  MOUNT dsk0:drive0 "CP-M 2.2.dsk"
+  2  RUN FF00
+```
+
+`STARTUP ADD` appends a line exactly as you typed it — quotes and spaces and all, because a
+startup entry is just a command line; `STARTUP REMOVE <n>` drops one and `STARTUP CLEAR` empties
+the list. Whatever you assemble is what `CONFIG SAVE` writes as `startup = [...]`, so the boot
+sequence you tried at the prompt is the boot sequence the file carries.

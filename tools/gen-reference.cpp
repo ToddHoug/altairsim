@@ -231,7 +231,7 @@ const char* commandGroup(const std::string& n) {
     if (n == "BOARDS" || n == "REGION" || n == "SET" || n == "SHOW" || n == "CONFIG" ||
         n == "CONSOLE" || n == "MOUNT" || n == "UNMOUNT" || n == "CONNECT" ||
         n == "DISCONNECT" || n == "SNAPSHOT" || n == "RESTORE" || n == "MACHINE" ||
-        n == "DO")
+        n == "STARTUP" || n == "DO")
         return "Configuring the machine";
     if (n == "HELP" || n == "QUIT") return "Getting help and leaving";
     return nullptr;
@@ -253,6 +253,7 @@ const char* commandSummary(const std::string& n) {
     if (n == "EDIT") return "Enter bytes into memory interactively from an address.";
     if (n == "CONFIG") return "Load or save the whole machine as a TOML file.";
     if (n == "MACHINE") return "Load a built-in machine by name (MACHINE none empties the backplane).";
+    if (n == "STARTUP") return "Edit the machine's boot list (the commands CONFIG SAVE writes as startup = [...]).";
     if (n == "DO") return "Run a file of monitor commands, one per line, as if typed.";
     if (n == "SET") return "Change a property of a board, the console, display, a register, or the bus.";
     if (n == "SHOW") return "Display the state of a board, the bus, or the machine.";

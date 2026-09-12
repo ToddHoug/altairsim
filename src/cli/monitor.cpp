@@ -102,6 +102,24 @@ static std::string unquote(const std::string& s) {
     return (!s.empty() && s[0] == '"') ? s.substr(1) : s;
 }
 
+// The raw remainder of a command line, past the first `skip` whitespace-delimited
+// words, with leading and trailing blanks trimmed. Used where an argument is ITSELF a
+// command line -- STARTUP ADD -- and has to keep its quotes and interior spacing so the
+// tokenizer sees them again on replay; rejoining tokenize()'s output with single spaces
+// would lose the spacing inside a quoted path ("CP-M 2.2.dsk"). The words being skipped
+// (STARTUP, ADD) are never quoted, so a plain whitespace scan finds their ends.
+static std::string restOfLine(const std::string& line, int skip) {
+    size_t i = 0;
+    for (int n = 0; n < skip; ++n) {
+        while (i < line.size() && std::isspace((unsigned char)line[i])) ++i;
+        while (i < line.size() && !std::isspace((unsigned char)line[i])) ++i;
+    }
+    while (i < line.size() && std::isspace((unsigned char)line[i])) ++i;
+    size_t end = line.size();
+    while (end > i && std::isspace((unsigned char)line[end - 1])) --end;
+    return line.substr(i, end - i);
+}
+
 static std::string upper(std::string s) {
     for (auto& c : s) c = (char)std::toupper((unsigned char)c);
     return s;
@@ -5705,6 +5723,76 @@ bool Monitor::exec(const std::string& line, std::ostream& out) {
         }
 
         out << "SYMBOLS LOAD <file> [REPLACE] | SYMBOLS CLEAR\n";
+        failed_ = true;
+        return true;
+    }
+
+    if (cmd == "STARTUP") {
+        // The boot list is Machine::startup -- the commands runStartup replays and CONFIG
+        // SAVE writes back as `startup = [...]`. Nothing wrote to it interactively before
+        // (only the loader and SYMBOLS LOAD's re-emit), so this is the one place you can
+        // BUILD one at the prompt. A bare STARTUP prints it, numbered so REMOVE has a line
+        // to name; ADD/REMOVE/CLEAR edit it in place; CONFIG SAVE then captures the result.
+        std::vector<std::string>& list = m_.startup;
+
+        if (a.size() < 2) {
+            if (list.empty()) {
+                out << "startup list is empty -- STARTUP ADD <command> to build one\n";
+                return true;
+            }
+            for (size_t i = 0; i < list.size(); ++i)
+                out << "  " << (i + 1) << "  " << list[i] << "\n";
+            return true;
+        }
+
+        // Selector by prefix, like SYMBOLS: `STARTUP A` is ADD, `STARTUP C` is CLEAR.
+        std::string sel = resolveKeyword(a[1], {"ADD", "CLEAR", "REMOVE"});
+
+        if (sel == "CLEAR") {
+            list.clear();
+            out << "startup list cleared\n";
+            return true;
+        }
+
+        if (sel == "REMOVE") {
+            if (a.size() < 3) {
+                out << "usage: STARTUP REMOVE <n>\n";
+                failed_ = true;
+                return true;
+            }
+            // 1-based, matching the numbered display -- a line number is a count, so decimal.
+            char* endp = nullptr;
+            long  n    = std::strtol(a[2].c_str(), &endp, 10);
+            if (endp == a[2].c_str() || *endp != '\0' || n < 1 || (size_t)n > list.size()) {
+                out << "no startup line '" << a[2] << "' -- the list has " << list.size()
+                    << " (STARTUP shows them)\n";
+                failed_ = true;
+                return true;
+            }
+            std::string gone = list[(size_t)n - 1];
+            list.erase(list.begin() + (n - 1));
+            out << "removed: " << gone << "\n";
+            return true;
+        }
+
+        if (sel == "ADD") {
+            // The REST OF THE LINE, verbatim. A startup entry is a command line, not a second
+            // language (monitor.h), so what follows ADD is stored exactly as typed and parsed
+            // nowhere here -- runStartup re-tokenizes it on replay just as if you had typed it.
+            // Taken from the raw `line`, not rejoined from `a`, so the quotes and the spaces
+            // inside a quoted path ("CP-M 2.2.dsk") reach the tokenizer intact.
+            std::string entry = restOfLine(line, 2);
+            if (entry.empty()) {
+                out << "usage: STARTUP ADD <command>\n";
+                failed_ = true;
+                return true;
+            }
+            list.push_back(entry);
+            out << "added: " << entry << "\n";
+            return true;
+        }
+
+        out << "usage: STARTUP [ADD <command> | REMOVE <n> | CLEAR]\n";
         failed_ = true;
         return true;
     }

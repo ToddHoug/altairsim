@@ -90,6 +90,11 @@ void test_cli() {
     CHECK(R("SA") == "SAVE", "SA saves");
     CHECK(R("ST") == "STEP", "ST steps");
     CHECK(R("STO") == "", "STO is nothing now -- STOP was dropped");
+    // STARTUP added below STEP: STEP keeps S/ST/STE, and STA -- which is not a prefix of
+    // STEP -- reaches STARTUP. Neither name is a strict prefix of the other, so both stay
+    // fully typeable; the invariant sweep below proves it for the whole table.
+    CHECK(R("STA") == "STARTUP", "STA is the startup list -- STEP still owns S, ST and STE");
+    CHECK(R("STE") == "STEP", "STE is still STEP -- STARTUP did not take it");
     CHECK(R("SN") == "SNAPSHOT", "SN snapshots");
     // ---- THE N-CLUSTER (Patrick, 2026-07-15) ----
     // NEXT took `N` from NOBREAK, by the same rule that gave RUN `R` and STEP `S`: the
@@ -1622,6 +1627,74 @@ void test_cli() {
         got.clear();
         while (con.read(&b, 1)) got += (char)b;
         CHECK(got == "a\tb\\zc", "a tab, and an unknown escape left as written");
+    }
+
+    // ---------------------------------------------------------------------
+    // STARTUP -- build the boot list at the prompt, and CONFIG SAVE captures it
+    // ---------------------------------------------------------------------
+    // Before this, Machine::startup was written in exactly one place -- the loader --
+    // so a list could only be composed by hand-editing the .toml. STARTUP edits it in
+    // place, and the point of it is the round trip: what you ADD is what CONFIG SAVE
+    // writes and CONFIG LOAD reads back, byte for byte, quotes and all. A fresh Machine
+    // keeps this away from the DUMP fixture's memory state; the intentional refusal is
+    // saved for last, because failed() is STICKY and would poison every check after it.
+    SECTION("STARTUP -- ADD/REMOVE/CLEAR edit the boot list, and it survives a save/load");
+    {
+        Machine sm;
+        Monitor smon(sm);
+        auto    sr = [&](const char* cmdline) {
+            std::ostringstream o;
+            smon.exec(cmdline, o);
+            return o.str();
+        };
+
+        CHECK(sr("STARTUP").find("empty") != std::string::npos,
+              "a fresh machine's startup list is empty, and STARTUP says so");
+        CHECK(sm.startup.empty(), "...and nothing is in it");
+
+        // ADD stores the REST OF THE LINE verbatim: a startup entry is a command line,
+        // and the one thing it is for -- MOUNT a period tape/disk -- has a SPACE in the
+        // path, so the quotes must survive intact or the tokenizer loses the filename.
+        sr("STARTUP ADD MOUNT dsk0:drive0 \"CP-M 2.2.dsk\"");
+        sr("STA A RUN FF00");  // and the prefix forms resolve: STA is STARTUP, A is ADD
+        CHECK(sm.startup.size() == 2, "two ADDs make two entries");
+        CHECK(sm.startup[0] == "MOUNT dsk0:drive0 \"CP-M 2.2.dsk\"",
+              "the quoted path is stored exactly as typed -- space and quotes and all");
+        CHECK(sm.startup[1] == "RUN FF00", "and STA A RUN FF00 stored the whole command line");
+
+        // The bare list is NUMBERED, so REMOVE has a line to name.
+        std::string shown = sr("STARTUP");
+        CHECK(shown.find("1  MOUNT dsk0:drive0") != std::string::npos, "line 1 is numbered");
+        CHECK(shown.find("2  RUN FF00") != std::string::npos, "line 2 is numbered");
+
+        // The round trip, the reason the command exists: CONFIG SAVE's escaping of a startup
+        // entry (quotes doubled) is exactly what CONFIG LOAD unescapes, so a list ADDed at the
+        // prompt reloads identical -- the same guarantee test_machines pins for a hand-written
+        // list, now reached through the command. Run while the list still holds the quoted line.
+        std::string text = saveTomlText(sm);
+        Machine     back;
+        std::string serr;
+        CHECK(loadTomlText(text, "startup (saved)", back, serr),
+              ("CONFIG SAVE's output loads back in: " + serr).c_str());
+        CHECK(back.startup == sm.startup,
+              "...with every startup line byte-identical -- the quotes round-trip");
+
+        // REMOVE is 1-based, matching the display, and the list closes up around the gap.
+        sr("STARTUP REMOVE 1");
+        CHECK(sm.startup.size() == 1 && sm.startup[0] == "RUN FF00",
+              "REMOVE 1 drops the first line and the list closes up");
+        sr("STARTUP CLEAR");
+        CHECK(sm.startup.empty(), "CLEAR empties the list");
+
+        // Everything up to here was a valid command, so nothing has tripped failed() yet.
+        CHECK(!smon.failed(), "a run of valid STARTUP commands leaves failed() clear");
+
+        // The one refusal, LAST because failed() is sticky: REMOVE past the end changes
+        // nothing and is an error, not a silent no-op.
+        CHECK(sr("STARTUP REMOVE 9").find("no startup line") != std::string::npos,
+              "REMOVE past the end is refused and says how many there are");
+        CHECK(sm.startup.empty(), "...and it removes nothing");
+        CHECK(smon.failed(), "...and it trips failed()");
     }
 }
 
