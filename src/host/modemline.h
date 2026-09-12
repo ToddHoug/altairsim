@@ -31,6 +31,7 @@
 // ---------------------------------------------------------------------------
 
 #include "host/stream.h"
+#include "host/telnet_codec.h"
 #include "platform/socket.h"
 
 #include <memory>
@@ -43,7 +44,13 @@ public:
     // CONFIG ONLY -- opens no socket. An empty dialHost or a zero dialPort means
     // "cannot originate"; a zero answerPort means "cannot answer". A line with
     // neither is legal but inert (describe() still round-trips it).
-    ModemLine(std::string dialHost, uint16_t dialPort, uint16_t answerPort);
+    //
+    // `telnet` makes the line speak the Telnet protocol once a call is up: an answered
+    // call negotiates as the SERVER (offers to echo, character mode), a dialed call as
+    // the CLIENT. Off by default -- a machine-to-machine modem link must stay a raw
+    // pipe, or the far end would read the negotiation as data. See host/telnet_codec.h.
+    ModemLine(std::string dialHost, uint16_t dialPort, uint16_t answerPort,
+              bool telnet = false);
 
     // ---- ByteStream ----
     std::string describe() const override;
@@ -84,6 +91,14 @@ private:
     std::unique_ptr<platform::TcpConn>     conn_;
 
     std::string rx_, tx_;
+
+    // TELNET MODE. When telnet_ is set, a live call's bytes run through this codec:
+    // inbound is decoded into rx_ (IAC stripped, CR LF folded), outbound is encoded
+    // into tx_ (0xFF doubled), and answer()/a completed dial reset it into the server
+    // or client role and queue the option offers. Off -> the line is a raw pipe and
+    // rx_/tx_ carry bytes verbatim, exactly as before.
+    bool        telnet_ = false;
+    TelnetCodec codec_;
 
     // THE RING GATE. A connection that arrived on the listener is held ringing_
     // until the board answer()s: while ringing, no byte is drained from the kernel

@@ -479,6 +479,16 @@ void test_pmmi() {
         CHECK(!setProperty(*g.pmmi, "answer", "70000", err), "an out-of-range answer port is refused");
     }
 
+    SECTION("PMMI MM-103 -- telnet defaults on for a modem line, and is a settable strap");
+    {
+        ModemRig    g("", "2323");
+        std::string err;
+        CHECK(prop(*g.pmmi, "telnet") == "true", "answer=/dial= speak telnet by default");
+        CHECK(setProperty(*g.pmmi, "telnet", "off", err), "the strap is settable to off");
+        CHECK(prop(*g.pmmi, "telnet") == "false", "...and round-trips off for a raw pipe");
+        CHECK(setProperty(*g.pmmi, "telnet", "on", err), "...and back on");
+    }
+
     SECTION("PMMI MM-103 -- with neither dial nor answer the line stays a dead NullStream");
     {
         ModemRig g("", "");
@@ -661,6 +671,9 @@ void test_pmmi() {
         uint16_t port = freePort();
         ModemRig    g("", std::to_string(port));
         std::string err;
+        // Raw pipe: this proves the modem's own byte path, with no telnet framing in the
+        // way (the telnet layer has its own tests). answer= now defaults telnet on.
+        CHECK(setProperty(*g.pmmi, "telnet", "off", err), "telnet=off gives a raw line");
         g.modemctl(0x7F);  // DTR -> arm
 
         auto caller = platform::connectTcp("127.0.0.1", port, err);

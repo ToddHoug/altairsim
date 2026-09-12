@@ -2,8 +2,9 @@
 
 namespace altair {
 
-ModemLine::ModemLine(std::string dialHost, uint16_t dialPort, uint16_t answerPort)
-    : dialHost_(std::move(dialHost)), dialPort_(dialPort), answerPort_(answerPort) {}
+ModemLine::ModemLine(std::string dialHost, uint16_t dialPort, uint16_t answerPort, bool telnet)
+    : dialHost_(std::move(dialHost)), dialPort_(dialPort), answerPort_(answerPort),
+      telnet_(telnet) {}
 
 // SHOW / CONFIG SAVE round-trip. Only the modes that are actually configured are
 // named, so `modem:answer=2323` and `modem:dial=bbs.example:23,answer=2323` both
@@ -40,7 +41,12 @@ size_t ModemLine::read(uint8_t* buf, size_t n) {
 // that has not connected. (host/tcp.cpp makes the same call for a dead client.)
 size_t ModemLine::write(const uint8_t* buf, size_t n) {
     if (!(offHook_ && conn_ && conn_->established())) return n;
-    tx_.append((const char*)buf, n);
+    if (telnet_) {
+        codec_.send(buf, n);   // encode (0xFF doubled) onto the wire buffer
+        tx_ += codec_.takeOut();
+    } else {
+        tx_.append((const char*)buf, n);
+    }
     flush();
     return n;
 }
@@ -91,8 +97,15 @@ void ModemLine::pump() {
     // against the next caller. Peek for the far-end close so it is cleaned up here.
     if (!offHook_ && conn_->peerClosed()) conn_->close();
 
-    // An OUTBOUND dial whose handshake has completed: the far end answered.
-    if (dialing_ && conn_->established()) dialing_ = false;
+    // An OUTBOUND dial whose handshake has completed: the far end answered. In telnet
+    // mode this is where the dialed call takes the CLIENT role and queues its offers.
+    if (dialing_ && conn_->established()) {
+        dialing_ = false;
+        if (telnet_) {
+            codec_.reset(/*server=*/false);
+            tx_ += codec_.takeOut();
+        }
+    }
 
     // Move bytes only on a LIVE, ANSWERED call. A ringing (unanswered) line is held
     // silent on purpose -- see the accept above.
@@ -101,7 +114,15 @@ void ModemLine::pump() {
         for (;;) {
             size_t r = conn_->read(buf, sizeof buf);
             if (r == 0) break;
-            rx_.append((const char*)buf, r);
+            // In telnet mode the far end's bytes are wire bytes: decode them into rx_
+            // (IAC stripped) and let any negotiation reply ride out on tx_. Raw mode
+            // hands them to the guest verbatim.
+            if (telnet_) codec_.recv(buf, r);
+            else rx_.append((const char*)buf, r);
+        }
+        if (telnet_) {
+            rx_ += codec_.takeData();
+            tx_ += codec_.takeOut();
         }
         flush();
     }
@@ -186,6 +207,15 @@ void ModemLine::answer() {
     if (!ringing_) return;
     ringing_ = false;
     offHook_ = true;
+
+    // In telnet mode the answered call takes the SERVER role: reset the codec and send
+    // the option offers now, so a stock client drops its local echo the moment it is
+    // picked up. flush() lands them -- conn_ is established at this point.
+    if (telnet_) {
+        codec_.reset(/*server=*/true);
+        tx_ += codec_.takeOut();
+        flush();
+    }
 }
 
 // HANG UP. Drop the current call (answered, ringing, or dialing) but LEAVE THE LISTENER

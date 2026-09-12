@@ -216,6 +216,15 @@ private:
     // low. Travels as config through the `rtsdtr` property, exactly like dial=/answer=.
     bool rtsMirrorsDtr_ = false;
 
+    // A strap: a dial=/answer= line speaks the Telnet protocol, so a person telnetting
+    // into an answering BBS (or the modem dialling a real telnet host) gets the
+    // terminal-server handshake -- no double echo, one key at a time. DEFAULT ON,
+    // because the overwhelmingly common far end of a modem port here is a telnet client;
+    // set `telnet=off` for a raw pipe (a machine-to-machine modem link, where the other
+    // end is another simulator's raw socket). Travels as config through the `telnet`
+    // property; rebuilds the ModemLine (syncModem) on change.
+    bool telnet_ = true;
+
     // The installed ModemLine, or nullptr when the line is a NullStream / a CONNECTed
     // endpoint. NON-OWNING: the UART owns the stream (or savedLine_ pockets it during
     // self-test). Cleared whenever a non-modem endpoint replaces the line, so it can

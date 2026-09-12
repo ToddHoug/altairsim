@@ -243,6 +243,62 @@ void test_modemline() {
     }
 
     // -----------------------------------------------------------------------
+    // TELNET MODE. A line built with telnet=true negotiates as the SERVER the instant
+    // it picks up -- offering WILL ECHO / SGA so a stock client drops its local echo --
+    // strips inbound IAC so the guest reads only data, and doubles a data 0xFF on the
+    // way out. This is what the PMMI's `telnet` strap turns on for an answering BBS.
+    // -----------------------------------------------------------------------
+    SECTION("ModemLine -- telnet mode negotiates on answer and strips inbound IAC");
+    {
+        constexpr uint8_t IAC = 255, DO = 253, WILL = 251, ECHO = 1, SGA = 3;
+        std::string       err;
+        uint16_t          port = freePort();
+        ModemLine         m("", 0, port, /*telnet=*/true);
+        CHECK(m.armAnswer(err), ("armAnswer binds the port: " + err).c_str());
+
+        auto caller = platform::connectTcp("127.0.0.1", port, err);
+        bool rang   = waitFor([&] { if (caller) caller->poll(); m.pump(); },
+                              [&] { return m.ringing() && caller && caller->established(); });
+        CHECK(rang, "the caller rings");
+
+        // PICK UP -> the server offers echo/SGA. (Nothing was sent while merely ringing.)
+        m.answer();
+        std::string neg;
+        waitFor([&] { if (caller) { caller->poll();
+                          uint8_t b[64]; size_t r;
+                          while ((r = caller->read(b, sizeof b)) > 0) neg.append((const char*)b, r); }
+                      m.pump(); },
+                [&] { return neg.size() >= 9; });
+        const std::string want = {(char)IAC, (char)WILL, (char)ECHO,
+                                  (char)IAC, (char)WILL, (char)SGA,
+                                  (char)IAC, (char)DO,   (char)SGA};
+        CHECK(neg == want, "answer() sends WILL ECHO, WILL SGA, DO SGA to the telnet client");
+
+        // The client splices an IAC command into its data; the guest sees only data.
+        const std::vector<uint8_t> in = {'H', IAC, DO, ECHO, 'I'};
+        if (caller) caller->write(in.data(), in.size());
+        std::string got;
+        waitFor([&] { if (caller) caller->poll(); m.pump();
+                      uint8_t b[64]; got.append((const char*)b, m.read(b, sizeof b)); },
+                [&] { return got.size() >= 2; });
+        CHECK(got == "HI", "inbound IAC is stripped -- the guest reads only data");
+
+        // Guest output with a 0xFF in it is doubled on the wire.
+        const uint8_t out[] = {'A', 0xFF, 'B'};
+        m.write(out, sizeof out);
+        std::string wire;
+        waitFor([&] { if (caller) { caller->poll();
+                          uint8_t b[64]; size_t r;
+                          while ((r = caller->read(b, sizeof b)) > 0) wire.append((const char*)b, r); }
+                      m.pump(); },
+                [&] { return wire.size() >= 4; });
+        const std::string wantWire = {'A', (char)0xFF, (char)0xFF, 'B'};
+        CHECK(wire == wantWire, "a data 0xFF is doubled (IAC IAC) on the way out");
+
+        m.hangup();
+    }
+
+    // -----------------------------------------------------------------------
     // describe() names only the modes actually configured, so SHOW/CONFIG SAVE
     // round-trip what the operator gave.
     // -----------------------------------------------------------------------

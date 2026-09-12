@@ -355,7 +355,7 @@ bool PmmiBoard::modemActive() const {
 // does.
 void PmmiBoard::syncModem() {
     if (canDial() || canAnswer()) {
-        auto ml = std::make_unique<ModemLine>(dialHost_, dialPort_, answerPort_);
+        auto ml = std::make_unique<ModemLine>(dialHost_, dialPort_, answerPort_, telnet_);
         modem_  = ml.get();
         attachStream(std::move(ml));
         // Plug the phone line in NOW, for the life of the modem -- not on DTR-set. A
@@ -780,6 +780,26 @@ std::vector<Property> PmmiBoard::properties() {
         x.set  = [this](const Value& v, std::string&) {
             rtsMirrorsDtr_ = v.b();
             pushControl();  // re-drive the pins so RTS follows the new strap immediately
+            return true;
+        };
+        p.push_back(std::move(x));
+    }
+    // A strap for a dial=/answer= phone line: speak the Telnet protocol on a live call,
+    // so a person telnetting into an answering BBS gets the terminal-server handshake
+    // (no double echo, one key at a time) instead of a raw pipe. Default off -- a
+    // machine-to-machine modem link stays raw. No effect on a CONNECTed endpoint (use
+    // the telnet: endpoint there) or in self-test.
+    {
+        Property x;
+        x.name = "telnet";
+        x.help = "Speak the Telnet protocol on a dial=/answer= line, for a human telnet "
+                 "client (no double echo, character-at-a-time). Default on; telnet=off for "
+                 "a raw pipe to another simulator";
+        x.kind = Kind::Bool;
+        x.get  = [this] { return Value::ofBool(telnet_); };
+        x.set  = [this](const Value& v, std::string&) {
+            telnet_ = v.b();
+            syncModem();  // rebuild the ModemLine so the new mode takes effect
             return true;
         };
         p.push_back(std::move(x));

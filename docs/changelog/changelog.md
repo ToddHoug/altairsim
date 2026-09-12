@@ -20,6 +20,11 @@ inbound protocol bytes the guest should never see. Use it in place of `socket:` 
 telnets into a BBS or a monitor; `socket:` stays a raw pipe for machine-to-machine links and the
 live mirror. `telnet:HOST:PORT` dials out as the client, asking the far end to echo.
 
+The PMMI modem's `dial=`/`answer=` line speaks Telnet too, and **by default** — its far end is
+almost always a person's telnet client — so a BBS the PMMI answers behaves the moment someone
+telnets in, with no configuration. Set `telnet=off` on the board for a raw modem link to another
+simulator. Both paths share one protocol engine (`TelnetCodec`).
+
 ### The PMMI modem answers a real BBS
 
 A PMMI configured to answer (`answer=PORT`) now keeps its phone line **plugged in for the life of
