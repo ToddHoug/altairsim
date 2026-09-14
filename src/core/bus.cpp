@@ -65,12 +65,34 @@ std::vector<Board*> Bus::respondersTo(const BusCycle& in) const {
 }
 
 uint8_t Bus::peek(uint16_t addr) const {
+    // peek is on the instruction flight recorder's hot path -- debug.cpp snapshots
+    // three opcode bytes with it for EVERY executed instruction -- so it takes the
+    // same cached decode the live read path (memRead) uses instead of re-scanning
+    // the backplane. memRead_[page] names the single board that answers a MemRead in
+    // that 256-byte page; on a non-slow page that IS the only decoder (slow == n>1),
+    // so peeking it is identical to the exact first-responder scan, minus the scan.
+    // The phantom overlay is already baked into who: resolve() ran anyAssertsPhantom
+    // before deciding, and peek() itself takes no cycle, so there is nothing to pass.
+    if (!dirty_) {
+        const Slot& s = memRead_[addr >> 8];
+        if (verify_) verifySlot(BusCycle{Cycle::MemRead, addr, 0, false}, s);
+        if (!s.slow) {
+            uint8_t v = 0xFF;
+            if (s.who) s.who->peek(addr, v);  // false leaves 0xFF: the floating bus
+            return v;
+        }
+        // slow page (contention, or a sub-page decoder like the Tarbell): fall through
+    }
+
+    // No cache to trust -- dirty (nothing has rebuilt it yet this run) or a slow page.
+    // The exact first-responder scan, still without building a decoders() vector.
     BusCycle c{Cycle::MemRead, addr, 0, false};
     c.phantom = anyAssertsPhantom(c);
-    for (Board* b : decoders(c)) {
-        uint8_t v = 0xFF;
-        if (b->peek(addr, v)) return v;
-    }
+    for (Board* b : boards_)
+        if (b->enabled() && b->decodes(c)) {
+            uint8_t v = 0xFF;
+            if (b->peek(addr, v)) return v;
+        }
     return 0xFF;  // nobody could answer without side effects. Neither can we.
 }
 
