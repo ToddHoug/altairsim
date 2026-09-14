@@ -20,8 +20,7 @@ here is intermittent and nothing is hidden.
 
 - **An 8080 and its binary-compatible successor the 8085**, with a Z80 alongside — each faithful
   down to the flags, the carries and the undocumented behaviours, and each checked against the
-  standard processor exercisers before any board is built on it. The Altair 680b's Motorola 6800
-  is here too.
+  standard processor exercisers before any board is built on it.
 - **A board for most of the machine**, all but one modelled from its own manual: CPU boards,
   RAM/ROM, serial boards, cassette interfaces, floppy and disk controllers, a line-printer
   controller, video displays, the Sol-PC's integrated I/O, a vectored-interrupt/real-time-clock

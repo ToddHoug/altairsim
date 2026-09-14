@@ -8,6 +8,17 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+### The Altair 680b moves to its own simulator
+
+The **MITS Altair 680b** — the Motorola 6800 machine 1.0.0 added — leaves altairsim for a
+simulator of its own, **swtpcsim** (<https://github.com/deltecent/swtpcsim>), where it joins the
+rest of the 6800/6809 world it belongs to. The 6800 CPU core, its disassembler and assembler, the
+`altair680` machine, the `680io` / `680uio` / `680kcacr` boards, and the MON680 / KCACR PROMs go
+with it. altairsim is once again purely an 8080/Z80/8085 S-100 simulator, which is what its bus, its
+boards and its machines all are. The **Motorola S-record** support that arrived alongside the 680b
+stays — `LOAD` still reads `.S19` and takes `FORMAT=SREC`, because it is a general file format and
+not a 6800-only one.
+
 ### `STARTUP` — build a machine's boot list at the prompt
 
 A machine file's `startup = [...]` is the operator's keystrokes written down — `MOUNT` the disk,
@@ -66,6 +77,10 @@ a second port, and the **KCACR cassette** board loads and saves off tape — eno
 that MITS **680 BASIC** loads from cassette and runs. Because Motorola tools speak Motorola
 formats, `LOAD` now reads a **Motorola S-record** (`.S19`) file as well as Intel HEX, and takes an
 explicit `FORMAT=SREC`.
+
+> **Since moved.** The 680b and its 6800 core left altairsim after 1.0.0 for their own simulator,
+> **swtpcsim** (<https://github.com/deltecent/swtpcsim>) — see Unreleased. The S-record `LOAD`
+> support described here stays.
 
 The **Intel 8085** joins them too — the 8080's binary superset, with `RIM`/`SIM` and the on-chip
 interrupt system (the non-maskable `TRAP` and the maskable `RST 5.5/6.5/7.5`, each with its mask
