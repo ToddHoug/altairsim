@@ -363,6 +363,17 @@ private:
     // Receive is paced too, or a byte could never arrive "while the last one was
     // still sitting there" -- which is precisely what an overrun IS.
     uint64_t rxNextAt_ = 0;
+
+    // ...but rxNextAt_ alone only paces one delivery to the NEXT. After the line
+    // has been quiet, that deadline is stale -- left over from a byte that shifted
+    // in character-times ago -- and the first byte to arrive would sail past it and
+    // reach the guest with no shift-in latency at all. This edge is the receive
+    // shift register: true whenever the line is idle (and on reset / carrier loss),
+    // cleared the moment a byte appears, which is when its full character-time is
+    // measured FROM. A continuously full line never goes idle, so nothing is added
+    // to a stream; the latency lands only on the first byte after a lull -- the byte
+    // a paste was losing. See poll(); issue #469.
+    bool rxIdle_ = true;
 };
 
 } // namespace altair

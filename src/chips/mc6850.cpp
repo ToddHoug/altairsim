@@ -57,6 +57,13 @@ void Mc6850::deserialize(StateReader& r) {
     txRoom_        = r.boolean();
     txFreeAt_      = r.u64();
     rxNextAt_      = r.u64();
+
+    // rxIdle_ is a transient shift-register edge, not part of the on-disk format.
+    // Assume idle after a restore: the first byte to arrive is then timed from its
+    // own arrival rather than trusting a delivery deadline frozen into the snapshot.
+    // Costs one character-time on a single byte after restore -- negligible, and the
+    // safe side of the receive-timing contract. See poll(); issue #469.
+    rxIdle_        = true;
 }
 
 // ---------------------------------------------------------------------------
@@ -271,6 +278,7 @@ void Mc6850::sampleDcd() {
         dcdStatusRead_ = false;
         rdrf_          = false;  // "inhibits and initializes the receiver section"
         ovrn_          = false;
+        rxIdle_        = true;   // the receiver is initialized: next byte times afresh
     }
     dcdPinLost_ = lost;
 
@@ -375,8 +383,23 @@ void Mc6850::poll(const Clock& clk) {
     if (inReset()) return;
 
     if (rdrf_) return;                  // the register is still full: the line waits
-    if (clk.now() < rxNextAt_) return;  // the character has not finished arriving
-    if (!stream_->readable()) return;
+
+    // Nothing on the line? Then the receiver has caught up and its shift register is
+    // empty. Remember that: the NEXT byte to arrive must be timed from ITS OWN
+    // arrival, not from rxNextAt_, which by now is a deadline left stale by the lull.
+    if (!stream_->readable()) { rxIdle_ = true; return; }
+
+    // A byte is on the line. If the receiver was idle, this byte only begins shifting
+    // in now, so its full character-time is measured from this instant -- one
+    // character-time of shift-in latency, exactly as on real hardware. (A line that
+    // never went idle skips this: rxNextAt_ from the last delivery already paces it
+    // and nothing is added, so a socket transfer or injected script is unchanged.)
+    if (rxIdle_) {
+        rxIdle_   = false;
+        rxNextAt_ = clk.now() + charTStates(clk);
+    }
+
+    if (clk.now() < rxNextAt_) return;  // the character has not finished shifting in
 
     uint8_t b = 0;
     if (stream_->read(&b, 1) != 1) return;
@@ -487,6 +510,7 @@ void Mc6850::resetAction(const Clock& clk) {
     rxData_   = 0;
     txFreeAt_ = clk.now();   // "initializes both the receiver and transmitter"
     rxNextAt_ = clk.now();
+    rxIdle_   = true;        // shift register empty -- the first byte in is timed afresh
 
     // "Master reset ... clears the Status Register (EXCEPT for external conditions on
     // CTS and DCD)" -- data sheet. Those two are PINS: a reset button on the front
