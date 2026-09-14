@@ -147,10 +147,18 @@ bool MemoryBoard::loadRomRegion(size_t idx, std::string& err) {
     // and a short image decodes a short range. If the file disagrees with `at`,
     // say so rather than silently relocating it: a ROM at the wrong address is
     // a bug you would chase for an hour.
-    if (img.lo() != r.at) {
+    //
+    // ...unless the region ASKED to relocate. Then `at` wins: anchor the first
+    // record there and shift the whole image by the same delta (the primitive
+    // LOAD ... AT already uses), which is how one builtin mirrors onto a second
+    // base -- a self-placed region and a relocated one over the same image (#468).
+    if (r.relocate) {
+        relocateTo(img, r.at);
+    } else if (img.lo() != r.at) {
         char buf[160];
         std::snprintf(buf, sizeof buf,
-                      "%s places bytes at %04X but the region says at = %04X",
+                      "%s places bytes at %04X but the region says at = %04X"
+                      " (set relocate = true to move it there)",
                       r.mount.c_str(), img.lo(), r.at);
         err = buf;
         return false;
@@ -503,6 +511,13 @@ std::vector<Property> MemoryBoard::subUnitProperties(const std::string& table) c
         x.kind = Kind::Str;
         p.push_back(std::move(x));
     }
+    {
+        Property x;
+        x.name = "relocate";
+        x.help = "Move a HEX/S-record image to `at` instead of its own record address";
+        x.kind = Kind::Bool;
+        p.push_back(std::move(x));
+    }
     return p;
 }
 
@@ -535,6 +550,10 @@ bool MemoryBoard::addSubUnit(const std::string& table, const KeyValues& kv, std:
         } else if (k == "mount") {
             r.mount     = v;                 // what the file said...
             r.mountFile = resolvePath(v);    // ...and where that leads from where it lives
+        } else if (k == "relocate") {
+            Value bv;
+            if (!parseValue(v, Kind::Bool, bv, err)) return false;
+            r.relocate = bv.b();
         }
     }
     if (!haveType) {
@@ -569,6 +588,9 @@ std::vector<Board::SubUnit> MemoryBoard::subUnits() const {
             // nothing down. `mount = ""` would round-trip, but it reads like a bug and
             // invites someone to "fix" it.
             if (!r.mount.empty()) su.fields.push_back({"mount", r.mount, true});
+            // Only when set: the default is a self-placed ROM, and an unasked-for
+            // `relocate = false` on every region is just noise in the file.
+            if (r.relocate) su.fields.push_back({"relocate", "true", false});
         } else if (r.size % 1024 == 0) {
             // QUOTED, and it has to be: `size = 48K` bare is not TOML, and the
             // suffix is exactly what makes this legible.

@@ -73,6 +73,12 @@ struct Region {
     // handle survives, so those cards resolve and forget. This one cannot.
     std::string mountFile;
 
+    // rom only: honor `at` for a HEX/S-record image instead of the address its own
+    // records encode. Off by default -- a relocated ROM is the footgun the loader's
+    // self-place check exists to catch, so it only happens when a region asks for it.
+    // A `Bin` mount always honors `at`, so this key does nothing for one. See #468.
+    bool relocate = false;
+
     std::string describe() const;
 };
 
