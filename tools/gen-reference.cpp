@@ -202,9 +202,9 @@ const char* boardCategory(const std::string& n) {
         n == "tarbell" || n == "tarbelldd" || n == "16fdc" || n == "64fdc" ||
         n == "icom" || n == "dualsd" || n == "dualide") return "Disk";
     if (n == "2sio" || n == "sio" || n == "sbc" || n == "pmmi" ||
-        n == "turnkey" || n == "gsio" || n == "io4" || n == "propio" || n == "680io") return "Serial";
-    if (n == "acr" || n == "uio" || n == "680kcacr") return "Tape";
-    if (n == "pio" || n == "4pio" || n == "680uio" || n == "d7a" || n == "c700" || n == "lpc")
+        n == "turnkey" || n == "gsio" || n == "io4" || n == "propio") return "Serial";
+    if (n == "acr" || n == "uio") return "Tape";
+    if (n == "pio" || n == "4pio" || n == "d7a" || n == "c700" || n == "lpc")
         return "Parallel and printer";
     if (n == "vdm1" || n == "dazzler" || n == "vdb8024") return "Video";
     if (n == "sol") return "Systems";  // a whole machine's I/O on one card -- more will come
