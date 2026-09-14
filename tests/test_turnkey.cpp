@@ -156,6 +156,8 @@ void test_turnkey() {
 
         // Receive: a byte fed to the line lands in RDRF and reads back at the data port.
         tty->feed("Z");
+        (void)bus.ioRead(0x10);      // the receiver notices 'Z'...
+        rig.m.clock.advance(50000);  // ...and it shifts in a character time later (issue #469)
         CHECK((bus.ioRead(0x10) & 0x01) != 0, "RDRF set once a character arrives");
         CHECK(bus.ioRead(0x11) == 'Z', "the data port at 0x11 (odd) yields it");
 

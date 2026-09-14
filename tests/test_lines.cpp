@@ -213,10 +213,11 @@ void test_lines() {
         g.line->st_.carrier = true;
         g.control(k8n1 | kRie);  // receive interrupt enable: this is what arms DCD too
 
-        // A character arrives normally.
+        // A character arrives normally. The receiver has to SEE it (a poll) before its
+        // character-time begins, then that time has to pass (issue #469).
         g.line->feed("A");
-        g.tick(10000);
         g.poll();
+        g.tick(10000);
         CHECK((g.status() & kRdrf) != 0, "carrier up: the receiver receives");
         CHECK(g.data() == 'A', "...and the byte is the byte");
 
@@ -240,8 +241,8 @@ void test_lines() {
         // CARRIER COMES BACK -- and the bit does NOT clear by itself. That is the whole
         // point of a latch: a guest that was not looking still finds out.
         g.line->st_.carrier = true;
-        g.tick(10000);
-        g.poll();
+        g.poll();       // the receiver is alive again and NOW sees the waiting byte...
+        g.tick(10000);  // ...which then takes its character-time to shift in (issue #469)
         CHECK((g.status() & kDcd) != 0, "carrier back, bit STILL SET -- it is latched");
         CHECK(g.u.irq(g.clk), "...and still interrupting: nobody has acknowledged it");
         CHECK((g.status() & kRdrf) != 0,
@@ -506,7 +507,8 @@ void test_lines() {
         CHECK(g.u.rxBytes() == 0, "nothing received yet");
 
         g.line->feed("Hi");
-        g.tick(5000);     // one character time passes
+        g.poll();         // the receiver notices 'H' -> its character time begins
+        g.tick(5000);     // ...and one character time passes (issue #469)
         CHECK((g.status() & kRdrf) != 0, "a byte has arrived");
         CHECK(g.data() == 'H', "and it is the first one");
         CHECK(g.u.rxBytes() == 1, "ONE byte handed to the guest -- the count moved");

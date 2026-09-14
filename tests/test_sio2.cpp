@@ -24,8 +24,9 @@ struct Rig {
     Sio2Board*       sio = nullptr;
     MemoryBoard*     mem = nullptr;
     ScriptedStream*  tty = nullptr;
+    uint8_t          base = 0x10;   // channel A's status/control port
 
-    Rig(uint8_t port = 0x10) {
+    Rig(uint8_t port = 0x10) : base(port) {
         std::string err;
 
         // PARANOID MODE, PERMANENTLY ON IN THIS SUITE. The 2SIO is the card that
@@ -81,6 +82,21 @@ struct Rig {
     // character time at 9600 baud (the longest is 11 bits = 2,291).
     void lineTime() { m.clock.advance(5000); }
 
+    // The first character on a quiet line takes a character-time to shift in, and
+    // poll() measures that from the moment the receiver first SEES the byte, not
+    // from a delivery deadline left stale by the lull (issue #469). So a test lets
+    // the chip observe the byte (the first poll starts the shift-in clock), advances
+    // one character-time, and polls again -- the poll it lands on -- exactly what the
+    // run loop's own polling does in the microseconds after a key arrives. A
+    // continuously full line never idles and never needs this; it is only ever the
+    // first byte after quiet. Leaves RDRF set, the byte waiting at the data port.
+    void settle(uint8_t statusPort) {
+        (void)m.bus.ioRead(statusPort);  // the receiver notices the byte...
+        lineTime();                       // ...a character-time passes...
+        (void)m.bus.ioRead(statusPort);  // ...and this is the poll it lands on
+    }
+    void settle() { settle(base); }
+
     void load(std::initializer_list<uint8_t> code, uint16_t at = 0) {
         uint16_t a = at;
         for (uint8_t b : code) m.bus.memWrite(a++, b);
@@ -129,6 +145,7 @@ void test_sio2() {
         CHECK((s & 0x08) == 0, "CTS clear -- clear to send (the pin is /CTS)");
 
         g.tty->feed("A");
+        g.settle();
         s = g.m.bus.ioRead(0x10);
         CHECK((s & 0x01) != 0, "RDRF set once a character arrives");
         CHECK(g.m.bus.ioRead(0x11) == 'A', "and the data port yields it");
@@ -195,7 +212,7 @@ void test_sio2() {
         g.m.bus.ioWrite(0x10, 0x11);  // 8N2 -- 11 bits on the wire
         g.tty->feed("HI");
 
-        (void)g.m.bus.ioRead(0x10);
+        g.settle();
         CHECK(g.m.bus.ioRead(0x11) == 'H', "the first character arrives");
 
         const uint64_t charT = (uint64_t)(2000000 * 11 / 9600);  // 2,291 T-states
@@ -230,7 +247,7 @@ void test_sio2() {
         // nothing, every machine that starts with a master reset starts wrong.
         Rig g;
         g.tty->feed("Z");
-        (void)g.m.bus.ioRead(0x10);  // let it arrive -> RDRF set
+        g.settle();  // the receiver sees it, a character-time passes -> RDRF set
         CHECK((g.m.bus.ioRead(0x10) & 0x01) != 0, "a character is waiting");
 
         g.m.bus.ioWrite(0x10, 0x03);  // divide field == 11 == MASTER RESET
@@ -262,6 +279,7 @@ void test_sio2() {
         // thrown away by the reset -- the old behaviour -- bit 7 would stay clear.
         g.tty->feed("Q");
         g.sio->pump();
+        g.settle();
         CHECK((g.m.bus.ioRead(0x10) & 0x80) != 0, "RIE survived the reset it rode in on");
 
         // ...and it does NOT unplug the terminal. A warm reset that dropped the
@@ -289,6 +307,7 @@ void test_sio2() {
 
         g.tty->feed("K");
         g.sio->pump();
+        g.settle();
         CHECK((g.m.bus.ioRead(0x10) & 0x01) != 0, "a character is waiting in the receiver");
 
         g.sio->reset(Reset::Bus);  // THE RESET SWITCH
@@ -300,15 +319,16 @@ void test_sio2() {
         // character on the line and watch the chip raise the IRQ bit in the status
         // register. If the bus reset had zeroed the control register, RIE would be gone.
         //
-        // lineTime() is not decoration here, and its absence is what this test caught
-        // first: the receiver is PACED, and 'K' left rxNextAt_ a character time into the
-        // future. A bus reset does not rewind that -- there is no pin for it to rewind
-        // it WITH -- so the line needs its character time exactly as it would on the
-        // bench. (The master-reset section above gets away without this only because a
-        // master reset really does reinitialize the receiver.)
+        // settle() is not decoration here, and its absence is what this test caught
+        // first: the receiver is PACED, and reading 'K' left the line quiet, so 'W'
+        // shifts in on its own character time from when the receiver next sees it
+        // (issue #469). A bus reset does not rewind that -- there is no pin for it to
+        // rewind it WITH -- so the line needs its character time exactly as it would on
+        // the bench. (The master-reset section above reinitializes the receiver, but
+        // still has to let the byte after it shift in, which is why it settles too.)
         g.tty->feed("W");
-        g.lineTime();
         g.sio->pump();
+        g.settle();
         CHECK((g.m.bus.ioRead(0x10) & 0x80) != 0, "RIE survived the RESET switch");
 
         // And the word format survived with it -- the chip is not back in the reset
@@ -328,6 +348,7 @@ void test_sio2() {
         g.sio->channel("b")->connect(std::move(s));
 
         g.m.bus.ioWrite(0x13, 'q');  // b's data port -- straight back round the loop
+        g.settle(0x12);              // b's line was idle: let the looped byte shift in
         CHECK((g.m.bus.ioRead(0x12) & 0x01) != 0, "b: loopback returns the byte");
         CHECK(g.m.bus.ioRead(0x13) == 'q', "b: and it is the byte we sent");
 
@@ -367,7 +388,7 @@ void test_sio2() {
         CHECK(!g.m.bus.intPending(), "RIE on, but nothing has arrived");
 
         g.tty->feed("!");
-        (void)g.m.bus.ioRead(0x10);  // the character lands
+        g.settle();  // the character lands one character-time after the receiver sees it
         CHECK(g.m.bus.intPending(), "a character arrived -> the card pulls pINT");
         CHECK((g.m.bus.ioRead(0x10) & 0x80) != 0, "and status bit 7 (IRQ) says so");
 
@@ -381,8 +402,7 @@ void test_sio2() {
         // not care what you soldered to it), but the WIRE goes nowhere.
         CHECK(setUnitProperty(*g.sio, "a", "interrupt", "none", err), "jumper A pulled");
         g.tty->feed("?");
-        g.lineTime();  // the next character has to physically arrive
-        (void)g.m.bus.ioRead(0x10);
+        g.settle();  // '!' was read and the line went quiet: the next byte shifts in afresh
         CHECK((g.m.bus.ioRead(0x10) & 0x80) != 0, "chip still raises IRQ in its status");
         CHECK(!g.m.bus.intPending(), "but with no jumper, pINT stays high");
     }
@@ -460,7 +480,7 @@ void test_sio2() {
         // Inbound it is just as important: it is the first byte of an XMODEM block's
         // payload as often as any other value.
         g.tty->feed(std::string(1, '\xC5'));  // char literal, not (char)0xC5: MSVC C4310 casts
-        (void)g.m.bus.ioRead(0x10);
+        g.settle();
         CHECK(g.m.bus.ioRead(0x11) == 0xC5, "0xC5 reaches the guest with bit 7 intact");
     }
 
@@ -496,7 +516,8 @@ void test_sio2() {
         // to back with no clock between them is asking a 9600-baud line to deliver
         // two characters in zero time -- and the first draft of this test did exactly
         // that, and hung forever waiting for a byte that was not due yet.
-        (void)m.bus.ioRead(0x10);
+        (void)m.bus.ioRead(0x10);   // the receiver notices 'H' -> the shift-in clock starts
+        m.clock.advance(5000);      // ...and a character time passes before it lands (issue #469)
         CHECK((m.bus.ioRead(0x10) & 0x01) != 0, "the 6850 says a character is ready");
         CHECK(m.bus.ioRead(0x11) == 'H', "and the guest reads it");
         CHECK(con.pending() == 1, "one key still on the line -- the UART holds ONE");
@@ -566,7 +587,8 @@ void test_sio2() {
         con.inject("K");
         uint64_t hungry1   = con.hungry();
         uint64_t consumed0 = con.consumed();
-        (void)m.bus.ioRead(0x10);
+        (void)m.bus.ioRead(0x10);   // the receiver notices 'K'...
+        m.clock.advance(5000);      // ...and it shifts in a character time later (issue #469)
         CHECK((m.bus.ioRead(0x10) & 0x01) != 0, "the 6850 has the key");
         CHECK(con.hungry() == hungry1, "a keyboard with a key in it is not an idle one");
         CHECK(m.bus.ioRead(0x11) == 'K', "and the guest reads it");
@@ -591,7 +613,7 @@ void test_sio2() {
         CHECK(Console::instance().attn() == 0x05, "ATTN is ^E");
 
         g.tty->feed("\x05");  // a ScriptedStream: a socket, a modem, anything but the console
-        (void)g.m.bus.ioRead(0x10);
+        g.settle();
         CHECK(g.m.bus.ioRead(0x11) == 0x05, "the guest gets the 05 -- unaltered, uneaten");
     }
 
