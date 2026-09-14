@@ -80,6 +80,61 @@ void test_memory() {
     }
 
     {
+        // relocate = true (issue #468): the same self-placing image, moved to `at`
+        // instead of rejected. dbl's records sit at FF00; ask for it at F000 and the
+        // whole image shifts down by the delta -- the first byte lands at F000 and the
+        // old base is vacated. This is what lets a mirror-decoded monitor answer a
+        // vector fetch at a base its records never named.
+        Machine m;
+        auto* b = addMem(m, "mem0");
+        CHECK(b->loadSubUnit("region",
+                             {{"type", "rom"}, {"at", "F000"}, {"mount", "builtin:dbl"},
+                              {"relocate", "true"}}, err),
+              "a relocated ROM mounts even though its records disagree with `at`");
+        m.power();
+
+        CHECK(m.bus.memRead(0xF000) == 0x21, "the first byte moved to F000 with the image");
+        CHECK(m.bus.respondersTo({Cycle::MemRead, 0xFF00, 0, false}).empty(),
+              "and the record's own base FF00 is vacated -- the whole image shifted");
+
+        // CONFIG SAVE round-trips the key, and only when set: a self-placed ROM says
+        // nothing, a relocated one says `relocate = true`.
+        std::string toml = saveTomlText(m);
+        CHECK(toml.find("relocate = true") != std::string::npos,
+              "the relocated region writes `relocate = true` back out");
+    }
+
+    {
+        // The point of relocate: a MIRROR. One builtin under two regions -- self-placed
+        // at FF00 and relocated onto F000 -- so both windows present the same ROM. (The
+        // real use is a 6800/6809 monitor whose vectors must answer a top-of-memory
+        // fetch from a mirror the records never addressed.)
+        Machine m;
+        auto* b = addMem(m, "mem0");
+        CHECK(b->addRegion(rom(0xFF00, "builtin:dbl"), err), "self-placed at its own base");
+        Region mir = rom(0xF000, "builtin:dbl");
+        mir.relocate = true;
+        CHECK(b->addRegion(std::move(mir), err), "and a relocated mirror onto F000");
+        m.power();
+
+        CHECK(m.bus.memRead(0xFF00) == 0x21, "the self-placed copy answers at FF00");
+        CHECK(m.bus.memRead(0xF000) == 0x21, "and the mirror answers the same byte at F000");
+    }
+
+    {
+        // relocate does nothing to a Bin mount -- a Bin already honors `at`, so the flag
+        // is a no-op there rather than an error. (Nothing to assert on dbl, which is
+        // HEX; this just pins that setting it never rejects a mount that already fits.)
+        Machine m;
+        auto* b = addMem(m, "mem0");
+        Region r = rom(0xFF00, "builtin:dbl");
+        r.relocate = true;                    // asking to relocate to the base it already has
+        CHECK(b->addRegion(std::move(r), err), "relocate to the record's own base is a no-op");
+        m.power();
+        CHECK(m.bus.memRead(0xFF00) == 0x21, "the image is exactly where it would be without it");
+    }
+
+    {
         // Reset vs power. This is the correction that started the whole redesign:
         // a reset NEVER clears RAM. Only removing power does.
         Machine m;

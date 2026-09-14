@@ -207,6 +207,7 @@ RAM/ROM board: a list of regions and PHANTOM* -- plain, unbanked memory (bank sw
 | `at` | int | `0x0` .. `0xFFFF` | Where it starts. An address: 0000, F800 |
 | `size` | int | `1` .. `65536` | How much. Decimal, and it takes a suffix: 48K, 1024, 2M |
 | `mount` | string | text | The ROM image. A file (relative to THIS FILE), or builtin:<name> |
+| `relocate` | bool | `on` \| `off` | Move a HEX/S-record image to `at` instead of its own record address |
 
 #### Board properties
 
