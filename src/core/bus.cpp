@@ -67,10 +67,16 @@ std::vector<Board*> Bus::respondersTo(const BusCycle& in) const {
 uint8_t Bus::peek(uint16_t addr) const {
     BusCycle c{Cycle::MemRead, addr, 0, false};
     c.phantom = anyAssertsPhantom(c);
-    for (Board* b : decoders(c)) {
-        uint8_t v = 0xFF;
-        if (b->peek(addr, v)) return v;
-    }
+    // First-responder scan, but without building the decoders() vector: peek is on
+    // the instruction flight recorder's hot path (three calls per executed
+    // instruction, debug.cpp), so it iterates boards_ directly and short-circuits
+    // on the first enabled decoder that can answer. Same order and semantics as
+    // decoders(c); no per-call heap allocation.
+    for (Board* b : boards_)
+        if (b->enabled() && b->decodes(c)) {
+            uint8_t v = 0xFF;
+            if (b->peek(addr, v)) return v;
+        }
     return 0xFF;  // nobody could answer without side effects. Neither can we.
 }
 
