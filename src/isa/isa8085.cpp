@@ -30,7 +30,7 @@ namespace {
 //   FD  JK  a16  undocumented -- jump if the K (X5) flag is set
 //
 // This file is INDEPENDENT of isa8080.cpp on purpose -- the same call isaZ80.cpp
-// and isa6800.cpp made. A decoder shares nothing so the two tables cannot drift
+// made. A decoder shares nothing so the two tables cannot drift
 // into agreement on a bug; a test (test_8085_isa.cpp) instead PROVES the intended
 // relationship -- identical to the 8080 on all 244 shared opcodes, differing on
 // exactly these twelve.
@@ -324,7 +324,7 @@ const Isa8085Assembler k8085asm;
 } // namespace
 
 // Registered through isa8080.cpp's disassemblerFor/assemblerFor/instructionSets,
-// the one registry -- the same way isaZ80.cpp and isa6800.cpp hook in.
+// the one registry -- the same way isaZ80.cpp hooks in.
 const Disassembler* isa8085Disassembler() { return &k8085; }
 const Assembler* isa8085Assembler() { return &k8085asm; }
 

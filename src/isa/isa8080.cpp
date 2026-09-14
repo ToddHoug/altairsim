@@ -337,11 +337,10 @@ const Isa8080Assembler k8080asm;
 
 } // namespace
 
-// Defined in isaZ80.cpp / isa6800.cpp / isa8085.cpp. The registry lives here, in
+// Defined in isaZ80.cpp / isa8085.cpp. The registry lives here, in
 // one place; each other decoder is a whole file of its own but registers through
 // this one accessor.
 const Disassembler* z80Disassembler();
-const Disassembler* mc6800Disassembler();
 const Disassembler* isa8085Disassembler();
 
 const Disassembler* disassemblerFor(const std::string& isa) {
@@ -350,12 +349,10 @@ const Disassembler* disassemblerFor(const std::string& isa) {
     if (k == "8080") return &k8080;
     if (k == "8085") return isa8085Disassembler();  // the 8080 set + RIM/SIM, its own table
     if (k == "z80") return z80Disassembler();
-    if (k == "6800") return mc6800Disassembler();
-    return nullptr;  // The caller reports it. Disassembling a Z80 or a 6800 as an
-                     // 8080 produces plausible, WRONG text -- worse than an error.
+    return nullptr;  // The caller reports it. Disassembling a Z80 as an 8080
+                     // produces plausible, WRONG text -- worse than an error.
 }
 
-const Assembler* mc6800Assembler();
 const Assembler* z80Assembler();
 const Assembler* isa8085Assembler();
 
@@ -364,7 +361,6 @@ const Assembler* assemblerFor(const std::string& isa) {
     for (char c : isa) k += (char)std::tolower((unsigned char)c);
     if (k == "8080") return &k8080asm;
     if (k == "8085") return isa8085Assembler();  // 8080 forms + RIM/SIM; undoc ops don't assemble
-    if (k == "6800") return mc6800Assembler();
     // A CONVENIENCE Z80 assembler: the documented main table, CB and ED pages.
     // It deliberately does NOT assemble the IX/IY indexed forms or the relative
     // JR/DJNZ (see isaZ80.cpp); those report "not implemented" rather than encode.
@@ -372,6 +368,6 @@ const Assembler* assemblerFor(const std::string& isa) {
     return nullptr;
 }
 
-std::vector<std::string> instructionSets() { return {"8080", "8085", "z80", "6800"}; }
+std::vector<std::string> instructionSets() { return {"8080", "8085", "z80"}; }
 
 } // namespace altair

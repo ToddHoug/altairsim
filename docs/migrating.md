@@ -38,7 +38,7 @@ case *for* altairsim, stated plainly. The honest trade-offs are in §2 and §9; 
 - **It reads the disks you already have.** Both common 8-inch formats — the 337,568-byte
   hard-sector image and the 256,256-byte soft-sector image — mount directly, so your existing
   library comes with you (§4).
-- **The widest 8-bit CPU set.** 8080, Z80, 8085 and the Motorola 6800 (a complete Altair 680b).
+- **The widest 8-bit CPU set.** 8080, Z80 and the Intel 8085.
 - **Install the same board as many times as you like.** Need three serial cards, or two disk
   controllers? Add `sio0`, `sio1`, `sio2` — each a distinct card at its own ports. SIMH models
   each peripheral as a fixed device (its console is a single 2SIO), so you cannot freely add more
@@ -59,8 +59,8 @@ altairsim does *not* do — then §9 is the honest place to find that out before
 |---|---|---|---|
 | What it is at heart | A general S-100 / CP-M-era hardware simulator that boots as an Altair | Faithful **front-panel** recreations of specific classic machines, plus a headless CP/M host | A MITS Altair 8800 / S-100 simulator focused on bus- and board-level fidelity |
 | License | MIT-style | MIT | (see repository `LICENSE`) |
-| CPUs | 8080, Z80, **8086** | 8080, Z80 | 8080, Z80, **8085**, **6800** (Altair 680b) |
-| Machines it presents | Altair + many alternate S-100 configs (IMSAI, North Star, Cromemco, CompuPro, Vector Graphic, ADC, SCP, N8VEM…) | Altair 8800, **IMSAI 8080**, **Cromemco Z-1**, a generic CP/M host (`cpmsim`), Intel MDS-800, Mostek SBC, Pico | Many built-in machines (Altair variants, Sol-20, SD Systems SBC, Tarbell, iCOM, Cromemco FDC, CompuPro SS1, S100Computers, Altair 680b…) |
+| CPUs | 8080, Z80, **8086** | 8080, Z80 | 8080, Z80, **8085** |
+| Machines it presents | Altair + many alternate S-100 configs (IMSAI, North Star, Cromemco, CompuPro, Vector Graphic, ADC, SCP, N8VEM…) | Altair 8800, **IMSAI 8080**, **Cromemco Z-1**, a generic CP/M host (`cpmsim`), Intel MDS-800, Mostek SBC, Pico | Many built-in machines (Altair variants, Sol-20, SD Systems SBC, Tarbell, iCOM, Cromemco FDC, CompuPro SS1, S100Computers…) |
 | Graphical front panel | No panel window (real Dazzler/VDM-1 **video** via SDL) | **Yes** — photoreal lights & switches (X11/OpenGL or SDL2; 2D/3D), plus a web panel on some systems | No panel window; the **monitor is the panel** (EXAMINE / DEPOSIT / RUN are the switches). Optional SDL3 for VDM-1 / Dazzler / video terminals |
 | How you describe a machine | `.ini` command script (`SET`/`ATTACH`) | Per-system `conf/system.conf` + `[MEMORY n]` map sections + `disks/` directory | One **TOML machine file** = a self-contained, copyable directory |
 | Debugger | SIMH `EXAMINE`/`DEPOSIT`/`BREAK`, `SAVE`/`RESTORE` | "ICE" monitor (off by default on the panel machines; needs a rebuild to enable) | Always-on monitor: `BREAK … IF`, `HISTORY`, `TRACE`, symbols, `STEP`/`NEXT`, `SNAPSHOT` |
@@ -135,7 +135,7 @@ other simulator:
   program *or an AI agent* drive a **running** guest — type at it, wait for the output it prints,
   react — over plain JSON-RPC. Neither SIMH's `EXPECT`/`SEND` nor z80pack's shell wrappers offer
   anything at this level. See `docs/manual/mcp.md` and `docs/DRIVING-WITH-AI.md`.
-- **The widest CPU line-up.** 8080, Z80, 8085 *and* the Motorola 6800 (a full Altair 680b) — more
+- **The widest CPU line-up.** 8080, Z80 *and* the Intel 8085 — more
   than either other simulator on the 8-bit side.
 - **Multiple instances of any board.** Because a board is a card on the bus, you can plug in as
   many of the same type as the address map allows — several 2SIOs on different port ranges, more
@@ -523,7 +523,7 @@ bus-accurate board model, an always-on debugger, and `--mcp`.
 
 ## 10. A migration checklist
 
-1. **Confirm the CPU.** 8080/Z80/8085/6800 → fine. **8086 → stop, stay on SIMH.**
+1. **Confirm the CPU.** 8080/Z80/8085 → fine. **8086 → stop, stay on SIMH.**
 2. **Confirm the machine exists.** `altairsim --list`. Need an IMSAI 8080 or a graphical panel →
    z80pack is the better home.
 3. **Sort your disks by size, then match the controller kind.** 337,568 bytes → a hard-sector

@@ -125,19 +125,6 @@ void test_roms() {
         // .hex (absolute addresses); docs/roms.md carries the provenance and both listings.
         {"rdos252", 0xC000, 0xD000, 4097, 0xA006878Eu, true},
         {"rdos312", 0xC000, 0xDFFF, 8192, 0x59EBD5ECu, true},
-        // The Altair 680b PROM Monitor, in Motorola S-record form (the .S19 loader, and
-        // the machine it was built for -- machines/altair680.toml). A single 256-byte
-        // PROM at FF00-FFFF: PROM 1, the highest, holding the monitor and the reset and
-        // interrupt vectors (Theory of Operation 3). swimon is the same monitor with SWI
-        // vectored through $0010 for breakpoints -- same window, a different image, a
-        // different CRC. These decode through loadSrec, not loadHex.
-        {"mon680", 0xFF00, 0xFFFF, 256, 0x397E717Fu, true},
-        {"swimon", 0xFF00, 0xFFFF, 256, 0x2ABE348Fu, true},
-        // The KCACR cassette loader/punch PROM (socket V, FD00-FDFF): loads and dumps
-        // memory over the 680b KCACR in Motorola S-record form, calling the MON680
-        // console routines (so it lives one PROM below the monitor). Also an S19, and
-        // its status/data equates are $F010/$F011 -- the 680kcacr board's registers.
-        {"kcacr", 0xFD00, 0xFDFF, 256, 0xA89ADB57u, true},
         // The iCOM FD3712/FD3812 8" floppy interface boot PROMs. The FD3712 carries two:
         // a CP/M 2.2 loader at F000 (JMP F073) and iCOM's own FDOS/EDOS bootstrap +
         // mini-monitor at C000 (JMP C015). The FD3812 double-density card's Lifeboat CP/M

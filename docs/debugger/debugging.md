@@ -263,7 +263,7 @@ lands the next prompt two on. Operands are numbers in the console base — an `H
 number overrides it — and there are no labels: this is a patch assembler, not a toolchain. A bare
 value is still a plain byte, so byte entry is unchanged.
 
-The 8080 and 6800 assemble in full. The Z80 assembles as a convenience — its documented main,
+The 8080 and 8085 assemble in full. The Z80 assembles as a convenience — its documented main,
 `CB` and `ED` instructions — but not the `IX`/`IY` indexed forms or the relative jumps `JR` and
 `DJNZ`, which report *not implemented* rather than take a byte. Those two ask for something a
 single prompt cannot supply: an indexed form carries a displacement (and its `IXH`/`IXL`

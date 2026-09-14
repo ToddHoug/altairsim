@@ -4,7 +4,7 @@ A C++ simulator of the **MITS Altair 8800** and the **S-100 bus**.
 
 `altairsim` is a **hardware development bench** that happens to run period software. The S-100 bus is a first-class modeled object rather than an implementation detail, because the point is to develop **new hardware** as well as to run old software.
 
-It boots Altair 4K and 8K BASIC (and the 1975 8080 BASIC 1.0) off cassettes, MITS Programming System II (polled *and* interrupt-driven), CP/M 2.2 off 8″ and 5¼″ floppies, CP/M 3 off CompactFlash and SD cards, Cromemco CDOS, SD Systems SDOS, iCOM FDOS, and the Altair 680b's MON680 monitor — every one a real period artifact, running unmodified.
+It boots Altair 4K and 8K BASIC (and the 1975 8080 BASIC 1.0) off cassettes, MITS Programming System II (polled *and* interrupt-driven), CP/M 2.2 off 8″ and 5¼″ floppies, CP/M 3 off CompactFlash and SD cards, Cromemco CDOS, SD Systems SDOS, and iCOM FDOS — every one a real period artifact, running unmodified.
 
 Every one of those boots is an **acceptance test**: it runs the period software on the whole machine through the real CLI and checks what lands on the terminal. There are more than forty of them. Three CP/M images are tracked in git — one 8″ floppy and the minidisk's two — so a fresh clone boots CP/M and runs those tests without downloading anything first. The eight examples that ship live in `examples/`, one directory each, and `acceptance-examples` boots them from a scratch directory with no repository in sight. The larger images that no test needs are fetched by `tools/fetch-disk-images.sh`.
 
@@ -72,7 +72,6 @@ in the monitor prints this list with a one-line description of each (`SHOW BOARD
 | `8080` | MITS 88-CPU — an 8080A at 2 MHz. |
 | `8085` | 8085 core — the 88-CPU's twin, with `RIM`/`SIM` and `TRAP`/`RST 5.5`/`6.5`/`7.5`. |
 | `z80` | Zilog Z80 card — the same bus, a different ISA. ZEXALL-validated. |
-| `6800` | Altair 680b CPU — a Motorola 6800 at 500 KHz, with memory-mapped I/O. |
 
 **Memory**
 
@@ -128,8 +127,6 @@ in the monitor prints this list with a one-line description of each (`SHOW BOARD
 | `pio` / `4pio` | MITS 88-PIO / 88-4PIO — 8-bit parallel ports. |
 | `d7a` | Cromemco D+7A — analog + parallel I/O; reads host joysticks. |
 
-**680b onboard I/O** — `680io` (6850 console), `680uio` (a second 6850 plus a 6820 PIA), `680kcacr` (Kansas City Standard cassette).
-
 **Interrupts, clock and control**
 
 | Board | What it is |
@@ -144,7 +141,7 @@ in the monitor prints this list with a one-line description of each (`SHOW BOARD
 names them all. The Altairs proper — `default`, `original` (as it left Albuquerque),
 `altmon`, `amon`, `acuter`, `cuter`, `turnkey`, `rombasic`. The BASIC and PS2 benches —
 `basic4k`, `basic8k`, `ps2`, `ps2int`. The disk machines — `minidisk`, `tarbell`,
-`tarbelldd`, `icom`. Other CPUs and other makers — `z80`, `8085`, `altair680`, `sbc200`,
+`tarbelldd`, `icom`. Other CPUs and other makers — `z80`, `8085`, `sbc200`,
 `sbc200v`, `dualsd`, `dualide`, `dualidesd`. And the peripheral demos — `vdm1`, `dazzler`,
 `sol20`, `lineprinter`, `parallel`, `bankmem`, `compupro`.
 
