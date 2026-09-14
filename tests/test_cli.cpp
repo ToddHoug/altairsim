@@ -1880,7 +1880,7 @@ void test_achieved_hz() {
               "FORMAT=BIN overrides the sniff -- the file loads as the ASCII it literally is");
 
         // FORMAT=SREC forces the S-record reader even when the name (.txt) hides it
-        // from the sniff -- the 680b's world, what MON680 punches and loads.
+        // from the sniff -- the Motorola-world counterpart to Intel HEX.
         std::ostringstream a3;
         mon.exec("LOAD " + srec + " FORMAT=SREC", a3);
         CHECK(mm.bus.memRead(0x0400) == 0xCC && mm.bus.memRead(0x0401) == 0xDD,

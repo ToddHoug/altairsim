@@ -11,7 +11,7 @@ static std::span<const uint8_t> sv(const char* s) {
 }
 
 void test_srec() {
-    SECTION("Motorola S-record -- the Altair 680b's world, not Intel HEX");
+    SECTION("Motorola S-record -- the Motorola-world counterpart to Intel HEX");
 
     {
         // S0 header (skipped), one S1 data record at 0100, S9 term carrying the

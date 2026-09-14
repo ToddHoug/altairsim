@@ -181,8 +181,8 @@ void Bus::reportUnclaimed(const BusCycle& c) {
 // which direction the byte was going -- and neither does a TRACE, which is why the
 // observers get the same corrected cycle.
 // THE FALLBACK status word, derivable from the cycle TYPE alone -- used only when no
-// master annotated the cycle (a monitor memory poke, a DMA transfer, the 6800, which
-// has no 8080 status word). The 8080/Z80 CPU is the real GENERATOR: it asserts the
+// master annotated the cycle (a monitor memory poke or a DMA transfer, neither of
+// which asserts an 8080 status word). The 8080/Z80 CPU is the real GENERATOR: it asserts the
 // full word (M1, STACK, ...) on the cycle it originates, and this fallback is a subset
 // of that word, so settle()'s OR (below) never corrupts a master-supplied one. WO* is
 // active low: set on reads/inputs, clear on writes/outputs. M1/HLTA/STACK are never in

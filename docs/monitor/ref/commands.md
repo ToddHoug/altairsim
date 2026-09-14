@@ -221,7 +221,7 @@ way LOAD ... ROM does -- behind the bus, into the chip that answers there.
 If the machine has a CPU, type an INSTRUCTION where a byte would go and it is
 assembled in place -- the prompt then drops by the instruction's length, not one
 byte. Operands are numbers in the console base (an H or Q suffix overrides); a
-bare value is still a plain byte. The 8080 and 6800 assemble in full; the Z80 is
+bare value is still a plain byte. The 8080 and 8085 assemble in full; the Z80 is
 a convenience -- its documented main, CB and ED forms, but not the IX/IY indexed
 forms (they carry a displacement) or the relative JR/DJNZ jumps (their byte is a
 signed offset from the next address), which report "not implemented" -- deposit
@@ -311,7 +311,7 @@ HEX  Intel HEX. ASCII text, and it CARRIES ITS OWN ADDRESSES, so it needs
 
 
 ```
-SREC Motorola S-records -- the 680b's world, what MON680 punches and loads.
+SREC Motorola S-records -- the Motorola-world counterpart to Intel HEX.
      ASCII text that CARRIES ITS OWN ADDRESSES too, so like HEX it needs no
      AT. Data records are S1/S2/S3 (2/3/4-byte addresses), the terminator
      S7/S8/S9. Every checksum is verified and a bad one FAILS the load.

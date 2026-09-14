@@ -20,7 +20,6 @@ and within a group the boards are in **alphabetical order**.
 
 | Type | What it is |
 |---|---|
-| [`6800`](#6800) | Altair 680b CPU board: a Motorola 6800 at 500 KHz. Decodes nothing -- it drives the bus. The 88-CPU's twin, one core down, with memory-mapped I/O |
 | [`8080`](#8080) | MITS 88-CPU: an 8080A at 2 MHz. Decodes nothing -- it drives the bus |
 | [`8085`](#8085) | Generic 8085 CPU board. Decodes nothing -- it drives the bus. The 88-CPU's twin, with an 8085 core (RIM/SIM + TRAP/RST 5.5/6.5/7.5) |
 | [`z80`](#z80) | Generic Z80 CPU board. Decodes nothing -- it drives the bus. The 88-CPU's twin, with a Z80 core |
@@ -54,7 +53,6 @@ and within a group the boards are in **alphabetical order**.
 | Type | What it is |
 |---|---|
 | [`2sio`](#2sio) | MITS 88-2SIO: two 6850 ACIAs, units 'a' and 'b'. Four ports at BASE+0..3 |
-| [`680io`](#680io) | Altair 680b onboard I/O: a 6850 ACIA console ('tty') at F000/F001 and the config-strap read port at F002. Memory-mapped |
 | [`gsio`](#gsio) | Generic SIO: a strap-configurable serial board with TWO independent channels, units 'a' and 'b' (configure each under [board.unit.a] / [board.unit.b]). Basic transmit/receive only -- no programmable word length, parity, stop bits or framing/overrun status; a specific card that needs those is a separate emulated board. Per channel you strap: a status/control port (status_port -- read synthesizes DAV/TBMT at bit positions you pick, write is discarded) and a data port (data_port); one inverter_gate knob inverts both status bits together. Built-in profiles preset the straps: profile=sior0 (MITS SIO Rev 0, the default) \| tuart (Cromemco TU-ART) \| imsai-sio2 \| compupro-if2 (CompuPro Interfacer II) \| compupro-ss1 (CompuPro System Support 1). Channel a defaults to ports 0/1, b to 2/3. Polled, no interrupts. CONNECT each channel to a file, socket, serial port, in:/out: |
 | [`io4`](#io4) | SSM IO-4 (2P+2S): the real Solid State Music board -- two full-duplex serial channels AND a four-port parallel section. Serial units 'a'/'b' are real 1602-family UARTs with programmable word length (data_bits 5-8), parity and stop bits (unlike the generic gsio), plus the full status-word strap-up (stat_* map, invert_status, port_reversal) and named profiles (default altair-rev1). A 4-port block set by switch S3 (default 0-3): Serial A status/data at BASE+0/+1, Serial B at BASE+2/+3. Parallel units 'pa'/'pb' are 8212 latched ports (input latch + service request, output latch) on their own 2-port block set by switch S4 (par_port, default 4-5): Parallel A at PAR+0, B at PAR+1; a byte the far end sends is strobed in, a write latches out, and the §3.2.2 status/data console flag is strappable (dav_bit/dav_source/dav_active_low). If the two blocks overlap, neither section answers the shared ports. Each serial channel's receive (DAV) and transmit (TBMT) and each parallel input (service request) can raise an interrupt, strapped on header W4 to a VI line, pin 73 (int), or none (rx_int/tx_int per serial channel, int per parallel port) -- there is no software enable, the strap is the enable, and a parallel input interrupt rises even when the port is not addressed. Configure each unit under [board.unit.a] / [board.unit.pa] etc.; CONNECT each to a file, socket, serial port, in:/out: |
 | [`pmmi`](#pmmi) | PMMI MM-103: Bell 103 modem on an S-100 card, unit 'line'. Four ports at BASE+0..3 (default C0), read/write different registers. Transmit/receive over a ByteStream; CONNECT it to in:/out: files. No dialer; modem status is a fixed stub |
@@ -67,7 +65,6 @@ and within a group the boards are in **alphabetical order**.
 
 | Type | What it is |
 |---|---|
-| [`680kcacr`](#680kcacr) | Altair 680b KCACR audio-cassette interface: a 1602-family UART recording Kansas City Standard FSK, memory-mapped at F010 (status/control) and F011 (data), active-LOW. Adds software motor control (control D7=on, D6=off) and interrupt-driven transfer (D0/D1 enables pull the 6800 IRQ). Reuses the 88-ACR tape machinery -- MOUNT a tape, WIND/REWIND it |
 | [`acr`](#acr) | MITS 88-ACR: cassette. An 88-SIO B + an FSK modem, unit 'tape'. Brings the WIND/REWIND/EXTRACT verbs and a tape counter |
 | [`uio`](#uio) | MITS 88-UIO: serial + cassette on one board. A 6850 (unit 'serial', default 0x10) and an 88-ACR cassette section (unit 'tape', default 0x06) with motor control and a SW-1 MITS/Kansas-City modulation switch. Defaults reproduce the standard 0x10 + 0x06 layout |
 
@@ -76,7 +73,6 @@ and within a group the boards are in **alphabetical order**.
 | Type | What it is |
 |---|---|
 | [`4pio`](#4pio) | MITS 88-4PIO: up to four 6820 PIAs, sections ja/jb.. per port. 16 ports from BASE (default 20). Software-set direction; CONNECT each section |
-| [`680uio`](#680uio) | Altair 680b Universal I/O: a second 6850 ACIA serial port ('serial') and a 6820 PIA parallel port (sections 'p1a/p1b', 'p2a/p2b' with pias=2) in an S9-relocatable window (default base F000: serial F006/F007, PIA F008-F00F), plus fixed switch inputs at F003 and a non-latched output at F010-F013. Memory-mapped, active-high |
 | [`c700`](#c700) | MITS 88-C700: Centronics line-printer controller, unit 'prn'. Two ports at BASE+0..1 (default 02). Output-only; CONNECT it to a file, a socket, or a real printer queue |
 | [`d7a`](#d7a) | Cromemco D+7A: analog + parallel I/O. Eight ports from BASE (default 18): one parallel port + seven two's-complement A/D-in/D/A-out channels. Reads 1-2 JS-1 joysticks from the host |
 | [`lpc`](#lpc) | MITS 88-LPC: 88-LP line-printer controller, unit 'prn'. Two ports at BASE+0..1 (default 02). Line-buffered: 6-bit codes + PRINT/LINE FEED/CLEAR. CONNECT it to a file, a socket, or a real printer queue |
@@ -113,21 +109,6 @@ and within a group the boards are in **alphabetical order**.
 
 
 ## CPU
-
-### `6800`
-
-Altair 680b CPU board: a Motorola 6800 at 500 KHz. Decodes nothing -- it drives the bus. The 88-CPU's twin, one core down, with memory-mapped I/O
-
-**Units:** `6800` (cpu)
-
-#### Board properties
-
-| Key | Kind | Default | Legal | Meaning |
-|---|---|---|---|---|
-| `clock_hz` | int | `0` | `0` .. `100000000` | Crystal on the board. 0 runs flat out -- as fast as the host can. |
-| `idle` | bool | `true` | `on` \| `off` | Stand down when the guest is only polling an empty keyboard. On by default -- the guest cannot tell, and a prompt stops burning a core. |
-| `achieved_hz` | int | — | — | LIVE: T-states per real second the run loop last reached -- the crystal you got, beside the one you asked for. Read-only; 0 until it has run. **(read-only — not a key you may set)** |
-
 
 ### `8080`
 
@@ -549,30 +530,6 @@ MITS 88-2SIO: two 6850 ACIAs, units 'a' and 'b'. Four ports at BASE+0..3
 | `connect` | string | `null` | text | The endpoint on the other end of the line (CONNECT sets this) |
 
 
-### `680io`
-
-Altair 680b onboard I/O: a 6850 ACIA console ('tty') at F000/F001 and the config-strap read port at F002. Memory-mapped
-
-**Units:** `tty` (serial, CONNECT)
-
-#### Board properties
-
-| Key | Kind | Default | Legal | Meaning |
-|---|---|---|---|---|
-| `straps` | int | `0x0` | `0x0` .. `0xFF` | Config straps read at F002: bit7 No-Terminal (0=terminal), bit2 stop bits |
-
-#### Unit `tty` — `[board.unit.tty]`
-
-| Key | Kind | Default | Legal | Meaning |
-|---|---|---|---|---|
-| `baud` | int | `9600` | `50` .. `76800` | Line rate. A JUMPER on the real card -- software cannot change it, and there is no free-running setting: the rate paces the line |
-| `interrupt` | enum | `none` | `none` \| `int` \| `vi0` \| `vi1` \| `vi2` \| `vi3` \| `vi4` \| `vi5` \| `vi6` \| `vi7` | Where this channel's IRQ is jumpered: none \| int \| vi0..vi7 *(interrupt strap)* |
-| `dcd` | enum | `ground` | `ground` \| `wired` | /DCD pin: grounded on the card, or wired to the connector |
-| `cts` | enum | `ground` | `ground` \| `wired` | /CTS pin: grounded on the card, or wired -- and then it gates the transmitter |
-| `lines` | string | — | — | Live pin state (read-only). CAPITALS = asserted. in: DCD CTS, out: RTS BRK **(read-only — not a key you may set)** |
-| `connect` | string | `null` | text | The endpoint on the other end of the line (CONNECT sets this) |
-
-
 ### `gsio`
 
 Generic SIO: a strap-configurable serial board with TWO independent channels, units 'a' and 'b' (configure each under [board.unit.a] / [board.unit.b]). Basic transmit/receive only -- no programmable word length, parity, stop bits or framing/overrun status; a specific card that needs those is a separate emulated board. Per channel you strap: a status/control port (status_port -- read synthesizes DAV/TBMT at bit positions you pick, write is discarded) and a data port (data_port); one inverter_gate knob inverts both status bits together. Built-in profiles preset the straps: profile=sior0 (MITS SIO Rev 0, the default) | tuart (Cromemco TU-ART) | imsai-sio2 | compupro-if2 (CompuPro Interfacer II) | compupro-ss1 (CompuPro System Support 1). Channel a defaults to ports 0/1, b to 2/3. Polled, no interrupts. CONNECT each channel to a file, socket, serial port, in:/out:
@@ -815,39 +772,6 @@ MITS 8800b Turnkey Module: phantom boot PROM (FC00-FFFF), integrated 6850 SIO (u
 
 ## Tape
 
-### `680kcacr`
-
-Altair 680b KCACR audio-cassette interface: a 1602-family UART recording Kansas City Standard FSK, memory-mapped at F010 (status/control) and F011 (data), active-LOW. Adds software motor control (control D7=on, D6=off) and interrupt-driven transfer (D0/D1 enables pull the 6800 IRQ). Reuses the 88-ACR tape machinery -- MOUNT a tape, WIND/REWIND it
-
-**Units:** `tape` (tape, MOUNT)
-
-#### Board properties
-
-| Key | Kind | Default | Legal | Meaning |
-|---|---|---|---|---|
-| `baud` | int | `300` | `50` .. `25000` | Line rate. A JUMPER on the real card -- software cannot change it |
-| `data_bits` | int | `8` | `5` .. `8` | Data bits per character. The NDB1/NDB2 pads |
-| `stop_bits` | int | `2` | `1` .. `2` | Stop bits. The NSB pad: GND = 1, +V = 2 |
-| `parity` | enum | `none` | `none` \| `odd` \| `even` | The NPB/POE pads: none \| odd \| even |
-| `motor` | enum | — | — | Tape-recorder motor relay (guest-driven: STA F010 7F = on, BF = off) **(read-only — not a key you may set)** |
-
-#### Unit `tape` — `[board.unit.tape]`
-
-| Key | Kind | Default | Legal | Meaning |
-|---|---|---|---|---|
-| `mode` | enum | `play` | `play` \| `record` | Which way the bytes go: play loads from the file, record saves to it |
-| `format` | enum | `auto` | `auto` \| `raw` \| `kcs300` | How to read the mounted file: auto \| raw \| fsk300 |
-| `leader` | int | `15` | `0` .. `120` | Seconds of idle tone before recorded data, when writing audio |
-| `trailer` | int | `5` | `0` .. `120` | Seconds of idle tone after recorded data, when writing audio |
-| `waveform` | enum | `square` | `square` \| `sine` | Carrier shape when writing audio: square (like real hardware) \| sine |
-| `level` | int | `36` | `1` .. `100` | Recording level as a percent of full scale, when writing audio |
-| `rate` | enum | `full` | `full` \| `real` | Playback speed: full (as fast as the guest reads) \| real (wall-clock baud) |
-| `detected` | string | — | — | What the mounted tape turned out to be (empty if nothing is mounted) **(read-only — not a key you may set)** |
-| `position` | string | — | — | Where the tape head is now: mm:ss / total (percent) -- read-only **(read-only — not a key you may set)** |
-| `counter` | enum | `on` | `on` \| `off` | Live tape counter on the console during a load: on \| off |
-| `stop` | string | `off` | off \| end \| mm:ss | Auto-stop playback at this time: off \| end \| <mm:ss> |
-
-
 ### `acr`
 
 MITS 88-ACR: cassette. An 88-SIO B + an FSK modem, unit 'tape'. Brings the WIND/REWIND/EXTRACT verbs and a tape counter
@@ -960,45 +884,6 @@ MITS 88-4PIO: up to four 6820 PIAs, sections ja/jb.. per port. 16 ports from BAS
 | Key | Kind | Default | Legal | Meaning |
 |---|---|---|---|---|
 | `connect` | string | `null` | text | The endpoint on the other end of this section (CONNECT sets this) |
-
-
-### `680uio`
-
-Altair 680b Universal I/O: a second 6850 ACIA serial port ('serial') and a 6820 PIA parallel port (sections 'p1a/p1b', 'p2a/p2b' with pias=2) in an S9-relocatable window (default base F000: serial F006/F007, PIA F008-F00F), plus fixed switch inputs at F003 and a non-latched output at F010-F013. Memory-mapped, active-high
-
-**Units:** `serial` (serial, CONNECT), `p1a` (serial, CONNECT), `p1b` (serial, CONNECT)
-
-#### Board properties
-
-| Key | Kind | Default | Legal | Meaning |
-|---|---|---|---|---|
-| `base` | int | `0xF000` | `0xF000` .. `0xF0F0` | S9 window base (F000 + position*0x10); serial at base+6, PIAs base+8..+F |
-| `pias` | int | `1` | `1` .. `2` | 6820 PIAs populated: 1 (PIA-C only) or 2 (PIA-C + PIA-B) |
-| `sense` | int | `0x0` | `0x0` .. `0xFF` | Switch inputs read at F003 (fixed, read-only tri-state) |
-| `nlout` | bool | `true` | `on` \| `off` | Decode the F010-F013 non-latched output (off = IC A1 removed, KCACR owns F010/F011) |
-
-#### Unit `serial` — `[board.unit.serial]`
-
-| Key | Kind | Default | Legal | Meaning |
-|---|---|---|---|---|
-| `baud` | int | `9600` | `50` .. `76800` | Line rate. A JUMPER on the real card -- software cannot change it, and there is no free-running setting: the rate paces the line |
-| `interrupt` | enum | `none` | `none` \| `int` \| `vi0` \| `vi1` \| `vi2` \| `vi3` \| `vi4` \| `vi5` \| `vi6` \| `vi7` | Where this channel's IRQ is jumpered: none \| int \| vi0..vi7 *(interrupt strap)* |
-| `dcd` | enum | `ground` | `ground` \| `wired` | /DCD pin: grounded on the card, or wired to the connector |
-| `cts` | enum | `ground` | `ground` \| `wired` | /CTS pin: grounded on the card, or wired -- and then it gates the transmitter |
-| `lines` | string | — | — | Live pin state (read-only). CAPITALS = asserted. in: DCD CTS, out: RTS BRK **(read-only — not a key you may set)** |
-| `connect` | string | `null` | text | The endpoint on the other end of the line (CONNECT sets this) |
-
-#### Unit `p1a` — `[board.unit.p1a]`
-
-| Key | Kind | Default | Legal | Meaning |
-|---|---|---|---|---|
-| `connect` | string | `null` | text | The endpoint on the other end of this PIA section (CONNECT sets this) |
-
-#### Unit `p1b` — `[board.unit.p1b]`
-
-| Key | Kind | Default | Legal | Meaning |
-|---|---|---|---|---|
-| `connect` | string | `null` | text | The endpoint on the other end of this PIA section (CONNECT sets this) |
 
 
 ### `c700`

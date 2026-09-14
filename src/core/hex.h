@@ -56,8 +56,8 @@ bool looksLikeHex(std::span<const uint8_t> data);
 bool loadHex(std::span<const uint8_t> text, Image& out, std::string& err);
 
 // True if this looks like a Motorola S-record (leading 'S', a type digit, then
-// hex). The Altair 680b's world is S-record, not Intel HEX -- deramp's MON680
-// and KCACR PROMs ship as .S19 -- so LOAD/MOUNT/builtin autodetect this too.
+// hex). S-records are the Motorola-world counterpart to Intel HEX and ship as
+// .S19, so LOAD/MOUNT/builtin autodetect this format alongside HEX.
 bool looksLikeSrec(std::span<const uint8_t> data);
 
 // Motorola S-record loader (S1/S2/S3 data, S9/S8/S7 term -> start; S0/S5/S6
@@ -93,7 +93,7 @@ std::string saveHex(const Image& img, int recLen = 16);
 
 // The S-record counterpart: emit S1 data records (16-bit addresses) plus an S9
 // terminator carrying `start`. Round-trip is a test case, exactly as for hex.
-// 16-bit only -- the 680b is a 16-bit machine, so an address above 0xFFFF is a
+// 16-bit only -- the S-100 address space is 64K, so an address above 0xFFFF is a
 // caller bug rather than a reason to reach for S2/S3 here.
 std::string saveSrec(const Image& img, int recLen = 16);
 

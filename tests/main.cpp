@@ -10,8 +10,6 @@
 #include "boards/mits-88sio.h"
 #include "boards/mits-frontpanel.h"
 #include "boards/mits-88uio.h"
-#include "boards/mits-680io.h"
-#include "boards/mits-680uio.h"
 #include "boards/mits-turnkey.h"
 #include "boards/cromemco-16fdc.h"
 #include "boards/pmmi-mm103.h"
@@ -85,15 +83,8 @@ const struct {
     {"isa", test_isa},
     {"z80_isa", test_z80_isa},
     {"8085_isa", test_8085_isa},
-    {"isa6800", test_isa6800},
-    {"asm6800", test_asm6800},
     {"cpu", test_cpu},
     {"status", test_status},
-    {"cpu6800", test_cpu6800},
-    {"680board", test_680board},
-    {"680io", test_680io},
-    {"680uio", test_680uio},
-    {"680kcacr", test_680kcacr},
     {"z80_cpu", test_z80_cpu},
     {"8085_cpu", test_8085_cpu},
     {"8085_undoc_alu", test_8085_undoc_alu},
@@ -174,8 +165,6 @@ int main(int argc, char** argv) {
     // user will ever run, and the first thing to break would be the real one.
     altair::Sio2Board::setResolver(altair::resolveEndpoint);
     altair::TurnkeyBoard::setResolver(altair::resolveEndpoint);
-    altair::Io680Board::setResolver(altair::resolveEndpoint);
-    altair::Uio680Board::setResolver(altair::resolveEndpoint);
     altair::SioBoard::setResolver(altair::resolveEndpoint);
     altair::SbcBoard::setResolver(altair::resolveEndpoint);
     altair::UioBoard::setResolver(altair::resolveEndpoint);

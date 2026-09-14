@@ -196,8 +196,8 @@ public:
     // access is STACK, and only the CPU knows which -- and the bus carries it verbatim
     // (settle() ORs the type-derived FALLBACK on, which is a subset, so a master word
     // is never corrupted). The default 0 means "no master annotated this cycle": the
-    // monitor's memory pokes, a DMA transfer, the 6800 (which has no such word) all
-    // leave it 0 and fall back to statusFor() -- exactly the behavior before this
+    // monitor's memory pokes and a DMA transfer both leave it 0 and fall back to
+    // statusFor() -- exactly the behavior before this
     // existed. 0 is safe as "unset" because a real memory-write's word is also 0x00
     // and the fallback reproduces it.
     uint8_t memRead(uint16_t addr, uint8_t status = 0);

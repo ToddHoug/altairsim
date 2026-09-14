@@ -94,7 +94,7 @@ public:
 };
 
 // Null if we do not assemble that instruction set (e.g. "" when there is no CPU).
-// The 8080 and 6800 are full table reverses; the Z80 is a CONVENIENCE assembler
+// The 8080 and 8085 are full table reverses; the Z80 is a CONVENIENCE assembler
 // (documented main/CB/ED forms, but not the IX/IY indexed or relative JR/DJNZ
 // forms -- those return a "not implemented" error). The caller reports a null and
 // falls back to bytes -- it never guesses.
