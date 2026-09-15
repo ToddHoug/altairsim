@@ -20,27 +20,35 @@ static Clock& deadCard() {
     return stopped;
 }
 
-Clock& TarbellBoard::clk() const { return clock_ ? *clock_ : deadCard(); }
+Clock& TarbellBoardBase::clk() const { return clock_ ? *clock_ : deadCard(); }
 
 // ---------------------------------------------------------------------------
-// Construction
+// Construction. The base wires up the drive vector but never calls buildChip():
+// buildChip() is pure virtual, so it cannot run during base construction. Each
+// concrete generation's own constructor calls it once the object is fully that
+// generation -- so the vtable already points at the right chip (this also retires
+// the old base-construction-dispatch hazard the DD card used to work around).
 // ---------------------------------------------------------------------------
-TarbellBoard::TarbellBoard() {
+TarbellBoardBase::TarbellBoardBase() {
     drive_.resize((size_t)drives_);
-    buildChip();
 }
 
-TarbellBoard::~TarbellBoard() {
+TarbellBoardBase::~TarbellBoardBase() {
     // The Clock is holding a lambda with `this` in it; a card can be pulled from a
     // running machine, and a deadline firing into a freed board is a use-after-free.
     if (clock_) clock_->cancel(wake_);
 }
 
+// ===========================================================================
+// TarbellBoard -- the single-density #1011 (WD FD1771).
+// ===========================================================================
+TarbellBoard::TarbellBoard() { buildChip(); }
+
 // THE PART IS THE GENERATION. The single-density card has an FD1771; the rest of the
 // family (register file, command set) is shared in Wd17xx. Always wait-synced: the
 // Tarbell's data port stalls the CPU on the wait-state generator rather than exposing
 // a byte clock (reference §4), so every command completes on the access that would
-// have waited (see wd17xx.h). DD overrides this to build a Wd1791.
+// have waited (see wd17xx.h). DD builds a Wd1791 instead.
 void TarbellBoard::buildChip() {
     chip_ = std::make_unique<Wd1771>("fdc");
     chip_->setWaitSynced(true);
@@ -52,7 +60,7 @@ void TarbellBoard::buildChip() {
 // the VersaFloppy's 63H latch, the Tarbell's drive select is PLAIN (no inversion): the
 // SD function decoder and the DD bitmap latch both hand us a straight binary drive
 // number (writeControl below).
-void TarbellBoard::applySelection() {
+void TarbellBoardBase::applySelection() {
     FloppyDrive* fd = nullptr;
     if (sel_ >= 0 && sel_ < (int)drive_.size()) {
         drive_[(size_t)sel_].drv.setSide(side_);
@@ -69,7 +77,7 @@ void TarbellBoard::applySelection() {
 // The bus. Two arms: the 8-port I/O block, and the boot PROM's memory reads while it
 // is shadowing low RAM.
 // ---------------------------------------------------------------------------
-bool TarbellBoard::decodes(const BusCycle& c) const {
+bool TarbellBoardBase::decodes(const BusCycle& c) const {
     if (!enabled_) return false;
 
     if (c.type == Cycle::IoRead || c.type == Cycle::IoWrite) {
@@ -87,7 +95,7 @@ bool TarbellBoard::decodes(const BusCycle& c) const {
     return false;
 }
 
-uint8_t TarbellBoard::read(const BusCycle& c) {
+uint8_t TarbellBoardBase::read(const BusCycle& c) {
     if (c.type == Cycle::MemRead) return prom_[c.addr & 0x1F];  // only reached while shadowing
 
     Clock&  k   = clk();
@@ -111,7 +119,7 @@ uint8_t TarbellBoard::read(const BusCycle& c) {
     return v;
 }
 
-void TarbellBoard::write(const BusCycle& c) {
+void TarbellBoardBase::write(const BusCycle& c) {
     if (c.type != Cycle::IoWrite) return;  // a MemWrite in the shadow falls through to RAM
 
     Clock&  k   = clk();
@@ -152,11 +160,11 @@ void TarbellBoard::writeControl(uint8_t v) {
 // Interrupts. The standard Tarbell software polls the WAIT port, and both tracked
 // disks boot polled; the strap exists for completeness. Gate on the jumper.
 // ---------------------------------------------------------------------------
-bool TarbellBoard::assertsInt() const {
+bool TarbellBoardBase::assertsInt() const {
     return chip_ && irq_ == IrqJumper::Int && chip_->intrq();
 }
 
-uint8_t TarbellBoard::assertsVi() const {
+uint8_t TarbellBoardBase::assertsVi() const {
     if (!chip_ || !chip_->intrq()) return 0;
     return viBit(irq_);
 }
@@ -171,7 +179,7 @@ uint8_t TarbellBoard::assertsVi() const {
 // already un-shadowed, so the PROM's `JZ 07DH` (0x7D has A5 set) drops straight into
 // the loaded loader. `bootstrap = false` (the DIP off) disables the whole half.
 // ---------------------------------------------------------------------------
-bool TarbellBoard::assertsPhantom(const BusCycle& c) const {
+bool TarbellBoardBase::assertsPhantom(const BusCycle& c) const {
     if (!armed_ || !bootstrap_) return false;
     if (c.type != Cycle::MemRead && c.type != Cycle::MemWrite) return false;
     if (c.type == Cycle::MemRead && (c.addr & 0x0020)) return false;  // A5 high -> released now
@@ -181,7 +189,7 @@ bool TarbellBoard::assertsPhantom(const BusCycle& c) const {
 // The LATCHED half: the first memory read with A5 high releases the shadow forever
 // (until POC* re-arms it). The combinational half is in assertsPhantom() above; only
 // the latch is news the backplane needs.
-void TarbellBoard::snoop(const BusCycle& c) {
+void TarbellBoardBase::snoop(const BusCycle& c) {
     if (armed_ && c.type == Cycle::MemRead && (c.addr & 0x0020)) {
         armed_ = false;
         decodeChanged();
@@ -193,7 +201,7 @@ void TarbellBoard::snoop(const BusCycle& c) {
 // the interrupt wire, re-arm the one deadline. Under wait-synced operation the chip
 // has no autonomous edge, so no timer is armed -- everything happens on an access.
 // ---------------------------------------------------------------------------
-void TarbellBoard::refresh() {
+void TarbellBoardBase::refresh() {
     if (!clock_) return;
     chip_->poll(*clock_);
     intChanged();
@@ -209,7 +217,7 @@ void TarbellBoard::refresh() {
     if (e) wake_ = clock_->at(e, [this] { refresh(); });
 }
 
-void TarbellBoard::reset(Reset r) {
+void TarbellBoardBase::reset(Reset r) {
     // POC*/RESET* re-arms the boot PROM (the machine comes up with it shadowing 0000).
     // Independent of the clock -- do it first.
     if (bootstrap_ && !armed_) {
@@ -225,14 +233,14 @@ void TarbellBoard::reset(Reset r) {
     refresh();
 }
 
-void TarbellBoard::power() {
+void TarbellBoardBase::power() {
     loadProm();
     reset(Reset::PowerOn);
 }
 
-void TarbellBoard::pump() { refresh(); }
+void TarbellBoardBase::pump() { refresh(); }
 
-void TarbellBoard::configChanged() {
+void TarbellBoardBase::configChanged() {
     decodeChanged();  // `port` moved the card; `bootstrap` changed the shadow decode
     refresh();
 }
@@ -242,7 +250,7 @@ void TarbellBoard::configChanged() {
 // card's ROM region -- the same loader the SBC and Turnkey use. The 32 bytes land at
 // 0000; anything the decode places elsewhere is ignored (there is nothing else).
 // ---------------------------------------------------------------------------
-void TarbellBoard::loadProm() {
+void TarbellBoardBase::loadProm() {
     std::fill(std::begin(prom_), std::end(prom_), (uint8_t)0xFF);
     const BuiltinRom* rom = findRom("tarbell-sd");
     if (!rom) {
@@ -296,7 +304,7 @@ bool TarbellBoard::describeGeometry(uint64_t bytes, int& tracks, int& heads, boo
 // ---------------------------------------------------------------------------
 // Properties
 // ---------------------------------------------------------------------------
-std::vector<Property> TarbellBoard::properties() {
+std::vector<Property> TarbellBoardBase::properties() {
     std::vector<Property> p;
     {
         Property x;
@@ -354,7 +362,7 @@ std::vector<Property> TarbellBoard::properties() {
     return p;
 }
 
-std::vector<MapEntry> TarbellBoard::ioMap() const {
+std::vector<MapEntry> TarbellBoardBase::ioMap() const {
     return {
         {(uint32_t)port_ + 0, (uint32_t)port_ + 0, "command/status", "FD177x"},
         {(uint32_t)port_ + 1, (uint32_t)port_ + 1, "track",          "FD177x"},
@@ -364,7 +372,7 @@ std::vector<MapEntry> TarbellBoard::ioMap() const {
     };
 }
 
-std::vector<MapEntry> TarbellBoard::memMap() const {
+std::vector<MapEntry> TarbellBoardBase::memMap() const {
     if (!bootstrap_) return {};
     return {{0x0000, 0x001F, "boot PROM",
              "32-byte bootstrap; shadows RAM over PHANTOM* until an A5-high read releases it"}};
@@ -373,7 +381,7 @@ std::vector<MapEntry> TarbellBoard::memMap() const {
 // ---------------------------------------------------------------------------
 // Units, MOUNT, UNMOUNT, and the [[board.drive]] sub-unit table.
 // ---------------------------------------------------------------------------
-std::vector<UnitDef> TarbellBoard::units() const {
+std::vector<UnitDef> TarbellBoardBase::units() const {
     std::vector<UnitDef> u;
     for (int i = 0; i < drives_; ++i) {
         const Drive& d = drive_[(size_t)i];
@@ -400,7 +408,7 @@ static int driveIndex(const std::string& unit, int count) {
     return (i >= 0 && i < count) ? i : -1;
 }
 
-bool TarbellBoard::mount(const std::string& unit, const std::string& path, bool ro,
+bool TarbellBoardBase::mount(const std::string& unit, const std::string& path, bool ro,
                          std::string& err) {
     int i = driveIndex(unit, drives_);
     if (i < 0) {
@@ -455,7 +463,7 @@ bool TarbellBoard::mount(const std::string& unit, const std::string& path, bool 
     return true;
 }
 
-bool TarbellBoard::unmount(const std::string& unit, std::string& err) {
+bool TarbellBoardBase::unmount(const std::string& unit, std::string& err) {
     int i = driveIndex(unit, drives_);
     if (i < 0) { err = "no unit `" + unit + "` on " + id; return false; }
 
@@ -470,7 +478,7 @@ bool TarbellBoard::unmount(const std::string& unit, std::string& err) {
     return true;
 }
 
-std::vector<Property> TarbellBoard::subUnitProperties(const std::string& table) const {
+std::vector<Property> TarbellBoardBase::subUnitProperties(const std::string& table) const {
     if (table != "drive") return {};
     std::vector<Property> p;
     {
@@ -501,7 +509,7 @@ std::vector<Property> TarbellBoard::subUnitProperties(const std::string& table) 
     return p;
 }
 
-bool TarbellBoard::addSubUnit(const std::string& table, const KeyValues& kv, std::string& err) {
+bool TarbellBoardBase::addSubUnit(const std::string& table, const KeyValues& kv, std::string& err) {
     if (table != "drive") {
         err = type() + " has no [[board." + table + "]] table";
         return false;
@@ -535,7 +543,7 @@ bool TarbellBoard::addSubUnit(const std::string& table, const KeyValues& kv, std
     return mount("drive" + std::to_string(unit), path, ro, err);
 }
 
-std::vector<Board::SubUnit> TarbellBoard::subUnits() const {
+std::vector<Board::SubUnit> TarbellBoardBase::subUnits() const {
     std::vector<SubUnit> out;
     for (int i = 0; i < drives_; ++i) {
         const Drive& d = drive_[(size_t)i];
@@ -551,7 +559,7 @@ std::vector<Board::SubUnit> TarbellBoard::subUnits() const {
     return out;
 }
 
-std::vector<std::string> TarbellBoard::drainLog() {
+std::vector<std::string> TarbellBoardBase::drainLog() {
     std::vector<std::string> out = std::move(log_);
     log_.clear();
     if (chip_)
@@ -568,7 +576,7 @@ std::vector<std::string> TarbellBoard::drainLog() {
 // strap and is NOT serialized (a snapshot RESTOREs into a machine built from the same
 // config, so it is already correct).
 // ---------------------------------------------------------------------------
-void TarbellBoard::serialize(StateWriter& w) const {
+void TarbellBoardBase::serialize(StateWriter& w) const {
     Board::serialize(w);
     w.u8((uint8_t)sel_);
     w.u8((uint8_t)side_);
@@ -579,7 +587,7 @@ void TarbellBoard::serialize(StateWriter& w) const {
     chip_->serialize(w);
 }
 
-void TarbellBoard::deserialize(StateReader& r) {
+void TarbellBoardBase::deserialize(StateReader& r) {
     Board::deserialize(r);
     sel_      = (int)r.u8();
     side_     = (int)r.u8();
@@ -618,13 +626,13 @@ void TarbellDdBoard::buildChip() {
 bool TarbellDdBoard::decodes(const BusCycle& c) const {
     if (enabled_ && (c.type == Cycle::IoRead || c.type == Cycle::IoWrite) && inDmaWindow(c.port()))
         return true;
-    return TarbellBoard::decodes(c);
+    return TarbellBoardBase::decodes(c);
 }
 
 uint8_t TarbellDdBoard::read(const BusCycle& c) {
     if (c.type == Cycle::IoRead && inDmaWindow(c.port()))
         return dma_.readPort((uint8_t)(c.port() - dmaport_));
-    return TarbellBoard::read(c);
+    return TarbellBoardBase::read(c);
 }
 
 void TarbellDdBoard::write(const BusCycle& c) {
@@ -636,7 +644,7 @@ void TarbellDdBoard::write(const BusCycle& c) {
         holdChanged();
         return;
     }
-    TarbellBoard::write(c);
+    TarbellBoardBase::write(c);
 }
 
 // ---------------------------------------------------------------------------
@@ -751,7 +759,7 @@ bool TarbellDdBoard::describeGeometry(uint64_t bytes, int& tracks, int& heads, b
 // 8257's register block. Everything else (bootstrap, port, drives, interrupt) is the
 // base's, so chain to it and append.
 std::vector<Property> TarbellDdBoard::properties() {
-    std::vector<Property> p = TarbellBoard::properties();
+    std::vector<Property> p = TarbellBoardBase::properties();
     Property x;
     x.name  = "dmaport";
     x.help  = "Base of the on-card 8257 DMA controller's 16-port register block (default E0). "
@@ -772,7 +780,7 @@ std::vector<Property> TarbellDdBoard::properties() {
 
 // The base rows (FD1791 at port_) plus the 8257's block at dmaport_.
 std::vector<MapEntry> TarbellDdBoard::ioMap() const {
-    std::vector<MapEntry> m = TarbellBoard::ioMap();
+    std::vector<MapEntry> m = TarbellBoardBase::ioMap();
     m.push_back({(uint32_t)dmaport_ + 0, (uint32_t)dmaport_ + 0, "DMA ch0 address", "Intel 8257"});
     m.push_back({(uint32_t)dmaport_ + 1, (uint32_t)dmaport_ + 1, "DMA ch0 count",   "Intel 8257"});
     m.push_back({(uint32_t)dmaport_ + 8, (uint32_t)dmaport_ + 8, "DMA mode/status", "Intel 8257"});
@@ -780,13 +788,13 @@ std::vector<MapEntry> TarbellDdBoard::ioMap() const {
 }
 
 void TarbellDdBoard::serialize(StateWriter& w) const {
-    TarbellBoard::serialize(w);
+    TarbellBoardBase::serialize(w);
     w.u8(extAddr_);
     dma_.serialize(w);
 }
 
 void TarbellDdBoard::deserialize(StateReader& r) {
-    TarbellBoard::deserialize(r);
+    TarbellBoardBase::deserialize(r);
     extAddr_ = r.u8();
     dma_.deserialize(r);
     holdChanged();  // a snapshot taken mid-burst restores an armed channel; re-drive pHOLD
