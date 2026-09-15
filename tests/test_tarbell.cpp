@@ -38,13 +38,13 @@ constexpr uint8_t EXT  = P + 5;  // FD ext-addr (out) / DMA-busy (in)  -- DD onl
 // which is the board's default. ADR0 = E0, WCT0 = E1, CMND/status = E8.
 constexpr uint8_t dmaBase = 0xE0;
 
-uint8_t in(TarbellBoard& b, uint8_t port) {
+uint8_t in(TarbellBoardBase& b, uint8_t port) {
     BusCycle c;
     c.type = Cycle::IoRead;
     c.addr = port;
     return b.read(c);
 }
-void out(TarbellBoard& b, uint8_t port, uint8_t v) {
+void out(TarbellBoardBase& b, uint8_t port, uint8_t v) {
     BusCycle c;
     c.type = Cycle::IoWrite;
     c.addr = port;
@@ -85,7 +85,7 @@ MemoryBoard* ram64k(const char* id) {
 // Read one sector the way the Tarbell PROM does: poll the WAIT port (FC) for DRQ, read
 // a data byte (FB), repeat until the WAIT port shows INTRQ (bit7 clear). Returns what
 // came off the data port. A hard cap keeps a stuck DRQ from hanging the test.
-std::vector<uint8_t> pollRead(TarbellBoard& b) {
+std::vector<uint8_t> pollRead(TarbellBoardBase& b) {
     std::vector<uint8_t> got;
     for (int guard = 0; guard < 4096; ++guard) {
         if ((in(b, CTL) & 0x80) == 0) break;  // INTRQ: the transfer finished
@@ -99,7 +99,7 @@ std::vector<uint8_t> pollRead(TarbellBoard& b) {
 // the controller signals INTRQ (bit7 clear). That is exactly the ENDTRK loop: the guest does
 // not know the revolution length, it just fills until the wait-synced command completes. The
 // caller must have issued the Write Track command (0xF4) first.
-void pollWrite(TarbellBoard& b, const std::vector<uint8_t>& stream) {
+void pollWrite(TarbellBoardBase& b, const std::vector<uint8_t>& stream) {
     size_t k = 0;
     for (int guard = 0; guard < 20000; ++guard) {
         if ((in(b, CTL) & 0x80) == 0) break;  // INTRQ: the track is done

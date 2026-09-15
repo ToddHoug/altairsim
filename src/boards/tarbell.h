@@ -13,11 +13,15 @@
 // names this very card as the canonical example of a board that is more than one
 // kind of thing.
 //
-// TWO GENERATIONS, SD IS THE BASE. The single-density #1011 (FD1771) is
-// `TarbellBoard`; the double-density #2022 (FD1791/93) is `TarbellDdBoard`, which
-// inherits it and overrides only the chip, the OUT-FC control decode, the port-FD
-// DMA/extended-address registers, and the disk geometry (its track 0 is single
-// density, the rest double).
+// TWO GENERATIONS, ONE SHARED BASE. `TarbellBoardBase` is the common card -- the
+// FD177x register decode, the boot PROM / PHANTOM* half, the drives, MOUNT and the
+// snapshot -- and is abstract (it never decides which chip it is). The two shipping
+// cards are SIBLINGS off it, neither built on the other: the single-density #1011
+// (FD1771) is `TarbellBoard`, the double-density #2022 (FD1791/93) is
+// `TarbellDdBoard`. Each supplies its own chip, its OUT-FC control decode, the port-FD
+// extra registers, and its disk geometry; the DD card adds the on-card 8257 DMA block.
+// The base holds none of either card's specifics, so a change to one generation cannot
+// reach the other.
 //
 // PORTS (8-port window, base F8; COMMAND AT OFFSET 0, unlike the VersaFloppy):
 //   F8  command (write) / status (read)      F9  track      FA  sector
@@ -43,12 +47,13 @@
 
 namespace altair {
 
-class TarbellBoard : public Board {
+// The shared Tarbell card: the FD177x register decode, the boot PROM / PHANTOM* half,
+// the drives and their MOUNT plumbing, and the snapshot. ABSTRACT -- it never picks a
+// chip, a control-port decode, or a disk geometry; those are the pure virtual seams
+// each generation fills. Not a registered board; it cannot be instantiated on its own.
+class TarbellBoardBase : public Board {
 public:
-    TarbellBoard();
-    ~TarbellBoard() override;
-
-    std::string type() const override { return "tarbell"; }
+    ~TarbellBoardBase() override;
 
     // ---- the bus: the 8-port I/O block AND the boot PROM's memory reads ----
     bool    decodes(const BusCycle& c) const override;
@@ -91,6 +96,8 @@ public:
     bool    promArmed() const { return armed_; }
 
 protected:
+    TarbellBoardBase();   // wires up the drive vector; a concrete card calls buildChip()
+
     bool addSubUnit(const std::string& table, const KeyValues& kv, std::string& err) override;
 
     // One physical drive on the daisy chain: the mounted image (the board OWNS it) and
@@ -111,15 +118,15 @@ protected:
         int     sectors, sectorSize, startSector;
     };
 
-    // ---- the four things the double-density card changes ----
-    virtual void    buildChip();                     // SD: Wd1771; DD: Wd1791
-    virtual void    writeControl(uint8_t v);         // SD: function decoder; DD: bitmap latch
-    virtual uint8_t readExtra(uint8_t off) const { (void)off; return 0xFF; }    // DD: port FD in
-    virtual void    writeExtra(uint8_t off, uint8_t v) { (void)off; (void)v; }  // DD: port FD out
+    // ---- the seams each generation fills; the base holds neither card's answer ----
+    virtual void    buildChip() = 0;                 // SD: Wd1771; DD: Wd1791
+    virtual void    writeControl(uint8_t v) = 0;     // SD: function decoder; DD: bitmap latch
+    virtual uint8_t readExtra(uint8_t off) const = 0;        // DD: port FD in; SD: none
+    virtual void    writeExtra(uint8_t off, uint8_t v) = 0;  // DD: port FD out; SD: none
     // Probe an image's byte count into a geometry. SD: 256,256; DD: a 499,456 / 256,256 / blank
     // superset (the DD controller reads SD media too).
     virtual bool    describeGeometry(uint64_t bytes, int& tracks, int& heads, bool& interleaved,
-                                     std::vector<FmtRange>& ranges, std::string& err) const;
+                                     std::vector<FmtRange>& ranges, std::string& err) const = 0;
 
     void   applySelection();   // point the chip at drive_[sel_], set side + data rate
     void   refresh();          // advance the chip, re-drive the wires, re-arm the wake
@@ -145,6 +152,23 @@ protected:
     Clock::Handle wake_ = Clock::kNone;
 };
 
+// The single-density #1011: an FD1771, the 74LS138 OUT-FC function decoder, no port-FD
+// extra registers, and a single 256,256-byte 8" SD geometry.
+class TarbellBoard : public TarbellBoardBase {
+public:
+    TarbellBoard();
+
+    std::string type() const override { return "tarbell"; }
+
+protected:
+    void    buildChip() override;
+    void    writeControl(uint8_t v) override;
+    uint8_t readExtra(uint8_t /*off*/) const override { return 0xFF; }  // no port FD on the SD card
+    void    writeExtra(uint8_t /*off*/, uint8_t /*v*/) override {}
+    bool    describeGeometry(uint64_t bytes, int& tracks, int& heads, bool& interleaved,
+                             std::vector<FmtRange>& ranges, std::string& err) const override;
+};
+
 // The double-density #2022: a WD1791/93, a bitmap OUT-FC latch (density + side +
 // drive), a port-FD DMA-busy/extended-address register, and mixed-density media
 // (single-density track 0, double-density tracks 1-76). It also READS plain SD media
@@ -158,11 +182,10 @@ protected:
 // -- pulling pHOLD and driving the transfer through the same BusMaster::step() the CPU
 // uses, so BREAK MEM and TRACE catch a DMA cycle like any other. The 8257 is a CHIP the
 // board owns (HAS-A, like the WD1791); the BOARD is the bus master.
-class TarbellDdBoard : public TarbellBoard {
+class TarbellDdBoard : public TarbellBoardBase {
 public:
-    // The base constructor already ran buildChip() -- but virtual dispatch during base
-    // construction reaches TarbellBoard::buildChip (a Wd1771), not ours. Rebuild here, now
-    // that the object is fully a TarbellDdBoard, so the chip is the Wd1791 this card needs.
+    // buildChip() is pure virtual, so the base constructor never runs it -- each card
+    // builds its own chip here, once the object is fully its own type. Ours is the Wd1791.
     TarbellDdBoard() { mover_.d = this; buildChip(); }
 
     std::string type() const override { return "tarbelldd"; }
