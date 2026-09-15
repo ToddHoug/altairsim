@@ -244,7 +244,7 @@ int main(int argc, char** argv) {
     // one `#include` away from knowing what a socket is.
     Sio2Board::setResolver(resolveEndpoint);
     TurnkeyBoard::setResolver(resolveEndpoint);  // shares Sio2Port's resolver
-    SioBoard::setResolver(resolveEndpoint);
+    SerialBoardBase::setResolver(resolveEndpoint);  // the 88-SIO / 88-ACR / 88-UIO serial engine
     SbcBoard::setResolver(resolveEndpoint);
     UioBoard::setResolver(resolveEndpoint);  // serial half; the cassette half refuses CONNECT
     C700Board::setResolver(resolveEndpoint);

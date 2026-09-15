@@ -471,7 +471,10 @@ add_library(altair_core STATIC
   # See src/boards/icom-fd3712.h.
   src/boards/icom-fd3712.cpp
   src/boards/mits-2sio.cpp
-  src/boards/mits-88sio.cpp
+  # SerialBoardBase -- the reusable 88-SIO B serial engine (UART, inverted status word, VI
+  # straps, interrupt enables, decode, connector, snapshot). Not a registered board; the
+  # 88-SIO is it plus a name, the cassette engine extends it. See serial-board-base.h.
+  src/boards/serial-board-base.cpp
   # SD Systems SBC-100/200 -- the 8251 serial console (Phase 1). Structural twin of
   # the 88-SIO, embedding one Intel8251. See src/boards/sd-sbc.h.
   src/boards/sd-sbc.cpp
@@ -489,13 +492,16 @@ add_library(altair_core STATIC
   # 16FDC/64FDC leaves (header-only); boots CDOS. See src/boards/cromemco-fdc.h.
   src/boards/cromemco-fdc.cpp
   src/boards/floppy-drive.cpp
-  # The 88-ACR derives from the 88-SIO, because the card IS an 88-SIO B with a modem
-  # mated to it -- see mits-88acr.h. It must be listed after it for no reason at all;
-  # this list is not ordered. It is listed after it so the reader sees the pair.
-  src/boards/mits-88acr.cpp
-  # The 88-UIO -- a 6850 serial port AND an 88-ACR cassette section on one board. It
-  # DERIVES from the 88-ACR (the cassette half is one, verbatim, plus motor control and a
-  # SW-1 modulation switch) and embeds a Sio2Port for the serial half. See mits-88uio.h.
+  # CassetteBoardBase -- the reusable MITS cassette engine (an 88-SIO B via SerialBoardBase,
+  # plus the FSK modem and tape transport: MOUNT/WIND/REWIND/EXTRACT, WAV codec, snapshot).
+  # Not a registered board; the 88-ACR and the 88-UIO's cassette half are it. See
+  # cassette-board-base.h.
+  src/boards/cassette-board-base.cpp
+  # The 88-UIO -- a 6850 serial port AND a MITS cassette section on one board. It DERIVES
+  # from CassetteBoardBase (a SIBLING of the 88-ACR, not built on it), plus motor control
+  # and an SW-1 modulation switch, and embeds a Sio2Port for the serial half. The concrete
+  # 88-SIO and 88-ACR are header-only (mits-88sio.h, mits-88acr.h): each is its engine plus
+  # a name. See mits-88uio.h.
   src/boards/mits-88uio.cpp
   # The 88-C700 line-printer controller -- an output-only card that sinks its data
   # port to a ByteStream (a file, the console, a socket). No chip: a printer sends

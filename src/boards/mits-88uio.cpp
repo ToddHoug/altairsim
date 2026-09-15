@@ -10,7 +10,7 @@
 namespace altair {
 
 UioBoard::UioBoard() {
-    // AcrBoard() has already strapped the cassette section: base_ = 0x06, 300 baud, 8N1,
+    // CassetteBoardBase() has already strapped the cassette section: base_ = 0x06, 300 baud, 8N1,
     // Rev 1, interrupt pads left open. The serial section carries Sio2Port's own default
     // base of 0x10 -- 2SIO Port A, the SW-2-OFF address -- so nothing here needs setting.
     // motorOn_ (relay closed) and standard_ ("mits") hold their power-up defaults.
@@ -25,19 +25,19 @@ bool UioBoard::isSerial(const std::string& unit) { return lowerAscii(unit) == "s
 
 // ---------------------------------------------------------------------------
 // The bus. Two disjoint port ranges on one card: the serial section answers first,
-// the inherited cassette (SioBoard) answers for 0x06/0x07.
+// the inherited cassette engine answers for 0x06/0x07.
 // ---------------------------------------------------------------------------
 bool UioBoard::decodes(const BusCycle& c) const {
     if (!enabled_) return false;
     if ((c.type == Cycle::IoRead || c.type == Cycle::IoWrite) && serial_.decodesPort(c.port()))
         return true;
-    return SioBoard::decodes(c);  // the cassette section's control/data pair
+    return SerialBoardBase::decodes(c);  // the cassette section's control/data pair
 }
 
 uint8_t UioBoard::read(const BusCycle& c) {
     if (c.type == Cycle::IoRead && serial_.decodesPort(c.port()))
         return serial_.read(c.port());
-    return SioBoard::read(c);  // cassette status (0x06) / data (0x07)
+    return SerialBoardBase::read(c);  // cassette status (0x06) / data (0x07)
 }
 
 void UioBoard::write(const BusCycle& c) {
@@ -47,7 +47,7 @@ void UioBoard::write(const BusCycle& c) {
     }
 
     // THE CASSETTE CONTROL PORT DOUBLES AS THE MOTOR-RELAY REGISTER on this card. Latch
-    // the relay from D6/D7 and then STILL hand the write to SioBoard, so the two
+    // the relay from D6/D7 and then STILL hand the write to the cassette engine, so the two
     // interrupt-enable flip-flops (D0/D1) it also carries are set as usual -- the motor
     // bits and the enable bits do not collide. The one thing this must never do is
     // corrupt the UART or the tape, which is why it swallows nothing: it only reads D6/D7.
@@ -56,58 +56,58 @@ void UioBoard::write(const BusCycle& c) {
         else if (!(c.data & 0x40)) motorOn_ = false;  // D6 low  -> motor OFF (OUT 6,191)
     }
 
-    SioBoard::write(c);  // cassette data, or the control channel's interrupt enables
+    SerialBoardBase::write(c);  // cassette data, or the control channel's interrupt enables
 }
 
 // ---------------------------------------------------------------------------
 // pin 73 / VI0-VI7: either section can be strapped and asking, so OR them.
 // ---------------------------------------------------------------------------
-bool UioBoard::assertsInt() const { return serial_.assertsInt() || SioBoard::assertsInt(); }
+bool UioBoard::assertsInt() const { return serial_.assertsInt() || SerialBoardBase::assertsInt(); }
 
 uint8_t UioBoard::assertsVi() const {
-    return (uint8_t)(serial_.assertsVi() | SioBoard::assertsVi());
+    return (uint8_t)(serial_.assertsVi() | SerialBoardBase::assertsVi());
 }
 
 // ---------------------------------------------------------------------------
-// Lifecycle -- both halves. power() is inherited: SioBoard::power() calls reset(PowerOn)
+// Lifecycle -- both halves. power() is inherited: SerialBoardBase::power() calls reset(PowerOn)
 // virtually, which lands here and resets both sections.
 // ---------------------------------------------------------------------------
 void UioBoard::reset(Reset r) {
-    SioBoard::reset(r);  // the cassette UART + its interrupt-enable flip-flops
+    SerialBoardBase::reset(r);  // the cassette UART + its interrupt-enable flip-flops
     serial_.reset(r);    // the serial 6850 (a bus reset is a no-op for it; PowerOn is not)
 
     // The relay comes up closed at power-up (the manual). We re-arm it on RESET* too,
-    // the same assumption SioBoard::reset makes about its interrupt-enable flip-flops:
+    // the same assumption SerialBoardBase::reset makes about its interrupt-enable flip-flops:
     // the manual documents the power-up state and not the warm-reset clear line, and no
     // period program should be able to tell, since a driver sets the motor before use.
     motorOn_ = true;
 }
 
 void UioBoard::pump() {
-    SioBoard::pump();  // the cassette UART's door to the outside world
+    SerialBoardBase::pump();  // the cassette UART's door to the outside world
     serial_.pump();    // ...and the serial section's
 }
 
 void UioBoard::configChanged() {
-    SioBoard::configChanged();  // decode (covers a moved serial base too) + reprogram the
+    SerialBoardBase::configChanged();  // decode (covers a moved serial base too) + reprogram the
                                 // cassette line + refresh
     serial_.refresh();          // a serial baud/strap/connect moved one of the section's
                                 // deadlines
 }
 
 // ---------------------------------------------------------------------------
-// Reflection: the cassette's properties (AcrBoard's, which are the SIO's minus CONNECT)
+// Reflection: the cassette's properties (CassetteBoardBase's, the SIO minus CONNECT)
 // plus the serial base, the SW-1 modulation, and the read-only motor state.
 // ---------------------------------------------------------------------------
 std::vector<Property> UioBoard::properties() {
-    std::vector<Property> p = AcrBoard::properties();
+    std::vector<Property> p = CassetteBoardBase::properties();
 
     // GUARD THE INHERITED CASSETTE `port` SETTER against overlapping the serial pair.
-    // SioBoard's setter only checks even-ness; on this card the cassette must also stay
+    // the base setter only checks even-ness; on this card the cassette must also stay
     // clear of the 6850, or moving it onto 0x10 would shadow the serial section.
     for (Property& x : p) {
         if (x.name != "port") continue;
-        auto inner = x.set;  // SioBoard's even-check + assign base_
+        auto inner = x.set;  // the base even-check + assign base_
         x.set      = [this, inner](const Value& v, std::string& err) {
             if (portPairsOverlap((uint8_t)v.i(), serial_.base())) {
                 err = "the cassette would overlap the serial section at 0x" +
@@ -181,7 +181,7 @@ std::vector<Property> UioBoard::properties() {
 }
 
 std::vector<MapEntry> UioBoard::ioMap() const {
-    std::vector<MapEntry> m = AcrBoard::ioMap();  // cassette status/data (0x06/0x07)
+    std::vector<MapEntry> m = CassetteBoardBase::ioMap();  // cassette status/data (0x06/0x07)
     uint8_t b = serial_.base();
     for (const auto& ch : serial_.channels())
         m.push_back({(uint32_t)(b + ch.offset), (uint32_t)(b + ch.offset + 1), "read/write",
@@ -193,14 +193,14 @@ std::vector<MapEntry> UioBoard::ioMap() const {
 // Units: the inherited `tape` (MOUNT) plus the serial section's `serial` (CONNECT).
 // ---------------------------------------------------------------------------
 std::vector<UnitDef> UioBoard::units() const {
-    std::vector<UnitDef> u = AcrBoard::units();          // {tape}
+    std::vector<UnitDef> u = CassetteBoardBase::units();          // {tape}
     for (const auto& s : serial_.units()) u.push_back(s);  // {serial}
     return u;
 }
 
 std::vector<Property> UioBoard::unitProperties(const std::string& unit) {
     if (isSerial(unit)) return serial_.unitProperties(lowerAscii(unit));
-    return AcrBoard::unitProperties(unit);  // the tape's `mode`/`format`/leader/...
+    return CassetteBoardBase::unitProperties(unit);  // the tape's `mode`/`format`/leader/...
 }
 
 bool UioBoard::connect(const std::string& unit, const std::string& endpoint, std::string& err) {
@@ -218,45 +218,45 @@ bool UioBoard::connect(const std::string& unit, const std::string& endpoint, std
         }
         return true;
     }
-    if (lowerAscii(unit) == "tape") return AcrBoard::connect(unit, endpoint, err);  // refused, with reason
+    if (lowerAscii(unit) == "tape") return CassetteBoardBase::connect(unit, endpoint, err);  // refused, with reason
     err = "uio has a 'serial' unit to CONNECT and a 'tape' unit to MOUNT, not '" + unit + "'";
     return false;
 }
 
 bool UioBoard::disconnect(const std::string& unit, std::string& err) {
     if (isSerial(unit)) return serial_.disconnect(lowerAscii(unit), err);
-    if (lowerAscii(unit) == "tape") return AcrBoard::disconnect(unit, err);  // refused, with reason
+    if (lowerAscii(unit) == "tape") return CassetteBoardBase::disconnect(unit, err);  // refused, with reason
     err = "uio has a 'serial' unit to CONNECT and a 'tape' unit to MOUNT, not '" + unit + "'";
     return false;
 }
 
 ByteStream* UioBoard::unitStream(const std::string& unit) {
     if (isSerial(unit)) return serial_.unitStream(lowerAscii(unit));
-    return AcrBoard::unitStream(unit);  // tape -> nullptr (SioBoard exposes only its line)
+    return CassetteBoardBase::unitStream(unit);  // tape -> nullptr (the serial engine exposes only its line)
 }
 
-uint64_t UioBoard::rxBytes() const { return SioBoard::rxBytes() + serial_.rxBytes(); }
+uint64_t UioBoard::rxBytes() const { return SerialBoardBase::rxBytes() + serial_.rxBytes(); }
 
 std::vector<std::string> UioBoard::drainLog() {
-    std::vector<std::string> out = AcrBoard::drainLog();  // tape codec + cassette UART
+    std::vector<std::string> out = CassetteBoardBase::drainLog();  // tape codec + cassette UART
     for (auto& s : serial_.drainLog()) out.push_back(std::move(s));
     return out;
 }
 
 // ---------------------------------------------------------------------------
-// SNAPSHOT / RESTORE. AcrBoard writes [Board fields][cassette UART][int-enables][tape
+// SNAPSHOT / RESTORE. CassetteBoardBase writes [Board fields][cassette UART][int-enables][tape
 // mode + head], then the serial section's chip(s), then this card's one runtime latch --
 // the motor relay. standard_ and the two base ports are CONFIG (re-applied from the
 // machine file), so they do not travel. Deserialize in the same order.
 // ---------------------------------------------------------------------------
 void UioBoard::serialize(StateWriter& w) const {
-    AcrBoard::serialize(w);
+    CassetteBoardBase::serialize(w);
     serial_.serialize(w);
     w.boolean(motorOn_);
 }
 
 void UioBoard::deserialize(StateReader& r) {
-    AcrBoard::deserialize(r);
+    CassetteBoardBase::deserialize(r);
     serial_.deserialize(r);
     motorOn_ = r.boolean();
 }

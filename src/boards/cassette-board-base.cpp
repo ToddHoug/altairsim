@@ -1,4 +1,4 @@
-#include "boards/mits-88acr.h"
+#include "boards/cassette-board-base.h"
 
 #include "core/statefile.h"
 #include "host/media.h"
@@ -33,10 +33,14 @@ static bool isTape(const std::string& unit) { return lowerAscii(unit) == "tape";
 //
 // AND REV 1, WITHOUT HAVING TO ASSUME IT. The ACR manual's Bit Definition table reads
 // TBMT at bit 7, DAV at bit 0, and bits 5 and 1 "NOT USED" -- which IS the post-errata
-// status word (see SioRev in mits-88sio.h). The card documents itself as a Rev 1, so
-// we do not have to infer it from the printing date.
+// status word (see SioRev in serial-board-base.h). The card documents itself as a Rev 1,
+// so we do not have to infer it from the printing date.
+//
+// THESE STRAPS ARE THE MITS CASSETTE SECTION'S, shared by the 88-ACR and the 88-UIO's
+// cassette half alike -- which is why they live in this engine's ctor and not in either
+// concrete card.
 // ---------------------------------------------------------------------------
-AcrBoard::AcrBoard() {
+CassetteBoardBase::CassetteBoardBase() {
     base_ = 0x06;
 
     u_.baud     = 300;
@@ -77,8 +81,8 @@ AcrBoard::AcrBoard() {
 // the chain moved to the console, where the human is (host/console.h), and the 88-SIO
 // does not offer it any more either. There is nothing left here to take away but the
 // endpoint itself: the recorder is soldered to the card, so there is no `connect`.
-std::vector<Property> AcrBoard::properties() {
-    std::vector<Property> all = SioBoard::properties();
+std::vector<Property> CassetteBoardBase::properties() {
+    std::vector<Property> all = SerialBoardBase::properties();
 
     std::vector<std::string> drop{"connect"};
 
@@ -103,7 +107,7 @@ std::vector<Property> AcrBoard::properties() {
 // one head, one transport, one way at a time. NOT because a deck has one button down:
 // on a real one you hold PLAY and RECORD together, and RECORD alone does nothing. The
 // buttons select a mode; it is the mode that excludes.
-std::vector<Property> AcrBoard::unitProperties(const std::string& unit) {
+std::vector<Property> CassetteBoardBase::unitProperties(const std::string& unit) {
     if (!isTape(unit)) return {};
 
     std::vector<Property> p;
@@ -340,7 +344,7 @@ std::vector<Property> AcrBoard::unitProperties(const std::string& unit) {
     return p;
 }
 
-std::vector<MapEntry> AcrBoard::ioMap() const {
+std::vector<MapEntry> CassetteBoardBase::ioMap() const {
     return {
         {(uint32_t)base_, (uint32_t)base_, "read/write",
          "88-SIO B UART -- status / interrupt enables"},
@@ -351,7 +355,7 @@ std::vector<MapEntry> AcrBoard::ioMap() const {
 
 // ONE TAPE, and it is a TAPE and not a serial port -- which is the entire difference
 // between this card and its own SIO B half, as far as the operator is concerned.
-std::vector<UnitDef> AcrBoard::units() const {
+std::vector<UnitDef> CassetteBoardBase::units() const {
     UnitDef u{"tape", UnitKind::Tape, "(empty)"};
     if (tape_) {
         char buf[288];
@@ -385,15 +389,15 @@ std::vector<UnitDef> AcrBoard::units() const {
 // the TapeImage (host/tape.h -- non-owning, on purpose, so the chip cannot reach
 // REWIND). The old stream must die before the tape it points at does, and before the
 // tape it points at is replaced.
-void AcrBoard::serialize(StateWriter& w) const {
-    SioBoard::serialize(w);
+void CassetteBoardBase::serialize(StateWriter& w) const {
+    SerialBoardBase::serialize(w);
     w.u8(mode_ == TapeStream::Mode::Record ? 1 : 0);
     w.u64(tape_ ? tape_->pos() : 0);
     w.u64(tape_ ? tape_->stopAt() : TapeImage::kNoStop);  // the auto-stop mark travels too
 }
 
-void AcrBoard::deserialize(StateReader& r) {
-    SioBoard::deserialize(r);
+void CassetteBoardBase::deserialize(StateReader& r) {
+    SerialBoardBase::deserialize(r);
     mode_ = r.u8() ? TapeStream::Mode::Record : TapeStream::Mode::Play;
     uint64_t pos    = r.u64();
     uint64_t stopAt = r.u64();
@@ -405,7 +409,7 @@ void AcrBoard::deserialize(StateReader& r) {
                // position and stop mark just set. reline() re-arms the UART too.
 }
 
-void AcrBoard::reline() {
+void CassetteBoardBase::reline() {
     attachStream(std::make_unique<NullStream>());  // the old line dies here
 
     // THE TAPE'S CLOCK, built from the card's strap. `full` -> 0 -> as fast as the guest
@@ -428,9 +432,9 @@ void AcrBoard::reline() {
     refresh();
 }
 
-bool AcrBoard::mount(const std::string& unit, const std::string& path, bool ro, std::string& err) {
+bool CassetteBoardBase::mount(const std::string& unit, const std::string& path, bool ro, std::string& err) {
     if (!isTape(unit)) {
-        err = "acr has no unit '" + unit + "' -- it has one, and it is called 'tape'";
+        err = type() + " has no unit '" + unit + "' -- it has one, and it is called 'tape'";
         return false;
     }
 
@@ -449,7 +453,7 @@ bool AcrBoard::mount(const std::string& unit, const std::string& path, bool ro, 
     // The host would not let us write it, and the operator did not ask for that. Never
     // silent -- see MediaFile::readOnlyForced().
     if (!ro && media->readOnlyForced())
-        said.push_back("acr: " + path + " is write-protected on the host -- mounted read-only");
+        said.push_back(type() + ": " + path + " is write-protected on the host -- mounted read-only");
     for (std::string& s : said) log_.push_back(std::move(s));
 
     // AN OBSERVING POINTER, TAKEN BEFORE THE MEDIUM IS HANDED OVER. An audio tape has
@@ -471,7 +475,7 @@ bool AcrBoard::mount(const std::string& unit, const std::string& path, bool ro, 
 
 // What to lay down either side of the data when this tape is written back. A no-op on a
 // byte tape, which has no audio to put it in.
-void AcrBoard::applyEncoding() {
+void CassetteBoardBase::applyEncoding() {
     if (audio_)
         audio_->setEncoding(double(leader_), double(trailer_), waveformByName(wave_),
                             double(level_) / 100.0);
@@ -481,16 +485,16 @@ void AcrBoard::applyEncoding() {
 // Every caller is an operator action (UNMOUNT, REWIND, letting go of RECORD), which is
 // precisely the contract MediaFile::commit() describes. A failure is REPORTED rather
 // than swallowed: losing a recording quietly is the worst thing this path could do.
-void AcrBoard::commitTape() {
+void CassetteBoardBase::commitTape() {
     if (!tape_) return;
     std::string err;
-    if (!tape_->commit(err)) log_.push_back("acr: " + err);
+    if (!tape_->commit(err)) log_.push_back(type() + ": " + err);
 }
 
 // The whole of what REWIND and WIND share -- see host/tape.h. Order matters: flush the
 // recording BEFORE the head moves, drop the byte the UART pulled off the OLD position (or
 // the guest reads it, then reads it again when the tape replays it), and reline last.
-void AcrBoard::stageAt(uint64_t pos) {
+void CassetteBoardBase::stageAt(uint64_t pos) {
     if (!tape_) return;
     commitTape();
     tape_->setPos(pos > tape_->size() ? tape_->size() : pos);
@@ -501,20 +505,20 @@ void AcrBoard::stageAt(uint64_t pos) {
 // SECONDS INTO THE RECORDING. A WAV kept its audio clock at decode, so the head's time is
 // the real one -- leader and gaps and all. A byte tape (.TAP) never had audio, so its time
 // is the honest estimate a 300-baud strap gives: bytes x frame-bits / baud.
-double AcrBoard::tapeSeconds(uint64_t bytePos) const {
+double CassetteBoardBase::tapeSeconds(uint64_t bytePos) const {
     if (audio_ && audio_->hasTimeline()) return audio_->secondsAt(bytePos);
     const double baud = u_.baud > 0 ? double(u_.baud) : 300.0;
     return double(bytePos) * u_.bitsPerChar() / baud;
 }
 
-double AcrBoard::tapeTotalSeconds() const {
+double CassetteBoardBase::tapeTotalSeconds() const {
     if (audio_ && audio_->hasTimeline()) return audio_->totalSeconds();
     if (!tape_) return 0.0;
     const double baud = u_.baud > 0 ? double(u_.baud) : 300.0;
     return double(tape_->size()) * u_.bitsPerChar() / baud;
 }
 
-uint64_t AcrBoard::secondsToByte(double secs) const {
+uint64_t CassetteBoardBase::secondsToByte(double secs) const {
     if (!tape_) return 0;
     if (audio_ && audio_->hasTimeline()) return audio_->byteAt(secs);
     const double baud  = u_.baud > 0 ? double(u_.baud) : 300.0;
@@ -524,7 +528,7 @@ uint64_t AcrBoard::secondsToByte(double secs) const {
     return b > tape_->size() ? tape_->size() : b;
 }
 
-std::string AcrBoard::activityLabel() const {
+std::string CassetteBoardBase::activityLabel() const {
     if (!tape_ || !liveCounter_ || mode_ != TapeStream::Mode::Play) return {};
     const uint64_t p = tape_->pos();
     // Nothing to watch before the head has moved, or while it is parked at a stop mark
@@ -547,7 +551,7 @@ std::string AcrBoard::activityLabel() const {
 // already parked at its mark from an earlier load does not fire the instant a new run
 // starts -- only a FRESH arrival does. A REWIND/WIND moves the head off the mark, so the
 // next drain sees atStop() false, and the load after that fires again.
-bool AcrBoard::takeAutoStop() {
+bool CassetteBoardBase::takeAutoStop() {
     bool now  = tape_ && mode_ == TapeStream::Mode::Play && tape_->atStop();
     bool edge = now && !wasAtStop_;
     wasAtStop_ = now;
@@ -555,22 +559,22 @@ bool AcrBoard::takeAutoStop() {
 }
 
 // One modem, one modulation. This is the list a tape is judged against. Virtual so a
-// descendant (the 88-UIO) can present a switch-selected modulation instead; AcrBoard's
-// own answer is the FSK 2400/1850 its single modem board can hear, and only that.
-std::vector<TapeFormat> AcrBoard::modem() const {
+// concrete card (the 88-UIO) can present a switch-selected modulation instead; the plain
+// cassette's answer is the FSK 2400/1850 its single modem board can hear, and only that.
+std::vector<TapeFormat> CassetteBoardBase::modem() const {
     return {tapeformats::fsk300_1850()};
 }
 
-std::vector<std::string> AcrBoard::drainLog() {
+std::vector<std::string> CassetteBoardBase::drainLog() {
     std::vector<std::string> out = std::move(log_);
     log_.clear();
-    for (std::string& s : SioBoard::drainLog()) out.push_back(std::move(s));
+    for (std::string& s : SerialBoardBase::drainLog()) out.push_back(std::move(s));
     return out;
 }
 
-bool AcrBoard::unmount(const std::string& unit, std::string& err) {
+bool CassetteBoardBase::unmount(const std::string& unit, std::string& err) {
     if (!isTape(unit)) {
-        err = "acr has no unit '" + unit + "' -- it has one, and it is called 'tape'";
+        err = type() + " has no unit '" + unit + "' -- it has one, and it is called 'tape'";
         return false;
     }
     if (!tape_) {
@@ -590,19 +594,19 @@ bool AcrBoard::unmount(const std::string& unit, std::string& err) {
 }
 
 // CONNECT is not "unimplemented" here, it is WRONG here, and the difference is worth a
-// sentence. Silently inheriting SioBoard::connect() would let an operator plug a
+// sentence. Silently inheriting SerialBoardBase::connect() would let an operator plug a
 // socket into a card whose serial pins are soldered to a modem.
-bool AcrBoard::connect(const std::string& unit, const std::string& endpoint, std::string& err) {
+bool CassetteBoardBase::connect(const std::string& unit, const std::string& endpoint, std::string& err) {
     (void)unit;
     (void)endpoint;
-    err = "the 88-ACR's line is soldered to its modem board, and the modem to a "
+    err = "the cassette line is soldered to its modem board, and the modem to a "
           "cassette -- there is no connector. Use MOUNT to put a tape in it.";
     return false;
 }
 
-bool AcrBoard::disconnect(const std::string& unit, std::string& err) {
+bool CassetteBoardBase::disconnect(const std::string& unit, std::string& err) {
     (void)unit;
-    err = "nothing is connected to an 88-ACR -- its line goes to the modem. "
+    err = "nothing is connected to the cassette -- its line goes to the modem. "
           "Use UNMOUNT to take the tape out.";
     return false;
 }
@@ -617,14 +621,14 @@ bool AcrBoard::disconnect(const std::string& unit, std::string& err) {
 // and it is why this verb is attached to this CARD and is not in the monitor's static
 // table: pull the 88-ACR out of the machine and there is nothing left that can rewind.
 // ---------------------------------------------------------------------------
-std::vector<CommandDef> AcrBoard::commands() const {
+std::vector<CommandDef> CassetteBoardBase::commands() const {
     return {
         {
             "WIND",
             true,     // a card that is IN THE MACHINE has no unbuilt verbs
             nullptr,  // ...so it is waiting on nothing
             "WIND <id>:tape <mm:ss | START | END> -- move the cassette to a position",
-            "The 88-ACR reads and writes a tape from wherever its head is sitting. WIND is\n"
+            "The cassette reads and writes a tape from wherever its head is sitting. WIND is\n"
             "your finger on the recorder's transport: it moves the head to a time on the\n"
             "tape, so a tape holding several programs one after another is reachable.\n"
             "\n"
@@ -678,12 +682,12 @@ std::vector<CommandDef> AcrBoard::commands() const {
     };
 }
 
-bool AcrBoard::runCommand(const std::string& name, const std::vector<std::string>& args,
+bool CassetteBoardBase::runCommand(const std::string& name, const std::vector<std::string>& args,
                           std::ostream& out, std::string& err) {
     const bool rewind  = (name == "REWIND");
     const bool extract = (name == "EXTRACT");
     if (!rewind && !extract && name != "WIND") {
-        err = "the 88-ACR's verbs are WIND, REWIND and EXTRACT";
+        err = "the cassette's verbs are WIND, REWIND and EXTRACT";
         return false;
     }
 
@@ -696,7 +700,7 @@ bool AcrBoard::runCommand(const std::string& name, const std::vector<std::string
         if (c != std::string::npos) {
             std::string u = args[1].substr(c + 1);
             if (!isTape(u)) {
-                err = "the 88-ACR has no unit '" + u + "' -- it has one, and it is 'tape'";
+                err = type() + " has no unit '" + u + "' -- it has one, and it is 'tape'";
                 return false;
             }
         }
