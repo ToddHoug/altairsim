@@ -10,10 +10,11 @@
 //   * THE CASSETTE HALF IS AN 88-ACR, VERBATIM. Same 1602-family UART (an AY-5-1013A
 //     here, a COM2502 on the ACR -- the same part by another name, see the .md), same
 //     inverted status word, same 300-baud FSK modem, same tape machinery. So this card
-//     DERIVES from AcrBoard and inherits every bit of it: the tape MOUNT/UNMOUNT, the
-//     WIND/REWIND verbs, the live tape counter, the WAV codec, SNAPSHOT of the head
-//     position. What it CHANGES about the cassette is exactly two things the plain
-//     88-ACR does not have and this board's manual documents that it does:
+//     DERIVES from CassetteBoardBase -- the shared cassette engine the 88-ACR is also
+//     built on, its SIBLING and not its parent -- and inherits every bit of it: the tape
+//     MOUNT/UNMOUNT, the WIND/REWIND verbs, the live tape counter, the WAV codec,
+//     SNAPSHOT of the head position. What it CHANGES about the cassette is exactly two
+//     things the plain 88-ACR does not have and this board's manual documents that it does:
 //
 //       - MOTOR CONTROL. An OUT to the cassette status port drives a relay wired to the
 //         recorder's "Remote" jack: D7 low = motor ON (OUT 6,127), D6 low = motor OFF
@@ -39,7 +40,7 @@
 // Sio2Port for the serial ports (0x10/0x11 by default). The two ranges are disjoint,
 // and both are operator-settable (SW-2 moves the serial pair, SW-3 the cassette pair).
 
-#include "boards/mits-88acr.h"
+#include "boards/cassette-board-base.h"
 #include "chips/sio2port.h"
 
 #include <string>
@@ -47,7 +48,7 @@
 
 namespace altair {
 
-class UioBoard : public AcrBoard {
+class UioBoard : public CassetteBoardBase {
 public:
     UioBoard();
 

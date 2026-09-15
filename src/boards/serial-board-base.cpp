@@ -1,4 +1,4 @@
-#include "boards/mits-88sio.h"
+#include "boards/serial-board-base.h"
 
 #include "core/statefile.h"
 #include "host/endpoint.h"
@@ -93,7 +93,7 @@ constexpr uint8_t kUnusedRev1 = 0x62;  // bits 6, 5, 1
 constexpr uint8_t kInIntEnable  = 0x01;  // D0
 constexpr uint8_t kOutIntEnable = 0x02;  // D1
 
-SioBoard::EndpointResolver g_resolver;
+SerialBoardBase::EndpointResolver g_resolver;
 
 // A card in a backplane always has a clock, but Bus::attach() is public, so a
 // board CAN be wired up without a machine around it. A UART with no clock is a
@@ -106,15 +106,17 @@ Clock& deadCard() {
 
 } // namespace
 
-void SioBoard::setResolver(EndpointResolver r) { g_resolver = std::move(r); }
+void SerialBoardBase::setResolver(EndpointResolver r) { g_resolver = std::move(r); }
 
-SioBoard::SioBoard() {
+SerialBoardBase::SerialBoardBase() {
     // -> NullStream. There is no null pointer in the stream path, ever: a card with
-    // nothing plugged into it is a card with a DEAD line, not a dangling one.
+    // nothing plugged into it is a card with a DEAD line, not a dangling one. A cassette
+    // card relines this onto its tape once one is mounted; a bare 88-SIO stays here until
+    // CONNECT.
     u_.disconnect();
 }
 
-SioBoard::~SioBoard() {
+SerialBoardBase::~SerialBoardBase() {
     // The queue is holding a lambda with `this` inside it, and a card can be pulled
     // out of a RUNNING machine (`BOARDS REMOVE sio0`). A deadline that fires into a
     // destroyed board is a use-after-free with a two-week fuse on it.
@@ -126,11 +128,11 @@ SioBoard::~SioBoard() {
 // interesting happens in between. THIS IS THE CARD'S JOB AND NOT THE CHIP'S.
 // ---------------------------------------------------------------------------
 
-bool SioBoard::txBufferEmpty() const {
+bool SerialBoardBase::txBufferEmpty() const {
     return u_.txBufferEmpty(clock_ ? *clock_ : deadCard());
 }
 
-uint8_t SioBoard::statusByte() const {
+uint8_t SerialBoardBase::statusByte() const {
     uint8_t s = (rev_ == SioRev::Rev1) ? kUnusedRev1 : kUnusedRev0;
 
     // The two INVERTED ready bits. Set means NOT ready -- this is the trap.
@@ -165,14 +167,14 @@ uint8_t SioBoard::statusByte() const {
 // ---------------------------------------------------------------------------
 
 // Two ports: control/status at BASE (even), data at BASE+1 (odd).
-bool SioBoard::decodes(const BusCycle& c) const {
+bool SerialBoardBase::decodes(const BusCycle& c) const {
     if (!enabled_) return false;
     if (c.type != Cycle::IoRead && c.type != Cycle::IoWrite) return false;
     uint8_t p = c.port();
     return p == base_ || p == (uint8_t)(base_ + 1);
 }
 
-uint8_t SioBoard::read(const BusCycle& c) {
+uint8_t SerialBoardBase::read(const BusCycle& c) {
     const Clock& clk = clock_ ? *clock_ : deadCard();
     u_.poll(clk);  // the receiver runs on the UART's clock, not on ours
 
@@ -184,7 +186,7 @@ uint8_t SioBoard::read(const BusCycle& c) {
     return v;
 }
 
-void SioBoard::write(const BusCycle& c) {
+void SerialBoardBase::write(const BusCycle& c) {
     if ((c.port() - base_) & 1) {
         // The DATA channel -- the chip's /TDS strobe. The character goes out, and the
         // transmit buffer is BUSY until it has had time to leave.
@@ -205,7 +207,7 @@ void SioBoard::write(const BusCycle& c) {
 // Three things have to line up: the UART is asking, software enabled that
 // interrupt, and the corresponding pad is actually soldered to pin 73. An `in_int`
 // strapped to `vi3` goes to a vectored interrupt line instead -- see assertsVi().
-bool SioBoard::assertsInt() const {
+bool SerialBoardBase::assertsInt() const {
     if (!clock_) return false;  // no crystal: the chip is not running at all
     if (inIntEnabled_ && inIrq_ == IrqJumper::Int && rxReady()) return true;
     if (outIntEnabled_ && outIrq_ == IrqJumper::Int && txReady()) return true;
@@ -219,7 +221,7 @@ bool SioBoard::assertsInt() const {
 // priorities. Both can be asking at the same instant (a character has arrived and
 // the transmitter has gone empty), so this card can be pulling VI2 and VI5 at once.
 // A single "which level am I on" could only ever have reported one of them.
-uint8_t SioBoard::assertsVi() const {
+uint8_t SerialBoardBase::assertsVi() const {
     if (!clock_) return 0;  // no crystal: the chip is not running at all
     uint8_t m = 0;
     if (inIntEnabled_ && rxReady()) m |= viBit(inIrq_);
@@ -241,14 +243,14 @@ uint8_t SioBoard::assertsVi() const {
 // entirely ordinary driver, and the only thing that can wake it is a deadline this
 // card set for itself.
 // ---------------------------------------------------------------------------
-void SioBoard::serialize(StateWriter& w) const {
+void SerialBoardBase::serialize(StateWriter& w) const {
     Board::serialize(w);
     u_.serialize(w);
     w.boolean(inIntEnabled_);
     w.boolean(outIntEnabled_);
 }
 
-void SioBoard::deserialize(StateReader& r) {
+void SerialBoardBase::deserialize(StateReader& r) {
     Board::deserialize(r);
     u_.deserialize(r);
     inIntEnabled_  = r.boolean();
@@ -256,7 +258,7 @@ void SioBoard::deserialize(StateReader& r) {
     refresh();  // re-drive pin 73 and re-arm the deadline from the restored state
 }
 
-void SioBoard::refresh() {
+void SerialBoardBase::refresh() {
     if (!clock_) return;
 
     u_.poll(*clock_);
@@ -277,7 +279,7 @@ void SioBoard::refresh() {
 // has no interrupt pin, so unlike the 6850 it cannot answer this question itself: it
 // knows when TBMT rises and when the next character lands, and it knows nothing about
 // the two enable flip-flops or the wire to pin 73, both of which are out here.
-uint64_t SioBoard::nextEdge() const {
+uint64_t SerialBoardBase::nextEdge() const {
     const Clock& clk = clock_ ? *clock_ : deadCard();
 
     uint64_t best = 0;
@@ -312,7 +314,7 @@ uint64_t SioBoard::nextEdge() const {
 // have says in so many words, and it is flagged in the .md. We do it, because a card
 // that comes out of a reset with a stale byte in the receiver is a card nobody built.
 // ---------------------------------------------------------------------------
-void SioBoard::reset(Reset) {
+void SerialBoardBase::reset(Reset) {
     if (!clock_) return;
 
     u_.masterReset(*clock_);
@@ -335,10 +337,10 @@ void SioBoard::reset(Reset) {
     refresh();
 }
 
-void SioBoard::power() { reset(Reset::PowerOn); }
+void SerialBoardBase::power() { reset(Reset::PowerOn); }
 
 // THE ONE DOOR THE OUTSIDE WORLD COMES THROUGH (DESIGN.md 7.1).
-void SioBoard::pump() {
+void SerialBoardBase::pump() {
     u_.pump();
     refresh();
 }
@@ -348,7 +350,7 @@ void SioBoard::pump() {
 // has set is now aimed at the wrong T-state), `in_int`/`out_int` (which wire the
 // request is soldered to), or `connect` (a new line, possibly with something already
 // on it).
-void SioBoard::configChanged() {
+void SerialBoardBase::configChanged() {
     decodeChanged();
 
     // A STRAP THAT MOVED MAY HAVE MOVED THE FRAME. `baud`, `data_bits`, `stop_bits`
@@ -366,7 +368,7 @@ void SioBoard::configChanged() {
 // Reflection
 // ---------------------------------------------------------------------------
 
-std::vector<Property> SioBoard::properties() {
+std::vector<Property> SerialBoardBase::properties() {
     std::vector<Property> p;
     {
         Property x;
@@ -522,11 +524,11 @@ std::vector<Property> SioBoard::properties() {
 // ONE serial unit. The card has one UART and one connector, so unlike the 2SIO
 // there is nothing to disambiguate -- every jumper on it is a BOARD property, which
 // is exactly what it is on the PCB. The unit exists because CONNECT names one.
-std::vector<UnitDef> SioBoard::units() const {
+std::vector<UnitDef> SerialBoardBase::units() const {
     return {{"tty", UnitKind::Serial, u_.endpoint()}};
 }
 
-std::vector<MapEntry> SioBoard::ioMap() const {
+std::vector<MapEntry> SerialBoardBase::ioMap() const {
     return {
         {(uint32_t)base_, (uint32_t)base_, "read/write",
          "COM2502 -- status / interrupt enables"},
@@ -534,9 +536,9 @@ std::vector<MapEntry> SioBoard::ioMap() const {
     };
 }
 
-bool SioBoard::connect(const std::string& unit, const std::string& ep, std::string& err) {
+bool SerialBoardBase::connect(const std::string& unit, const std::string& ep, std::string& err) {
     if (unit != "tty") {
-        err = "sio has no unit '" + unit + "' -- it has one, and it is called 'tty'";
+        err = type() + " has no unit '" + unit + "' -- it has one, and it is called 'tty'";
         return false;
     }
     if (!g_resolver) {
@@ -562,9 +564,9 @@ bool SioBoard::connect(const std::string& unit, const std::string& ep, std::stri
     return true;
 }
 
-bool SioBoard::disconnect(const std::string& unit, std::string& err) {
+bool SerialBoardBase::disconnect(const std::string& unit, std::string& err) {
     if (unit != "tty") {
-        err = "sio has no unit '" + unit + "' -- it has one, and it is called 'tty'";
+        err = type() + " has no unit '" + unit + "' -- it has one, and it is called 'tty'";
         return false;
     }
     attachStream(std::make_unique<NullStream>());
