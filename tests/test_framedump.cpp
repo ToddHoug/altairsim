@@ -10,11 +10,26 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <system_error>
 #include <fstream>
 #include <string>
 #include <vector>
 
 using namespace altair;
+
+namespace {
+
+// Read a whole file and CLOSE IT before returning. The stream must not outlive the read:
+// the sections below delete the file next, and on Windows deleting a file that a stream
+// still holds open is a sharing violation -- std::filesystem::remove() throws, and an
+// uncaught exception aborts the whole test binary (CI, 2026-09-18: exit 0xC0000409).
+std::vector<uint8_t> slurp(const std::string& path) {
+    std::ifstream in(path, std::ios::binary);
+    return std::vector<uint8_t>((std::istreambuf_iterator<char>(in)),
+                                std::istreambuf_iterator<char>());
+}
+
+} // namespace
 
 // The frame-capture helpers (host/framedump.h) proved on hand-built Surfaces -- no board,
 // no window. A board's test then uses CHECK_FRAME and trusts these.
@@ -55,11 +70,10 @@ void test_framedump() {
             (std::filesystem::temp_directory_path() / "altair_framedump_test.ppm").string();
         std::string err;
         CHECK(writePpm(path, s, pal, err), "writePpm succeeds in the temp directory");
-        std::ifstream        in(path, std::ios::binary);
-        std::vector<uint8_t> back((std::istreambuf_iterator<char>(in)),
-                                  std::istreambuf_iterator<char>());
+        std::vector<uint8_t> back = slurp(path);
         CHECK(back == ppm, "and the file is byte-for-byte framePpm()");
-        std::filesystem::remove(path);
+        std::error_code ec;
+        std::filesystem::remove(path, ec);
 
         CHECK(!writePpm("/nonexistent-dir/x/y.ppm", s, pal, err) && !err.empty(),
               "an unwritable path fails with a message");
@@ -152,16 +166,14 @@ void test_framedump() {
         std::printf("  (the next 'frame:' lines are the failure path being exercised, not a failure)\n");
         std::string ppm =
             (std::filesystem::temp_directory_path() / "altair_frame_framedump_negative.ppm").string();
-        std::filesystem::remove(ppm);
+        std::error_code ec;
+        std::filesystem::remove(ppm, ec);
         CHECK(!checkFrame(disp, a, "1...\n....\n", TextGridOpts{}, "framedump negative"),
               "a wrong expectation is reported false");
-        CHECK(std::filesystem::exists(ppm), "and the actual frame was written as a .ppm");
-        std::ifstream        in(ppm, std::ios::binary);
-        std::vector<uint8_t> back((std::istreambuf_iterator<char>(in)),
-                                  std::istreambuf_iterator<char>());
-        CHECK(back == framePpm(*disp.surface(a), disp.palette(a)),
+        CHECK(std::filesystem::exists(ppm, ec), "and the actual frame was written as a .ppm");
+        CHECK(slurp(ppm) == framePpm(*disp.surface(a), disp.palette(a)),
               "...and it is the frame the board drew, through its own palette");
-        std::filesystem::remove(ppm);
+        std::filesystem::remove(ppm, ec);
 
         char unknown = 0;
         CHECK(!checkFrame(disp, &unknown, "", TextGridOpts{}, "framedump no owner"),
