@@ -979,7 +979,7 @@ and interleaved access — and `SHOW <id>` has a `wiring` line that says `ok` or
 **It needs a display**, and draws into it like the others: an SDL3 build opens a window titled
 with the board's id; a headless build runs identically and shows nothing. `SHOW <id>` reports the
 live `video`, `picture` (the programmed size and where it sits in the frame), `wiring` and ACRTC
-`status` alongside the straps: `port`, `dac`, `mode`, `vram` (frame memory in K words) and
+`status` alongside the straps: `port`, `dac`, `mode`, `vram` (frame memory in kilobytes, 2 MB by default) and
 `width`. The `cadzilla` machine is the bare board with a console to type at. The ACRTC's larger
 commands — circles, arcs, paint, pattern and area copies — are recognized but not yet drawn; the
 board says so in its status register, and the Developer Guide lists exactly what is modeled.

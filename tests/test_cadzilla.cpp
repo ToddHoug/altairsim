@@ -394,7 +394,8 @@ void test_cadzilla() {
             Property p = prop(name);
             return p.get ? p.get().text(p.radix) : std::string("<missing>");
         };
-        CHECK(val("mode") == "640x480" && val("vram") == "512", "defaults: 640x480, 512 K words");
+        CHECK(val("mode") == "640x480" && val("vram") == "2048", "defaults: 640x480, 2 MB of frame memory");
+        CHECK(g.cad->acrtc().vram().size() == 1u << 20, "2048 KB is the ACRTC's whole 1 M-word address space");
         CHECK(val("video") == "off" && val("status") == "0x23", "comes up stopped");
         CHECK(!prop("video").set && !prop("picture").set && !prop("wiring").set && !prop("status").set,
               "live status is read-only");
@@ -409,12 +410,13 @@ void test_cadzilla() {
         CHECK(!setProperty(*g.cad, "port", "71", err), "an odd ACRTC base is refused");
         CHECK(!setProperty(*g.cad, "dac", "76", err), "a DAC base that is not a multiple of 4 is refused");
         CHECK(!setProperty(*g.cad, "vram", "100", err), "a non-power-of-two vram is refused");
+        CHECK(!setProperty(*g.cad, "vram", "4096", err), "and more than the ACRTC can address");
         CHECK(setProperty(*g.cad, "port", "E0", err) && setProperty(*g.cad, "dac", "E4", err), "even and 4-aligned are taken");
         BusCycle c;
         c.type = Cycle::IoWrite;
         c.addr = 0xE1;
         CHECK(g.cad->decodes(c), "and the board now decodes there");
-        CHECK(setProperty(*g.cad, "vram", "16", err) && g.cad->acrtc().vram().size() == 16 * 1024, "vram refits the frame memory");
+        CHECK(setProperty(*g.cad, "vram", "16", err) && g.cad->acrtc().vram().size() == 16 * 512, "vram refits the frame memory: 16 KB is 8 K words");
 
         // Changing the mode re-opens the window at the new size on the next frame.
         Rig h;

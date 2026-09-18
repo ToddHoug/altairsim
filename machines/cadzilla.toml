@@ -46,15 +46,15 @@ port = 10
   [board.unit.b]
   connect = "null"
 
-# THE BOARD. ACRTC at 70/71, Bt453 at 74-77, a 640x480 monitor, 512K words of frame memory
-# (all the defaults). It decodes no memory at all; the picture lives on the board.
+# THE BOARD. ACRTC at 70/71, Bt453 at 74-77, a 640x480 monitor, 2 MB of frame memory (all
+# the defaults). It decodes no memory at all; the picture lives on the board.
 [[board]]
 type = "cadzilla"
 id   = "cad0"
 port = 0x70
 dac  = 0x74
 mode = "640x480"
-vram = 512
+vram = 2048
 
 [[board]]
 type = "memory"

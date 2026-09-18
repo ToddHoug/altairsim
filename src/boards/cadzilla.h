@@ -54,7 +54,8 @@
 //   worth 8 pixels of the frame instead of 16. Superimposed mode (ACM = 11) is not wired:
 //   the window's second phase would need its own fetch path.
 //
-//   Also: how much DRAM is fitted (`vram`, default 512 K words -- 1024x768 needs 384 K),
+//   Also: how much DRAM is fitted (`vram` in kilobytes, default 2048 = the full 1 M words the
+//   ACRTC addresses; 1024x768 at 8 bpp needs 768 KB),
 //   OL1..0 tied low (no overlay source), and IRQ* not wired to the bus yet.
 // ---------------------------------------------------------------------------
 
@@ -139,7 +140,7 @@ private:
     // ---- Straps ----
     uint8_t port_ = 0x70;         // ACRTC: BASE (RS=0) and BASE+1 (RS=1); even
     uint8_t dacPort_ = 0x74;      // Bt453: four ports; a multiple of 4
-    int     vramK_ = 512;         // frame memory fitted, in K words (power of two)
+    int     vramKB_ = 2048;       // frame memory fitted, in KILOBYTES (power of two); words = KB * 512
     int     mode_ = 1;            // index into the mode table: 640x480
     int     videoWidth_ = 0;      // host window width in px, 0 = auto
 

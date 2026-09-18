@@ -29,7 +29,7 @@ The board's own decisions, which no chip made — and every one of them is visib
 | **Shift register** | wired for **8 bits per pixel and 8 words per display fetch**: each display cycle the board fetches eight consecutive words (128 bits) at the address the ACRTC puts on MAD and shifts them out as sixteen 8-bit pixels, low byte of the low word first. This is a hardware fact, not a register — see *Programming model* below |
 | **Monitor** | a fixed-frequency VESA display chosen by the `mode` strap: **640x400, 640x480 (default), 800x600, 1024x768**. The frame is always the mode's size; the ACRTC's picture is placed in it by HDS/VDS against the mode's porches |
 | **Access modes** | single (OMR ACM = `0x`) and interleaved (ACM = `10`). Superimposed (`11`) is not wired |
-| Frame memory fitted | `vram` K words, default **512 K** (1 MB; 1024x768 at 8 bpp needs 384 K); the ACRTC's 20-bit word address aliases above it |
+| Frame memory fitted | `vram` kilobytes, default **2048** — 2 MB, the full 1 M words the ACRTC addresses (1024x768 at 8 bpp needs 768 KB); a smaller fit aliases above its size |
 | Pixel bus to the DAC | P0–P7 from the shift register; the Bt453 sees exactly the byte the frame memory holds |
 | Overlay inputs | OL0, OL1 tied low: the overlay registers can be loaded but nothing selects them |
 | IRQ\* | not wired to the bus (a later milestone) |
@@ -178,8 +178,8 @@ and the same three for *inside*).
   clipped to the frame. The Bt453's 256-entry table goes to `Display::setPalette()`. Nothing is
   translated: the surface *is* the pixel bus and the palette *is* the RAMDAC. Off (STR or SE1
   clear) after having been on, the frame is black; never on, no window opens.
-- **`properties()`**: straps `port`, `dac`, `mode` (the monitor), `vram` (K words, a power of
-  two 4–1024; refits the frame memory), `width` (the window); live, read-only `video`, `picture`
+- **`properties()`**: straps `port`, `dac`, `mode` (the monitor), `vram` (kilobytes, a power of
+  two 8–2048; refits the frame memory), `width` (the window); live, read-only `video`, `picture`
   (programmed size and position in the frame), `wiring` (GBM/GAI/ACM against the board) and
   `status` (the SR).
 - **Interrupts**: none wired. `Hd63484::irq()` answers what IRQ\* would be; a later milestone
