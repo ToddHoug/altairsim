@@ -41,9 +41,10 @@ int CadzillaBoard::modeCount() { return (int)(sizeof kModes / sizeof kModes[0]);
 
 void CadzillaBoard::setDisplay(Display* d) { g_display = d; }
 
-// 512 K words is the default `vram` strap; the member initializer below must agree with it
-// (a member is not yet constructed when the base-initializer list runs).
-CadzillaBoard::CadzillaBoard() : acrtc_((size_t)512 * 1024) {}
+// 2048 KB -- 1 M words, the whole ACRTC address space -- is the default `vram` strap; the
+// member initializer below must agree with it (a member is not yet constructed when the
+// base-initializer list runs).
+CadzillaBoard::CadzillaBoard() : acrtc_((size_t)2048 * 512) {}
 
 // ---------------------------------------------------------------------------
 // Bus: six I/O ports, no memory.
@@ -287,23 +288,23 @@ std::vector<Property> CadzillaBoard::properties() {
     {
         Property x;
         x.name  = "vram";
-        x.help  = "Frame memory fitted, in K words of 16 bits: a power of two from 4 to 1024 "
-                  "(the ACRTC addresses 1 M words; 1024x768 at 8 bpp needs 384 K). Changing it "
-                  "clears the picture. Default 512";
+        x.help  = "Frame memory fitted, in kilobytes: a power of two from 8 to 2048 (the ACRTC "
+                  "addresses 1 M words = 2 MB; 1024x768 at 8 bpp needs 768). Changing it clears "
+                  "the picture. Default 2048";
         x.kind  = Kind::Int;
-        x.min   = 4;
-        x.max   = 1024;
-        x.get   = [this] { return Value::ofInt(vramK_); };
+        x.min   = 8;
+        x.max   = 2048;
+        x.get   = [this] { return Value::ofInt(vramKB_); };
         x.set   = [this](const Value& v, std::string& err) {
             long long k = v.i();
-            if (k < 4 || k > 1024 || (k & (k - 1)) != 0) {
-                err = "vram must be a power of two from 4 to 1024 K words";
+            if (k < 8 || k > 2048 || (k & (k - 1)) != 0) {
+                err = "vram must be a power of two from 8 to 2048 kilobytes";
                 return false;
             }
-            if ((int)k != vramK_) {
-                vramK_ = (int)k;
-                acrtc_  = Hd63484((size_t)vramK_ * 1024);
-                dirty_  = true;
+            if ((int)k != vramKB_) {
+                vramKB_ = (int)k;
+                acrtc_   = Hd63484((size_t)vramKB_ * 512);   // 512 sixteen-bit words per KB
+                dirty_   = true;
             }
             return true;
         };
