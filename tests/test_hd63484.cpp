@@ -518,6 +518,57 @@ void test_hd63484() {
         CHECK(row[4] == 0, "raster 3 is below it");
     }
 
+    SECTION("HD63484 -- scan-out at the address level: what MAD carries, for a board's own shift register");
+    {
+        Rig g;
+        g.reg(0x04, 0x4030);                      // STR, GAI = 011
+        CHECK(g.c.gaiWords() == 8 && g.c.accessMode() == 1, "GAI 011 is +8 words; ACM 0x is single access");
+        g.reg(0x04, 0x4018);                      // GAI = 001, ACM = 10
+        CHECK(g.c.gaiWords() == 2 && g.c.accessMode() == 2, "GAI 001 is +2; ACM 10 is interleaved (two cycles)");
+        g.reg(0x04, 0x4040);                      // GAI = 100: no increment
+        CHECK(g.c.gaiWords() == 0, "GAI 1x0 does not advance the display address");
+        g.reg(0x04, 0x4070);                      // GAI = 111: every two cycles
+        CHECK(g.c.gaiWords() == 1, "GAI 111 is treated as +1");
+
+        g.reg(0x84, 0x0227);                      // HDS = 2 -> 3 cycles from HSYNC rise; HDW = 39 -> 40
+        g.reg(0x88, 0x2002);                      // VDS = 32 -> raster 33; VSW = 2
+        CHECK(g.c.hds() == 3 && g.c.hdw() == 40 && g.c.vds() == 33, "timing registers decoded with the manual's +1");
+
+        g.reg(0x8A, 0x0004);                      // SP1 = 4
+        g.reg(0xCA, 0x0010);                      // MWR1 = 16
+        g.reg(0xCC, 0x0001);
+        g.reg(0xCE, 0x2000);                      // SAR1 = $12000
+        g.reg(0x06, 0x4000);                      // SE1
+        uint32_t a = 0;
+        CHECK(g.c.backgroundRaster(0, a) && a == 0x12000, "raster 0 of the base screen starts at SAR1");
+        CHECK(g.c.backgroundRaster(3, a) && a == 0x12030, "raster 3 is three MW1 on");
+        CHECK(!g.c.backgroundRaster(4, a), "raster 4 is past SP1: no screen owns it");
+        CHECK(!g.c.backgroundRaster(-1, a), "nor a negative raster");
+        g.reg(0x06, 0x0000);                      // SE1 clear: blanked
+        CHECK(!g.c.backgroundRaster(0, a), "a blanked screen answers false: black");
+
+        g.reg(0x06, 0x7000);                      // SE1 + SE0 = 11: an upper screen in front
+        g.reg(0x8C, 0x0002);                      // SP0 = 2
+        g.reg(0xC2, 0x0008);                      // MWR0 = 8
+        g.reg(0xC4, 0x0000);
+        g.reg(0xC6, 0x0500);                      // SAR0 = $500
+        CHECK(g.c.backgroundRaster(1, a) && a == 0x508, "raster 1 is the upper screen's second raster");
+        CHECK(g.c.backgroundRaster(2, a) && a == 0x12000, "raster 2 is the base screen's first");
+
+        CHECK(!g.c.windowRaster(40, a), "no window while SE3 != 11");
+        g.reg(0x06, 0x4300);                      // SE1 + SE3
+        g.reg(0x94, 0x0027);                      // VWS = 39 -> the window starts on VSYNC raster 40
+        g.reg(0x96, 0x0002);                      // VWW = 2
+        g.reg(0xDA, 0x0004);                      // MWR3 = 4
+        g.reg(0xDC, 0x0000);
+        g.reg(0xDE, 0x0300);                      // SAR3 = $300
+        CHECK(!g.c.windowRaster(39, a), "VSYNC raster 39 is above the window");
+        CHECK(g.c.windowRaster(40, a) && a == 0x300, "raster 40 is its first, at SAR3");
+        CHECK(g.c.windowRaster(41, a) && a == 0x304, "raster 41 its second, one MW3 on");
+        CHECK(!g.c.windowRaster(42, a), "raster 42 is below it");
+        CHECK(g.c.hws() == ((0x0000 >> 8) & 0xFF) + 1 && g.c.vws() == 40 && g.c.vww() == 2, "the window registers decode too");
+    }
+
     SECTION("HD63484 -- the picture is dirty when anything it depends on moves");
     {
         Rig g;

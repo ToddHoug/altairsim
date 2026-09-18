@@ -23,7 +23,7 @@ method each, and the other two are the Limitations section.
 | 2 | **I/O footprint** — which ports, and *separately* which answer `IN` vs `OUT`: the bus decodes by cycle type | ACRTC at `port`/`port+1`, DAC at `dac`..`dac+3`, all both directions but *different registers each way* | `decodes()`, `ioMap()` |
 | 3 | **Memory footprint.** On-board screen RAM the CPU addresses (VDM-1 decodes a 1 KB window), a framebuffer in main RAM (Dazzler decodes none, reads RAM), or private memory (cadzilla decodes none, and the CPU never sees it) | none | `decodes()`, `memMap()` |
 | 4 | **Where pixels come from and how you know they moved.** A write to on-board RAM latches a dirty flag; main RAM has to be polled against a shadow; a chip with its own memory tells you | `Hd63484::takeDirty()`, `Bt453::takeDirty()` | `pump()` |
-| 5 | **Geometry.** Native w×h — fixed, or decoded from registers each frame. `PixelFormat::Indexed8` is the only format the seam has | `displayWidth()` × `displayHeight()` from HDW, GAI, SP0–2 | `render()`, `acquire()` |
+| 5 | **Geometry.** Native w×h — fixed, decoded from registers each frame, or **the monitor's**: a board with a real CRT controller can carry a fixed-frequency display and place the chip's picture in it. `PixelFormat::Indexed8` is the only format the seam has | the `mode` strap's VESA frame (640x480 by default); the ACRTC's picture placed by HDS/VDS against the mode's porches | `render()`, `acquire()` |
 | 6 | **Palette.** How many entries, from where. Dazzler: 16 from an RGBI nibble. VDM-1: 2. cadzilla: **256, and they are a chip** | `Bt453::palette()` | `setPalette()` |
 | 7 | **Observable timing.** A status bit a guest can *time* (vblank, scan parity) comes off `clock_->now()` — never a poll counter. An oscillator the guest cannot observe (a cursor blink) comes off `Display::hostSeconds()` | none yet — see Limitations | `statusByte()` |
 | 8 | **Straps vs live status.** A strap has a setter and round-trips through `CONFIG SAVE`; live status has **no setter**, and that absence is the whole signal. Every video board pushes `Display::widthProperty(videoWidth_)` | `port`, `dac`, `vram`, `width`; live `video`, `resolution`, `depth`, `status` | `properties()` |
@@ -51,9 +51,13 @@ uint8_t CadzillaBoard::read(const BusCycle& c) {
 The pay-off is that a chip is tested on its own, from its data sheet, with no bus at all —
 `tests/test_hd63484.cpp` and `tests/test_bt453.cpp` — and the board test is left with only the
 board's own decisions to prove. The **decisions a chip cannot make** are the board's, and they
-belong in the board header where cadzilla's are: how much DRAM was fitted, which end of the
-word the shift register serializes first, what the overlay inputs are tied to, whether IRQ\*
-is wired.
+belong in the board header where cadzilla's are: the shift register (8 bits per pixel, 8 words
+per fetch, low byte first), the monitor (a fixed VESA frame), how much DRAM was fitted, what the
+overlay inputs are tied to, whether IRQ\* is wired. Draw the line where the hardware draws it:
+the ACRTC only ever puts an *address* on its bus, so `Hd63484` answers address-level questions
+(`backgroundRaster()`, `windowRaster()`, `gaiWords()`) and the *board* fetches words and makes
+pixels of them — which is also why a program that sets the chip to 4 bpp gets a scrambled
+picture here, as it would on the card, instead of a helpfully re-unpacked one.
 
 ## 3. The board: three gates and one call
 
@@ -80,19 +84,20 @@ and a test's frame count depends on the machine it ran on.
 `render()` is one call that is the window, and its arguments are not decoration:
 
 ```cpp
-Surface* s = g_display->acquire(this, id, w, h, PixelFormat::Indexed8, videoWidth_);
+Surface* s = g_display->acquire(this, id, m.width, m.height, PixelFormat::Indexed8, videoWidth_);
 ```
 
 `this` keys **this board's own window** (issue #234: two boards of the same resolution would
-otherwise land on one Surface), `id` **titles** it, `videoWidth_` **sizes** it. Get that line
-right and the SDL back end's windowing, integer scaling, CRT look, focus policy and close box
-all arrive with no further code — and a `NullDisplay` keeps the same Surface per owner for a
-test to read. Then paint every pixel (the Surface may be last frame's buffer), hand over the
-palette, and present:
+otherwise land on one Surface), `id` **titles** it, `videoWidth_` **sizes** it — and `m` is the
+monitor mode, so the frame is the monitor's, not the chip's. Get that line right and the SDL
+back end's windowing, integer scaling, CRT look, focus policy and close box all arrive with no
+further code — and a `NullDisplay` keeps the same Surface per owner for a test to read. Then
+paint every pixel (the Surface may be last frame's buffer), hand over the palette, and present:
 
 ```cpp
 g_display->setPalette(this, dac_.palette());     // the RAMDAC IS the palette, verbatim
-/* ... acrtc_.scanline(y, row) into s->pixels(), one byte per pixel = P0-P7 ... */
+s->clear(0);                                     // blanking is black
+if (on) paintFrame(s, m.width, m.height);        // the shift register, over the ACRTC's addresses
 g_display->present(this, s);
 ```
 
@@ -131,28 +136,40 @@ board with a RAMDAC, `frameRgb()` is literally the DAC in software — what the 
 **`tests/framecheck.h`** builds the assertion on top. The expected picture is a raw string
 literal *in the test*, readable by a person; on a mismatch the failure prints the first row that
 differs with a caret under the column **and writes what the board drew as a `.ppm`**, naming the
-path. This is cadzilla's end-to-end test, after loading the LUT through the four DAC ports and
-drawing through the two ACRTC ports:
+path. A 640x480 frame is not readable one character per pixel, so cadzilla's end-to-end test
+draws its rectangle, line and dot on a 32-pixel grid and samples the frame at the same pitch —
+20 x 15 characters that a person can check against the commands that drew them:
 
 ```cpp
-CHECK_FRAME(g.disp, g.cad, R"(
-................................
-..1111111111111111111111111111..
-..1..........................1..
-..1..........................1..
-..1..3333333....2............1..
-..1..........................1..
-..1111111111111111111111111111..
-................................
-)", "the rectangle, the line and the dot land where the ACRTC put them, right way up");
+TextGridOpts every32;
+every32.xStep = 32;
+every32.yStep = 32;
+CHECK_FRAME_OPTS(g.disp, g.cad, R"(
+11111111111111111111
+1..................1
+1..................1
+1..................1
+1..................1
+1..................1
+1..................1
+1.3333333333333333.1
+1..................1
+1..................1
+1..................1
+1.........2........1
+1..................1
+1..................1
+11111111111111111111
+)", every32, "sampled every 32nd pixel: the rectangle, the line and the dot, right way up");
 ```
 
-Every character is a pixel's palette index. A rectangle one row too high, a line one pixel too
-long, a mirrored X axis — each is visible in the diff, and the `.ppm` beside it shows the
-picture through the colors the guest loaded. For a frame too large to read 1:1, sample it
-(`TextGridOpts::xStep`/`yStep` — the Dazzler's quadrant test samples every eighth element), or
-keep a golden file under `tests/golden/` and `CHECK_FRAME_GOLDEN` it; the golden is rewritten
-only under `ALTAIR_TEST_WRITE_GOLDEN=1`, because a golden that rewrites itself asserts nothing.
+Every character is a pixel's palette index. A rectangle one row too high, a mirrored X axis, a
+picture placed one memory cycle late — each is visible in the diff, and the `.ppm` beside it
+shows the full-resolution picture through the colors the guest loaded. Pair the sampled grid
+with a few **exact probes** (`g.px(608, 0) == 1 && g.px(609, 0) == 0`) for the edges the grid
+steps over, or keep a golden file under `tests/golden/` and `CHECK_FRAME_GOLDEN` it; the golden
+is rewritten only under `ALTAIR_TEST_WRITE_GOLDEN=1`, because a golden that rewrites itself
+asserts nothing.
 
 Then prove the two things a picture alone does not: that a **palette-only change** reaches the
 host (`frames()` advanced, `frameCrc()` moved, the pixel bytes unchanged), and that a

@@ -1,15 +1,26 @@
 # An HD63484 ACRTC graphics board with a Bt453 RAMDAC in an Altair -- the bench for cadzilla.
 #
-# The board is our own design (docs/boards/cadzilla.md), built from two real mid-1980s chips.
+# The board is our own design (docs/boards/cadzilla.md), built from two real mid-1980s chips,
+# on a fixed VESA monitor (`mode`, 640x480 here). It is wired for 8 bits per pixel and an
+# address increment of 8 words per display cycle; the register values for every mode are in
+# the board's reference.
 #
 # `altairsim cadzilla` comes up at the monitor prompt. The board draws nothing until a program
 # sets the ACRTC's timing registers, starts it, loads the Bt453's color table and issues drawing
-# commands through the FIFO -- there is no framebuffer in RAM to poke. The port-level recipe is
-# in docs/boards/cadzilla.md; from the monitor:
+# commands through the FIFO -- there is no framebuffer in RAM to poke. The 640x480 picture from
+# the monitor prompt (OUT 70 = address register, OUT 71 = data; r80+ auto-increment):
 #
-#     OUT 70 02  / OUT 71 03       ; CCR high byte: 8 bits per pixel
-#     OUT 70 84  / OUT 71 00  / OUT 71 27   ; HDR: 40 memory cycles -> 80 pixels wide
-#     ...                            ; SP1, MWR1, SAR1, then OMR STR and DCR SE1
+#     OUT 70 02 / OUT 71 03 / OUT 70 03 / OUT 71 00      ; CCR $0300: 8 bits per pixel
+#     OUT 70 82 / OUT 71 31 / OUT 71 06                  ; HSR: HC 49, HSW 6
+#     OUT 71 02 / OUT 71 27                              ; HDR: HDS 2, HDW 39 (40 cycles = 640 px)
+#     OUT 71 02 / OUT 71 0D                              ; VSR: VC 525
+#     OUT 71 20 / OUT 71 02                              ; VDR: VDS 32, VSW 2
+#     OUT 71 01 / OUT 71 E0                              ; SP1: 480 rasters
+#     OUT 70 CA / OUT 71 01 / OUT 71 40                  ; MWR1: 320 words per raster
+#     OUT 71 00 / OUT 71 00 / OUT 71 00 / OUT 71 00      ; SAR1: 0
+#     OUT 70 06 / OUT 71 40 / OUT 70 07 / OUT 71 00      ; DCR $4000: base screen on
+#     OUT 70 04 / OUT 71 40 / OUT 70 05 / OUT 71 30      ; OMR $4030: start, GAI +8
+#     SHOW cad0                                          ; video on, picture 640x480 at (0,0), wiring ok
 #
 # It needs a host Display. With SDL3 present the picture shows in a window titled after the
 # board; in a headless build the machine runs identically and draws nothing.
@@ -35,14 +46,15 @@ port = 10
   [board.unit.b]
   connect = "null"
 
-# THE BOARD. ACRTC at 70/71, Bt453 at 74-77 (the defaults), 128K words of frame memory. It
-# decodes no memory at all; the picture lives on the board.
+# THE BOARD. ACRTC at 70/71, Bt453 at 74-77, a 640x480 monitor, 512K words of frame memory
+# (all the defaults). It decodes no memory at all; the picture lives on the board.
 [[board]]
 type = "cadzilla"
 id   = "cad0"
 port = 0x70
 dac  = 0x74
-vram = 128
+mode = "640x480"
+vram = 512
 
 [[board]]
 type = "memory"
