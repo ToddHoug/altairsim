@@ -1,4 +1,5 @@
 #include "test.h"
+#include "framecheck.h"
 
 #include "boards/cromemco-dazzler.h"
 #include "boards/s100-memory.h"
@@ -127,10 +128,24 @@ void test_dazzler() {
         g.poke(1536, 0x01);  // Q3 byte 0    -> bottom-right
         g.daz->pump();
         CHECK(g.side() == 64, "2 KB normal picture is 64x64 elements");
-        CHECK(g.px(0, 0) == 1, "quadrant 0 is the top-left 32x32 block");
-        CHECK(g.px(32, 0) == 1, "quadrant 1 is the top-right");
-        CHECK(g.px(0, 32) == 1, "quadrant 2 is the bottom-left");
-        CHECK(g.px(32, 32) == 1, "quadrant 3 is the bottom-right");
+
+        // The whole picture at once (tests/framecheck.h): sampled every 8th element so the
+        // 64x64 frame is an 8x8 grid, with the first element of each quadrant lit -- (0,0),
+        // (32,0), (0,32), (32,32) land at grid columns/rows 0 and 4. A wrong tiling shows
+        // up as a '1' in the wrong cell, and the failure names a .ppm of what was drawn.
+        TextGridOpts every8;
+        every8.xStep = 8;
+        every8.yStep = 8;
+        CHECK_FRAME_OPTS(g.disp, g.daz, R"(
+1...1...
+........
+........
+........
+1...1...
+........
+........
+........
+)", every8, "the four quadrants tile TL, TR, BL, BR");
     }
 
     SECTION("Dazzler -- X4 mode: one byte is eight on/off bits in a 4x2 cell");

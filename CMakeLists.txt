@@ -389,6 +389,11 @@ add_library(altair_core STATIC
   # HostFile). openHostMedia() is the resolver both mains install (src/host/cardimg.h).
   src/host/cardimg.cpp
   src/host/disk.cpp
+  # A video board's frame, OUT of the seam: resolved through its palette to a PPM image
+  # and to a one-character-per-pixel text grid, so a test can diff a whole picture and a
+  # person can open what the board drew (src/host/framedump.h). Pure functions over a
+  # Surface; no board and no window involved.
+  src/host/framedump.cpp
   # ImageDisk (.IMD) -> raw sibling .DSK, at the MOUNT layer. Pure (bytes in, bytes out),
   # so DiskImage stays raw-only and the container never reaches it (src/host/imd.h).
   src/host/imd.cpp
@@ -777,6 +782,8 @@ add_executable(altair_tests
   tests/test_vdm1.cpp
   tests/test_dazzler.cpp
   tests/test_multiwindow.cpp
+  tests/framecheck.cpp
+  tests/test_framedump.cpp
   tests/test_d7a.cpp
   tests/test_sol.cpp
   tests/test_tapemount.cpp
