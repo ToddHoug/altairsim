@@ -5,6 +5,7 @@
 #include "boards/cromemco-64fdc.h"
 #include "boards/cromemco-d7a.h"
 #include "boards/cromemco-dazzler.h"
+#include "boards/cadzilla.h"
 #include "boards/dualide.h"
 #include "boards/dualsd.h"
 #include "boards/bankmem.h"
@@ -89,6 +90,7 @@ std::vector<BoardType> boardTypes() {
         {"vdm1", "Processor Technology VDM-1: memory-mapped 16x64 video, screen RAM at BASE (default CC00), scroll/status port (default CC). Needs a Display"},
         {"dazzler", "Cromemco Dazzler: color graphics from a framebuffer in main RAM. Two ports at BASE+0..1 (default 0E): control/status and format. 32x32 to 128x128, 16 colors/greys. Needs a Display"},
         {"vdb8024", "SD Systems VDB-8024: an 80x24 video terminal on one board -- the video console for an SBC-100/200 (the alternative to the 8251). Two I/O ports at BASE+0..1 (default 00): status/keyboard/display. Unit 'keyboard' (CONNECT). Optional keyboard-strobe interrupt strap (interrupt=vi0..vi7) for the SBC-200's CTC to vector -- what the SD video CBIOS needs; polled by default. Boots sdmonv21. Needs a Display"},
+        {"cadzilla", "cadzilla: an HD63484 ACRTC graphics board with a Bt453 RAMDAC and its own frame memory. ACRTC at BASE+0..1 (default 70), DAC at DAC+0..3 (default 74). Draws by command through the ACRTC FIFO; 1-8 bpp through a 256-entry color LUT. Needs a Display"},
         {"d7a", "Cromemco D+7A: analog + parallel I/O. Eight ports from BASE (default 18): one parallel port + seven two's-complement A/D-in/D/A-out channels. Reads 1-2 JS-1 joysticks from the host"},
         {"sol", "Processor Technology Sol-PC I/O: serial, keyboard, parallel, CUTS tape as one board. Seven ports F8..FE. Units serial/printer/keyboard (CONNECT) and tape1/tape2 (MOUNT). Brings the WIND/REWIND/EXTRACT verbs and a tape counter"},
         // Not a toggle: the SENSE switches a guest reads at IN 0FFH are a CONFIGURED byte
@@ -136,6 +138,7 @@ std::unique_ptr<Board> makeBoard(const std::string& type) {
     if (type == "vdm1") return std::make_unique<VdmBoard>();
     if (type == "dazzler") return std::make_unique<DazzlerBoard>();
     if (type == "vdb8024") return std::make_unique<Vdb8024Board>();
+    if (type == "cadzilla") return std::make_unique<CadzillaBoard>();
     if (type == "d7a") return std::make_unique<D7aBoard>();
     if (type == "sol") return std::make_unique<SolBoard>();
     if (type == "fp") return std::make_unique<FrontPanelBoard>();

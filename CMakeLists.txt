@@ -542,6 +542,9 @@ add_library(altair_core STATIC
   # host Display seam as the VDM-1 and takes its keyboard from a ByteStream like the
   # Sol. See sd-vdb8024.h.
   src/boards/sd-vdb8024.cpp
+  # cadzilla: an HD63484 ACRTC + Bt453 RAMDAC graphics board with its own frame memory;
+  # six I/O ports, no memory decoded. Renders the same host Display seam. See cadzilla.h.
+  src/boards/cadzilla.cpp
   # The Cromemco D+7A: analog + parallel I/O. A block of eight ports -- one parallel
   # port and seven two's-complement A/D-in/D/A-out channels -- that reads one or two
   # JS-1 joysticks from an injected host Joystick service (src/host/joystick.h), like
@@ -802,6 +805,7 @@ add_executable(altair_tests
   tests/test_i8257.cpp
   tests/test_bt453.cpp
   tests/test_hd63484.cpp
+  tests/test_cadzilla.cpp
   tests/test_versafloppy.cpp
   tests/test_tarbell.cpp
   tests/test_cromemco-fdc.cpp

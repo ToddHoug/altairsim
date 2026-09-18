@@ -24,6 +24,7 @@ what is actually in one.
 | `bankmem` | A bank-switched RAM machine: a Z80, a console, and a Vector Graphic 64K bankmem. |
 | `basic4k` | The machine Altair 4K BASIC was sold to run on: an 88-SIO Teletype, a cassette in the ACR. |
 | `basic8k` | The machine Altair 8K BASIC was sold to run on: an 88-2SIO terminal, a cassette in the ACR. |
+| `cadzilla` | An HD63484 ACRTC graphics board with a Bt453 RAMDAC in an Altair -- the bench for cadzilla. |
 | `cdbl` | The `default` machine with the Combo Disk Boot Loader in the PROM socket. |
 | `compupro` | A stock Altair with a CompuPro System Support 1 board for its clock/calendar. |
 | `cuter` | CUTER 1.3 driving a Processor Technology VDM-1 -- the real Sol/CUTS monitor. |

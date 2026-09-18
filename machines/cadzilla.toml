@@ -1,0 +1,55 @@
+# An HD63484 ACRTC graphics board with a Bt453 RAMDAC in an Altair -- the bench for cadzilla.
+#
+# The board is our own design (docs/boards/cadzilla.md), built from two real mid-1980s chips.
+#
+# `altairsim cadzilla` comes up at the monitor prompt. The board draws nothing until a program
+# sets the ACRTC's timing registers, starts it, loads the Bt453's color table and issues drawing
+# commands through the FIFO -- there is no framebuffer in RAM to poke. The port-level recipe is
+# in docs/boards/cadzilla.md; from the monitor:
+#
+#     OUT 70 02  / OUT 71 03       ; CCR high byte: 8 bits per pixel
+#     OUT 70 84  / OUT 71 00  / OUT 71 27   ; HDR: 40 memory cycles -> 80 pixels wide
+#     ...                            ; SP1, MWR1, SAR1, then OMR STR and DCR SE1
+#
+# It needs a host Display. With SDL3 present the picture shows in a window titled after the
+# board; in a headless build the machine runs identically and draws nothing.
+
+[machine]
+name = "cadzilla"
+
+[[board]]
+type     = "8080"
+id       = "cpu0"
+clock_hz = 2000000
+
+# A console, so the machine is one you can talk to: the board is a DISPLAY, not a keyboard.
+[[board]]
+type = "2sio"
+id   = "sio0"
+port = 10
+
+  [board.unit.a]
+  connect = "console"
+  baud    = 9600
+
+  [board.unit.b]
+  connect = "null"
+
+# THE BOARD. ACRTC at 70/71, Bt453 at 74-77 (the defaults), 128K words of frame memory. It
+# decodes no memory at all; the picture lives on the board.
+[[board]]
+type = "cadzilla"
+id   = "cad0"
+port = 0x70
+dac  = 0x74
+vram = 128
+
+[[board]]
+type = "memory"
+id   = "mem0"
+fill = "random"
+
+  [[board.region]]
+  type = "ram"
+  at   = 0000
+  size = "64K"

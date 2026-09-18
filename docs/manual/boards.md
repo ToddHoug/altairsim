@@ -86,6 +86,7 @@ Grouped by what they do — the same order as the sections below.
 | `vdm1` | Processor Technology VDM-1 — memory-mapped video. Needs a display |
 | `dazzler` | Cromemco Dazzler — color graphics. Needs a display |
 | `vdb8024` | SD Systems VDB-8024 — an 80×24 video terminal on one board. Needs a display |
+| `cadzilla` | An HD63484 ACRTC graphics board with a Bt453 color look-up table. Needs a display |
 | `sol` | Processor Technology Sol-PC — the Sol-20's onboard I/O, on one card |
 
 **Interrupts and the clock**
@@ -943,6 +944,37 @@ running **Li-Chen Wang's Kaleidoscope**, a four-way-mirrored pattern turning ove
 (`STOP` breaks back to the monitor); the `dazzler` machine is the bare board to build on. Because a
 64×64 frame is tiny, the board's `width` property (above) sizes the window up to land near a VDM-1's
 size on your screen rather than a sixth of it.
+
+---
+
+## `cadzilla` — an HD63484 ACRTC graphics board
+
+Not a period product but a board of **our own design**, built from two real chips of the mid
+1980s: Hitachi's **HD63484 ACRTC**, a CRT controller with a *drawing processor* and up to a
+megaword of its own frame memory, and Brooktree's **Bt453**, a 256-entry color look-up table with
+three video DACs on one chip. Where the Dazzler and the VDM-1 are scanned out of the machine's
+RAM, this one keeps its picture to itself: the CPU never addresses a pixel. It **draws by
+command** — "move here", "line to there", "clear this block" — written a word at a time into the
+ACRTC's FIFO, and the chip does the rest at 1, 2, 4 or 8 bits per pixel over whatever raster
+timing you program.
+
+Six ports. Two for the ACRTC (default `70`/`71`): the first is the *address register* going out and
+the *status register* coming back, the second is whichever 16-bit control register the address
+names, a byte at a time — high byte at an even address, low byte at the odd one, with the timing
+and display registers auto-incrementing so a whole block loads from one address write. Four for the
+Bt453 (default `74`–`77`): an address register, the palette RAM (red, green, blue in three
+successive writes), the address again, and three overlay colors. What the ACRTC scans out is an
+8-bit pixel value; what reaches the screen is that value looked up in the Bt453 — so a program
+picks its colors by loading the table, and repainting the table recolors the picture without
+redrawing it.
+
+**It needs a display**, and draws into it like the others: an SDL3 build opens a window titled
+with the board's id; a headless build runs identically and shows nothing. `SHOW <id>` reports the
+live `video`, `resolution`, `depth` and ACRTC `status` alongside the straps: `port`, `dac`, `vram`
+(how much frame memory the board carries, in K words) and `width`. The `cadzilla` machine is the
+bare board with a console to type at. The ACRTC's larger commands — circles, arcs, paint, pattern
+and area copies — are recognized but not yet drawn; the board says so in its status register, and
+the Developer Guide lists exactly what is modeled.
 
 ---
 

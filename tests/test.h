@@ -78,6 +78,7 @@ void test_wd17xx();
 void test_i8257();
 void test_bt453();
 void test_hd63484();
+void test_cadzilla();
 void test_versafloppy();
 void test_tarbell();
 void test_cromemco_fdc();
