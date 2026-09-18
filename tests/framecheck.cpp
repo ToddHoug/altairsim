@@ -6,6 +6,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <system_error>
 #include <vector>
 
 using namespace altair;
@@ -99,7 +100,8 @@ bool checkFrameGolden(NullDisplay& d, Display::Owner owner, const char* name,
             std::printf("        golden: nothing drawn, %s not written\n", path.c_str());
             return false;
         }
-        std::filesystem::create_directories(std::filesystem::path(path).parent_path());
+        std::error_code ec;   // non-throwing: a failure shows up as the write failing below
+        std::filesystem::create_directories(std::filesystem::path(path).parent_path(), ec);
         std::ofstream out(path, std::ios::binary);
         out << frameText(*s, o);
         std::printf("        golden written: %s\n", path.c_str());
