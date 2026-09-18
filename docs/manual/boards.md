@@ -86,7 +86,7 @@ Grouped by what they do — the same order as the sections below.
 | `vdm1` | Processor Technology VDM-1 — memory-mapped video. Needs a display |
 | `dazzler` | Cromemco Dazzler — color graphics. Needs a display |
 | `vdb8024` | SD Systems VDB-8024 — an 80×24 video terminal on one board. Needs a display |
-| `cadzilla` | An HD63484 ACRTC graphics board with a Bt453 color look-up table. Needs a display |
+| `cadzilla` | An HD63484 ACRTC graphics board with a Bt453 color look-up table on a VESA monitor. Needs a display |
 | `sol` | Processor Technology Sol-PC — the Sol-20's onboard I/O, on one card |
 
 **Interrupts and the clock**
@@ -955,8 +955,7 @@ megaword of its own frame memory, and Brooktree's **Bt453**, a 256-entry color l
 three video DACs on one chip. Where the Dazzler and the VDM-1 are scanned out of the machine's
 RAM, this one keeps its picture to itself: the CPU never addresses a pixel. It **draws by
 command** — "move here", "line to there", "clear this block" — written a word at a time into the
-ACRTC's FIFO, and the chip does the rest at 1, 2, 4 or 8 bits per pixel over whatever raster
-timing you program.
+ACRTC's FIFO, and the chip does the rest.
 
 Six ports. Two for the ACRTC (default `70`/`71`): the first is the *address register* going out and
 the *status register* coming back, the second is whichever 16-bit control register the address
@@ -968,13 +967,22 @@ successive writes), the address again, and three overlay colors. What the ACRTC 
 picks its colors by loading the table, and repainting the table recolors the picture without
 redrawing it.
 
+**The monitor is part of the board.** `mode` picks a fixed-frequency VESA display — `640x400`,
+`640x480` (the default), `800x600` or `1024x768` — and the window is always that size, exactly
+as a real monitor's frame is. The ACRTC's picture lands in it where the chip's timing registers
+put it: a program that starts its display where the mode's back porch ends fills the frame, one
+that starts a cycle early or late is shifted and clipped. The board's shift register is wired for
+**8 bits per pixel and 8 words per fetch**, so a program sets the ACRTC to 8 bpp and an address
+increment of +8 — the board's reference gives the exact register values for every mode, in single
+and interleaved access — and `SHOW <id>` has a `wiring` line that says `ok` or names what is off.
+
 **It needs a display**, and draws into it like the others: an SDL3 build opens a window titled
 with the board's id; a headless build runs identically and shows nothing. `SHOW <id>` reports the
-live `video`, `resolution`, `depth` and ACRTC `status` alongside the straps: `port`, `dac`, `vram`
-(how much frame memory the board carries, in K words) and `width`. The `cadzilla` machine is the
-bare board with a console to type at. The ACRTC's larger commands — circles, arcs, paint, pattern
-and area copies — are recognized but not yet drawn; the board says so in its status register, and
-the Developer Guide lists exactly what is modeled.
+live `video`, `picture` (the programmed size and where it sits in the frame), `wiring` and ACRTC
+`status` alongside the straps: `port`, `dac`, `mode`, `vram` (frame memory in K words) and
+`width`. The `cadzilla` machine is the bare board with a console to type at. The ACRTC's larger
+commands — circles, arcs, paint, pattern and area copies — are recognized but not yet drawn; the
+board says so in its status register, and the Developer Guide lists exactly what is modeled.
 
 ---
 

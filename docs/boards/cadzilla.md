@@ -1,7 +1,8 @@
 # cadzilla — an HD63484 ACRTC graphics board with a Bt453 RAMDAC
 
-**Status:** milestone 1 — registers, FIFOs, a drawing subset, scan-out through the LUT. Built
-2026-09-18.
+**Status:** milestone 1 — registers, FIFOs, a drawing subset, scan-out through the LUT into a
+fixed VESA monitor. Built 2026-09-18; the monitor model and the 8 bpp / GAI +8 wiring added
+2026-09-19.
 
 ## The real hardware
 
@@ -20,16 +21,75 @@ from two real chips of the mid 1980s the way a CAD-station card of that era was.
   pixel inputs (P0–P7) select an entry every pixel clock; three overlay registers on two more
   inputs; an 8-bit MPU port with two command inputs, so it occupies **four locations**.
 
-The board's own decisions, which no chip made:
+The board's own decisions, which no chip made — and every one of them is visible from the bus:
 
 | Decision | cadzilla |
 |---|---|
 | ACRTC bus mode | 8-bit (DACK\* strapped at reset), the only mode an S-100 8080/Z80 can use |
-| Frame memory fitted | `vram` K words, default 128 K (256 KB); the ACRTC's 20-bit word address aliases above it |
-| Shift register order | the **low dot address leaves first**, so the ACRTC's +X is rightward on the screen |
-| Pixel bus to the DAC | P0–P7 wired to the frame-memory word's low pixel bits; at 16 bpp the low byte shows |
+| **Shift register** | wired for **8 bits per pixel and 8 words per display fetch**: each display cycle the board fetches eight consecutive words (128 bits) at the address the ACRTC puts on MAD and shifts them out as sixteen 8-bit pixels, low byte of the low word first. This is a hardware fact, not a register — see *Programming model* below |
+| **Monitor** | a fixed-frequency VESA display chosen by the `mode` strap: **640x400, 640x480 (default), 800x600, 1024x768**. The frame is always the mode's size; the ACRTC's picture is placed in it by HDS/VDS against the mode's porches |
+| **Access modes** | single (OMR ACM = `0x`) and interleaved (ACM = `10`). Superimposed (`11`) is not wired |
+| Frame memory fitted | `vram` K words, default **512 K** (1 MB; 1024x768 at 8 bpp needs 384 K); the ACRTC's 20-bit word address aliases above it |
+| Pixel bus to the DAC | P0–P7 from the shift register; the Bt453 sees exactly the byte the frame memory holds |
 | Overlay inputs | OL0, OL1 tied low: the overlay registers can be loaded but nothing selects them |
 | IRQ\* | not wired to the bus (a later milestone) |
+
+### Programming model
+
+The ACRTC does not serialize pixels — it only puts a word address on its MAD bus once per
+display cycle and advances that address by GAI words for the next one. What the board does
+with each address is the board's business, and cadzilla's is fixed: **eight words, sixteen
+8-bit pixels**. So a program must tell the chip the same thing, or the two disagree:
+
+- **CCR GBM = `011` (8 bits per pixel)**, so the drawing engine's pixel arithmetic matches the
+  bytes the shift register emits. At any other GBM the drawing commands still run — the chip
+  has no idea what the board fetches — but they pack pixels the board will not unpack, and the
+  picture is scrambled exactly as it would be on the real card.
+- **OMR GAI = `011` (+8 words per display cycle)**, so the ACRTC steps over exactly the eight
+  words the board just fetched. At GAI +1 the board still fetches eight words per cycle from an
+  address that only moved by one: the raster shows each eight-word run overlapping the last.
+- **OMR ACM** single or interleaved. In interleaved mode the ACRTC takes two memory cycles per
+  display cycle, so **every horizontal register is in doubled units** for the same picture
+  (`HC`, `HSW`, `HDS`, `HDW`, `HWS`, `HWW`) and one memory cycle is worth 8 pixels of the
+  frame instead of 16.
+
+`SHOW <id>` has a `wiring` line that reads `ok` or names which of GBM / GAI / ACM is off.
+
+### The monitor modes
+
+VESA timings in the board's units — memory cycles of 16 pixels (single access mode) and
+rasters. Where a VESA porch is not a whole number of cycles the board's timing rounds it and
+keeps the line total, as a timing PROM on a real card would.
+
+| `mode` | Pixel clock | H: sync / back porch / active / front porch (cycles) | V: sync / back porch / active / front porch (rasters) |
+|---|---|---|---|
+| `640x400` | 25.175 MHz | 6 / 3 / 40 / 1 = 50 | 2 / 35 / 400 / 12 = 449 |
+| `640x480` | 25.175 MHz | 6 / 3 / 40 / 1 = 50 | 2 / 33 / 480 / 10 = 525 |
+| `800x600` | 40.000 MHz | 8 / 6 / 50 / 2 = 66 | 4 / 23 / 600 / 1 = 628 |
+| `1024x768` | 65.000 MHz | 8 / 10 / 64 / 2 = 84 | 6 / 29 / 768 / 3 = 806 |
+
+The register values that put a full picture in each frame (single access mode; the manual's
+"set to N−1" already applied). For interleaved mode double `HC`, `HSW`, `HDS` and `HDW`
+(`HC = 2·total − 1`, `HSW = 2·sync`, `HDS = 2·back porch − 1`, `HDW = 2·active − 1`) and set
+ACM = `10`:
+
+| `mode` | `HSR` r82 (HC, HSW) | `HDR` r84 (HDS, HDW) | `VSR` r86 (VC) | `VDR` r88 (VDS, VSW) | `SSW` r8A (SP1) | `MWR1` rCA |
+|---|---|---|---|---|---|---|
+| `640x400` | `$3106` (49, 6) | `$0227` (2, 39) | `$01C1` (449) | `$2202` (34, 2) | `$0190` (400) | `$0140` (320) |
+| `640x480` | `$3106` (49, 6) | `$0227` (2, 39) | `$020D` (525) | `$2002` (32, 2) | `$01E0` (480) | `$0140` (320) |
+| `800x600` | `$4108` (65, 8) | `$0531` (5, 49) | `$0274` (628) | `$1604` (22, 4) | `$0258` (600) | `$0190` (400) |
+| `1024x768` | `$5308` (83, 8) | `$093F` (9, 63) | `$0326` (806) | `$1C06` (28, 6) | `$0300` (768) | `$0200` (512) |
+
+Then `CCR = $0300` (8 bpp), `OMR = $4030` (STR, GAI +8; `$4038` interleaved), `DCR = $4000`
+(SE1), `SAR1 = 0`, and an `ORG` wherever the program wants its origin — on the bottom raster
+(`DPA = (height−1)·MW`) if it wants +Y to be up on the screen.
+
+**Placement.** The ACRTC's display starts `HDS` memory cycles after HSYNC's rising edge; the
+monitor's picture starts a fixed number of cycles after the same edge — the mode's back porch.
+A picture programmed with `HDS = back porch − 1` fills the frame from the left edge; one cycle
+later it is 16 pixels to the right (8 in interleaved mode) with its last cycle off the edge, one
+cycle earlier it is clipped on the left. Vertically the same with `VDS` and the vertical back
+porch. `SHOW`'s `picture` line reports the programmed size and where its top-left corner lands.
 
 ## Sources
 
@@ -108,13 +168,20 @@ and the same three for *inside*).
   to the other. A drawing command executes **at the instant its last parameter lands** — the
   FIFO drains immediately, so `WFE` is the steady state.
 - **`pump()`**: the three gates every video board here uses — did either chip change anything
-  (a drawing, a register, a LUT entry)? does the host want a frame? — then the ACRTC's visible
-  raster is scanned into an `Indexed8` `Surface` (one byte per pixel = P0–P7) and the Bt453's
-  256-entry table is handed to `Display::setPalette()`. Nothing is translated: the surface *is*
-  the pixel bus and the palette *is* the RAMDAC. Off (STR or SE1 clear), the board paints its
-  last geometry black; never on, it opens no window.
-- **`properties()`**: straps `port`, `dac`, `vram` (K words, a power of two 4–1024; refits the
-  frame memory), `width` (the window); live, read-only `video`, `resolution`, `depth`, `status`.
+  (a drawing, a register, a LUT entry)? does the host want a frame? — then the board builds the
+  **monitor's** frame: a Surface the size of the `mode`, black, into which it runs its own shift
+  register. For every raster of the frame it asks the ACRTC which background raster (if any) and
+  which window raster fall there (`Hd63484::backgroundRaster` / `windowRaster`, VDS and VWS
+  against the mode's vertical back porch) and, for each memory cycle of `HDW`/`HWW`, fetches
+  eight words at the ACRTC's address — advancing by `gaiWords()` per display cycle — and places
+  sixteen 8-bit pixels at the cycle's frame x (HDS/HWS against the horizontal back porch),
+  clipped to the frame. The Bt453's 256-entry table goes to `Display::setPalette()`. Nothing is
+  translated: the surface *is* the pixel bus and the palette *is* the RAMDAC. Off (STR or SE1
+  clear) after having been on, the frame is black; never on, no window opens.
+- **`properties()`**: straps `port`, `dac`, `mode` (the monitor), `vram` (K words, a power of
+  two 4–1024; refits the frame memory), `width` (the window); live, read-only `video`, `picture`
+  (programmed size and position in the frame), `wiring` (GBM/GAI/ACM against the board) and
+  `status` (the SR).
 - **Interrupts**: none wired. `Hd63484::irq()` answers what IRQ\* would be; a later milestone
   adds the `interrupt` strap.
 - **Snapshot**: both chips — registers, FIFOs, a command in flight, the drawing state, the
@@ -141,6 +208,9 @@ and the same three for *inside*).
 | RWPe after CLR/DRD/DWT is RWP's column on the **last raster** (CLR-4: `$56`, AY = −6, MW `$10` → `$B6`) — MAME leaves it one raster further | a driver that clears in strips by chaining CLRs skips or overlaps a raster |
 | In 8-bit mode WPTN's *n* counts **bytes**, so it is twice the word count (WPTN-1) | half the pattern loads and the other half is parsed as the next command |
 | A DRD "goes into an indefinite wait state after the last transfer" — CED never sets; ABT ends it (manual 6.5) | a driver waiting on CED after a DRD hangs on real silicon and would not here |
+| The shift register is 8 bpp × 8 words whatever CCR/OMR say: a wrong GBM packs pixels the board will not unpack, a wrong GAI makes each fetch overlap the last | an off-spec program shows a coherent picture here and garbage on the card, or the reverse |
+| In interleaved mode every horizontal register is in doubled units and a memory cycle is 8 frame pixels | the picture is half as wide as intended, or the timing is off by half a line |
+| The picture is placed by HDS/VDS against the mode's porches; the frame does not grow to fit | a program that lands one cycle early is clipped, not shifted |
 | A Bt453 address-register **write** resets the R/G/B phase; a **read** does not; both `DAC+0` and `DAC+2` are the same register; the address increments after the blue cycle and wraps `$FF` → `$00` | colors land one channel out of phase, or a Bt458 driver's "read mask" write moves the address |
 
 ## Limitations and deliberate departures
@@ -154,9 +224,12 @@ and the same three for *inside*).
   step — and **CER is set**, so a guest can tell. DRD/DWT/DMOD run only in the manual's
   "under program control" mode (no DMAC on the board) and only in the positive X/Y directions.
 - **Scan-out**: graphic screens only (CHR = 1 character screens are scanned as graphic), the
-  three background screens stacked and the window over them, non-interlaced, GAI ×1/2/4/8 (the
-  no-increment and half-rate modes act as ×1). No zoom, no cursors, no light pen, no blink, no
-  smooth scroll (SDA is ignored), no DISP/CUD skew.
+  three background screens stacked and the window over them, non-interlaced; single and
+  interleaved access only (superimposed mode's second phase is not fetched). The monitor is the
+  four listed VESA modes, each at the one refresh rate in the table; the ACRTC's own HC/VC and
+  the sync widths are accepted but not checked against the mode — a timing a real monitor would
+  lose lock on shows here as a picture in the wrong place. No zoom, no cursors, no light pen,
+  no blink, no smooth scroll (SDA is ignored), no DISP/CUD skew.
 - **No interrupts**: CCR's enables are honored by `irq()` but nothing raises a bus interrupt.
 - **The frame memory is zero at power-on**; real DRAM is not.
 - **Bt453**: the analog side (sync, blank, the CS\*-blanks-video artifact) is not modeled and
@@ -170,14 +243,19 @@ and the same three for *inside*).
 RPR-2, WPTN-2, RPTN-2, ORG-3, CLR-3/4, ALINE-2, ARCT-2, AFRCT-1, DRD/DWT-2), the operation,
 color and area modes, scan-out geometry, the window overlay, and a snapshot round trip.
 `tests/test_cadzilla.cpp` proves the board: the six-port decode both directions, the ports
-reaching the chips, and an **end-to-end picture** — LUT loaded through the four DAC ports, a
-rectangle, a line and a dot drawn through the two ACRTC ports, the frame read back with
-`CHECK_FRAME` (`tests/framecheck.h`) and its colors resolved through the palette — then a
-palette-only change moving the frame, a snapshot repainting it, and RESET\* blanking it while
-the LUT survives.
+reaching the chips, and an **end-to-end 640x480 picture** — LUT loaded through the four DAC
+ports, a rectangle, a line and a dot drawn through the two ACRTC ports, the frame read back
+with `CHECK_FRAME_OPTS` sampled every 32nd pixel (`tests/framecheck.h`) plus exact pixel
+probes, its colors resolved through the palette; the picture's placement by HDS/VDS (one
+cycle right, one cycle clipped, one raster down, a narrower picture); the wiring — GAI +1
+repeating each fetch and a 4 bpp dot landing in the wrong nibble, as the hardware would, with
+`wiring` naming each; **1024x768 in interleaved mode** with the doubled registers, sampled
+every 64th pixel; every mode's frame filled corner to corner by one `AFRCT`; the window at
+HWS/VWS; the `mode` strap re-opening the frame at 800x600; then a palette-only change moving
+the frame, a snapshot repainting it, and RESET\* leaving a black frame while the LUT survives.
 
-No period software exists for this board; the demo in `machines/cadzilla.toml`'s header is the
-manual's own initialization sequence.
+No period software exists for this board; the register table above is what a program would
+load, and `machines/cadzilla.toml`'s header walks the 640x480 case from the monitor prompt.
 
 ## References
 

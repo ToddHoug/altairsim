@@ -131,8 +131,48 @@ public:
 
     // Visible raster `y` (0 = top) as pixel values, LOW dot address first, at most
     // out.size() of them; pixels past displayWidth() are left untouched. A pixel is the
-    // bpp-bit field, so at 16 bpp it is the whole word.
+    // bpp-bit field, so at 16 bpp it is the whole word. THIS IS THE CHIP'S OWN VIEW --
+    // pixels unpacked at GBM, one fetch per memory cycle -- and it is what a test of the
+    // chip reads. A real board's shift register decides the pixel width and the words per
+    // fetch for itself; cadzilla uses the address-level API below and ignores GBM.
     void scanline(int y, std::span<uint16_t> out) const;
+
+    // ---- SCAN-OUT AT THE ADDRESS LEVEL: what the MAD bus carries (manual 5.6-5.9) ----
+    //
+    // The ACRTC does not serialize pixels. Once per display cycle it puts a frame-memory
+    // word address on MAD, external logic fetches one or more words there and shifts them
+    // out, and the ACRTC advances the address by GAI words for the next cycle. A board
+    // that models its own shift register asks for the addresses and does the rest.
+
+    // The start address of background raster `raster` (0 = the first raster of the
+    // upper/base/lower stack, in display order). False if no enabled screen owns it or
+    // the screen that does is blanked (SE bits): the raster shows black.
+    bool backgroundRaster(int raster, uint32_t& startAddr) const;
+
+    // The start address of the window's raster on VSYNC-relative raster `vsyncRaster`
+    // (0 = the raster after VSYNC's rising edge -- the same reference VDS and VWS use).
+    // False if the window is not displayed (DCR SE3 != 11) or the raster is outside
+    // VWS+1 .. VWS+VWW.
+    bool windowRaster(int vsyncRaster, uint32_t& startAddr) const;
+
+    // Words the display address advances per display cycle: OMR GAI 000-011 -> 1, 2, 4, 8;
+    // the no-increment modes -> 0; the increment-every-two-cycles mode -> 1 (approximate).
+    int gaiWords() const;
+
+    // Memory cycles per display cycle: 1 in single access mode, 2 in interleaved and
+    // superimposed (OMR ACM bit 3 -- "the frame buffer is accessed twice every display
+    // cycle"; manual 5.6).
+    int accessMode() const;
+
+    // The timing registers, decoded to the manual's units (memory cycles / rasters, the
+    // "+1" applied where the manual says "set to N-1").
+    int hds() const { return ((reg(0x84) >> 8) & 0xFF) + 1; }   // display start, from HSYNC rise
+    int hdw() const { return (reg(0x84) & 0xFF) + 1; }          // display width
+    int hws() const { return ((reg(0x92) >> 8) & 0xFF) + 1; }   // window start
+    int hww() const { return (reg(0x92) & 0xFF) + 1; }          // window width
+    int vds() const { return ((reg(0x88) >> 8) & 0xFF) + 1; }   // display start, from VSYNC rise
+    int vws() const { return (reg(0x94) & 0x0FFF) + 1; }        // window start
+    int vww() const { return reg(0x96) & 0x0FFF; }              // window width
 
     // Has anything the picture depends on changed since last asked? Consuming.
     bool takeDirty() {

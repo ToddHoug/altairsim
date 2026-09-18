@@ -776,6 +776,39 @@ int Hd63484::displayHeight() const {
     return h;
 }
 
+int Hd63484::gaiWords() const {
+    int gai = (regWord(0x04) >> 4) & 0x07;
+    if (gai <= 3) return 1 << gai;
+    return gai == 7 ? 1 : 0;
+}
+
+int Hd63484::accessMode() const { return (regWord(0x04) & 0x08) ? 2 : 1; }
+
+bool Hd63484::backgroundRaster(int raster, uint32_t& startAddr) const {
+    const uint16_t dcr = regWord(0x06);
+    if (raster < 0) return false;
+    const int sp0 = (dcr & 0x2000) ? (regWord(0x8C) & 0x0FFF) : 0;
+    const int sp1 = regWord(0x8A) & 0x0FFF;
+    const int sp2 = (dcr & 0x0800) ? (regWord(0x8E) & 0x0FFF) : 0;
+    int  dn, top;
+    bool lit;
+    if (raster < sp0)                  { dn = 0; top = 0;         lit = (dcr & 0x1000) != 0; }
+    else if (raster < sp0 + sp1)       { dn = 1; top = sp0;       lit = (dcr & 0x4000) != 0; }
+    else if (raster < sp0 + sp1 + sp2) { dn = 2; top = sp0 + sp1; lit = (dcr & 0x0400) != 0; }
+    else return false;
+    if (!lit) return false;
+    startAddr = sar(dn) + (uint32_t)(raster - top) * mw(dn);
+    return true;
+}
+
+bool Hd63484::windowRaster(int vsyncRaster, uint32_t& startAddr) const {
+    if ((regWord(0x06) & 0x0300) != 0x0300) return false;
+    const int wy = vsyncRaster - vws();
+    if (wy < 0 || wy >= vww()) return false;
+    startAddr = sar(3) + (uint32_t)wy * mw(3);
+    return true;
+}
+
 void Hd63484::scanline(int y, std::span<uint16_t> out) const {
     const uint16_t dcr = regWord(0x06);
     const int      bpp = bitsPerPixel();

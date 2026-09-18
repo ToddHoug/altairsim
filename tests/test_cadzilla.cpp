@@ -15,8 +15,8 @@ using namespace altair;
 namespace {
 
 // A machine with a cadzilla and a NullDisplay wired to it -- the SAME injection main()
-// does (CadzillaBoard::setDisplay), one backend down. The board scans its ACRTC's frame
-// memory out into memory and the test reads the whole picture back with CHECK_FRAME.
+// does (CadzillaBoard::setDisplay), one backend down. The board builds the monitor's frame
+// in memory and the test reads the whole picture back with CHECK_FRAME.
 struct Rig {
     Machine        m;
     NullDisplay    disp;
@@ -32,6 +32,9 @@ struct Rig {
         CadzillaBoard::setDisplay(&disp);
         m.power();
     }
+    // The Display is injected statically; a test that builds a second Rig must point the
+    // first back at its own before asking it to draw.
+    void adopt() { CadzillaBoard::setDisplay(&disp); }
 
     // ---- the ACRTC through its two ports, 8-bit MPU mode ----
     void    ar(uint8_t a) { m.bus.ioWrite(kAcrtc, a); }
@@ -62,23 +65,37 @@ struct Rig {
         m.bus.ioWrite(kDac + 1, b);
     }
 
-    // A 32 x 8 picture at 8 bpp: HDW+1 = 16 memory cycles of two pixels; SP1 = 8 rasters;
-    // MW1 = 16 words per raster; SAR1 = 0. The origin is put on the BOTTOM raster
-    // (word 7 * 16 = 112) so the ACRTC's +Y (up in memory) is up on the screen too.
-    void screen32x8() {
-        reg(0x02, 0x0300);            // CCR: GBM = 011, 8 bpp; ABT clear
-        reg(0x84, 0x000F);            // HDR: HDS = 0, HDW = 15
-        reg(0x8A, 0x0008);            // SP1 = 8 rasters
-        reg(0xCA, 0x0010);            // MWR1 = 16 words
-        reg(0xCC, 0x0000);            // SAR1 = 0
-        reg(0xCE, 0x0000);
-        reg(0x04, 0x4000);            // OMR: STR
-        reg(0x06, 0x4000);            // DCR: SE1 -- the base screen displays
-        cmd(0x0400, {0x4000, (uint16_t)(112 << 4)});   // ORG: base screen, word 112, dot 0
-        cmd(0x1800, {2, 0xFFFF});     // pattern row 0 all ones (n = 1 word x 2 bytes)
-        cmd(0x0806, {0x0000});        // PRC: PSX = PSY = 0
-        cmd(0x0807, {0x00F0});        // PEX = 15, PEY = 0
-        cmd(0x0805, {0x0000});        // PPX = PPY = 0
+    // Program the ACRTC for the monitor mode the board is strapped to, the way the board's
+    // documentation says to: 8 bpp, GAI +8, the mode's timing in memory cycles (doubled in
+    // interleaved mode), the picture starting exactly where the porch ends, one raster per
+    // MW words, SAR1 = 0. The origin goes on the BOTTOM raster so +Y is up on the screen.
+    void programMode(bool interleaved = false) {
+        const auto& md  = cad->currentMode();
+        const int   acm = interleaved ? 2 : 1;
+        const int   mw  = md.width / 2;                       // words per raster at 8 bpp
+        reg(0x02, 0x0300);                                    // CCR: GBM = 011 (8 bpp), ABT clear
+        reg(0x82, (uint16_t)(((md.hc() * acm - 1) << 8) | (md.hsw * acm)));           // HC, HSW
+        reg(0x84, (uint16_t)(((md.hbp * acm - 1) << 8) | (md.width / 16 * acm - 1)));  // HDS, HDW
+        reg(0x86, (uint16_t)md.vc());                                                  // VC
+        reg(0x88, (uint16_t)(((md.vbp - 1) << 8) | md.vsw));                           // VDS, VSW
+        reg(0x8A, (uint16_t)md.height);                                                // SP1
+        reg(0xCA, (uint16_t)mw);                                                       // MWR1
+        reg(0xCC, 0x0000);
+        reg(0xCE, 0x0000);                                                             // SAR1 = 0
+        reg(0x04, (uint16_t)(0x4030 | (interleaved ? 0x08 : 0)));   // OMR: STR, GAI = 011, ACM
+        reg(0x06, 0x4000);                                          // DCR: SE1
+        const uint32_t org = (uint32_t)(md.height - 1) * (uint32_t)mw;
+        cmd(0x0400, {(uint16_t)(0x4000 | ((org >> 12) & 0xFF)), (uint16_t)((org & 0xFFF) << 4)});
+        cmd(0x1800, {2, 0xFFFF});                             // pattern row 0 all ones
+        cmd(0x0806, {0x0000});                                // PRC: PSX = PSY = 0
+        cmd(0x0807, {0x00F0});                                // PEX = 15, PEY = 0
+        cmd(0x0805, {0x0000});                                // PPX = PPY = 0
+    }
+    void color(uint8_t idx) { cmd(0x0801, {(uint16_t)((idx << 8) | idx)}); }   // CL1, both bytes
+
+    uint8_t px(int x, int y) const {
+        const Surface* s = disp.surface(cad);
+        return s->pixels()[(size_t)y * (size_t)s->pitch() + (size_t)x];
     }
 };
 
@@ -127,7 +144,7 @@ void test_cadzilla() {
               "and IN 75 x3 reads it back R, G, B");
     }
 
-    SECTION("cadzilla -- nothing to show, no window: a chip that is not displaying draws nothing");
+    SECTION("cadzilla -- nothing to show, no window: a chip that has never displayed draws nothing");
     {
         Rig g;
         g.cad->pump();
@@ -135,63 +152,237 @@ void test_cadzilla() {
         CHECK(g.disp.surface(g.cad) == nullptr, "and no surface acquired -- no window opens");
     }
 
-    SECTION("cadzilla -- end to end: LUT, ORG, a rectangle, a line and a dot, as one picture");
+    SECTION("cadzilla -- the default monitor is 640x480: LUT, ORG, a rectangle, a line, a dot");
     {
         Rig g;
-        g.screen32x8();
+        CHECK(std::string(g.cad->currentMode().name) == "640x480", "the default mode");
+        g.programMode();
         g.lut(0, 0, 0, 0);
         g.lut(1, 0xFF, 0, 0);                      // 1 = red
         g.lut(2, 0, 0xFF, 0);                      // 2 = green
         g.lut(3, 0, 0, 0xFF);                      // 3 = blue
 
-        g.cmd(0x0801, {0x0101});                   // CL1 = pixel value 1 in both bytes
-        g.cmd(0x8000, {2, 1});                     // AMOVE (2,1)
-        g.cmd(0x9000, {29, 6});                    // ARCT to (29,6): the frame, in red
-        g.cmd(0x0801, {0x0303});                   // 3 = blue
-        g.cmd(0x8000, {5, 3});
-        g.cmd(0x8800, {12, 3});                    // ALINE to (12,3): pixels 5..11
-        g.cmd(0x0801, {0x0202});                   // 2 = green
-        g.cmd(0x8000, {16, 3});
-        g.cmd(0xCC00);                             // DOT at (16,3)
+        // Everything on the 32-pixel sampling grid the frame check reads: frame y = 479 - Y.
+        g.color(1);
+        g.cmd(0x8000, {0, 31});
+        g.cmd(0x9000, {608, 479});                 // ARCT: corners (0,31) and (608,479)
+        g.color(3);
+        g.cmd(0x8000, {64, 255});
+        g.cmd(0x8800, {545, 255});                 // ALINE: x 64..544 on Y = 255 (frame row 224)
+        g.color(2);
+        g.cmd(0x8000, {320, 127});
+        g.cmd(0xCC00);                             // DOT at (320,127): frame (320, 352)
 
         g.cad->pump();
         CHECK(g.disp.frames(g.cad) == 1, "one frame presented");
         const Surface* s = g.disp.surface(g.cad);
-        CHECK(s && s->width() == 32 && s->height() == 8, "32 x 8: (HDW+1) cycles x 2 pixels at 8 bpp, SP1 rasters");
+        CHECK(s && s->width() == 640 && s->height() == 480, "the frame is the MONITOR's: 640x480");
+        CHECK(g.cad->wiring() == "ok", "GBM 8 bpp, GAI +8, single access: wired as the board is");
+        CHECK(g.cad->programmedWidth() == 640 && g.cad->programmedHeight() == 480 &&
+                  g.cad->programmedX() == 0 && g.cad->programmedY() == 0,
+              "the programmed picture fills the frame from (0,0)");
 
-        // Row 0 is the TOP raster (y = 7 in ACRTC coordinates, since the origin is the
-        // bottom raster and +Y is up). Every character is one pixel's LUT index.
-        CHECK_FRAME(g.disp, g.cad, R"(
-................................
-..1111111111111111111111111111..
-..1..........................1..
-..1..........................1..
-..1..3333333....2............1..
-..1..........................1..
-..1111111111111111111111111111..
-................................
-)", "the rectangle, the line and the dot land where the ACRTC put them, right way up");
+        TextGridOpts every32;
+        every32.xStep = 32;
+        every32.yStep = 32;
+        CHECK_FRAME_OPTS(g.disp, g.cad, R"(
+11111111111111111111
+1..................1
+1..................1
+1..................1
+1..................1
+1..................1
+1..................1
+1.3333333333333333.1
+1..................1
+1..................1
+1..................1
+1.........2........1
+1..................1
+1..................1
+11111111111111111111
+)", every32, "sampled every 32nd pixel: the rectangle, the line and the dot, right way up");
+
+        CHECK(g.px(0, 0) == 1 && g.px(608, 0) == 1 && g.px(609, 0) == 0 && g.px(639, 0) == 0,
+              "exact: the top edge runs x = 0..608 on frame row 0");
+        CHECK(g.px(0, 479) == 0 && g.px(0, 448) == 1, "and the bottom edge is on frame row 448 (Y = 31)");
+        CHECK(g.px(544, 224) == 3 && g.px(545, 224) == 0, "the line's end point is not drawn");
 
         // THE RAMDAC IS THE PALETTE: what the wire carries is the LUT, not the index.
         const auto& pal = g.disp.palette(g.cad);
-        CHECK(pal.size() == 256, "all 256 LUT entries handed to the host");
-        CHECK(pal[1].r == 0xFF && pal[1].g == 0 && pal[3].b == 0xFF, "in the colors the guest loaded");
+        CHECK(pal.size() == 256 && pal[1].r == 0xFF && pal[3].b == 0xFF, "the 256 LUT entries, as loaded");
         std::vector<uint8_t> rgb = frameRgb(*s, pal);
-        size_t dot = ((size_t)4 * 32 + 16) * 3;   // row 4 (y = 3 from the bottom), x = 16
+        size_t dot = ((size_t)352 * 640 + 320) * 3;
         CHECK(rgb[dot] == 0 && rgb[dot + 1] == 0xFF && rgb[dot + 2] == 0, "the dot resolves to green");
 
         // A palette-only change: no drawing command, yet the picture on the wire moves.
         uint32_t before = frameCrc(*s, pal);
         g.cad->pump();
         CHECK(g.disp.frames(g.cad) == 1, "nothing changed: no new frame");
-        g.lut(1, 0xFF, 0xFF, 0xFF);                // the frame turns white
+        g.lut(1, 0xFF, 0xFF, 0xFF);
         g.cad->pump();
         CHECK(g.disp.frames(g.cad) == 2, "a LUT write is a change the host must see");
         CHECK(frameCrc(*g.disp.surface(g.cad), g.disp.palette(g.cad)) != before, "and the resolved frame differs");
-        CHECK(g.disp.surface(g.cad)->pixels()[(size_t)1 * 32 + 2] == 1, "while the pixel values are what they were");
+        CHECK(g.px(0, 0) == 1, "while the pixel values are what they were");
     }
 
-    SECTION("cadzilla -- SHOW: live status is read-only, the straps are validated");
+    SECTION("cadzilla -- the monitor places the picture by HDS/VDS against its porches");
+    {
+        Rig g;
+        g.programMode();
+        g.color(1);
+        g.cmd(0x8000, {0, 479});
+        g.cmd(0x8800, {640, 479});                 // the whole top raster in 1
+        g.cad->pump();
+        CHECK(g.px(0, 0) == 1 && g.px(639, 0) == 1 && g.px(0, 1) == 0, "flush with the frame");
+
+        // HDS one memory cycle later than the back porch: the picture shifts 16 pixels right
+        // and its last cycle falls off the right edge -- the blanking on the left is black.
+        const uint16_t hdr = g.cad->acrtc().reg(0x84);
+        g.reg(0x84, (uint16_t)(hdr + 0x0100));
+        g.cad->pump();
+        CHECK(g.px(15, 0) == 0 && g.px(16, 0) == 1 && g.px(639, 0) == 1, "shifted right by one cycle");
+        CHECK(g.cad->programmedX() == 16, "and SHOW says so");
+        g.reg(0x84, (uint16_t)(hdr - 0x0100));     // one cycle EARLY: the first cycle is clipped
+        g.cad->pump();
+        CHECK(g.px(0, 0) == 1 && g.cad->programmedX() == -16, "shifted left, clipped, reported negative");
+        g.reg(0x84, hdr);
+
+        // VDS one raster later: frame row 0 is blanking, the raster is on row 1.
+        const uint16_t vdr = g.cad->acrtc().reg(0x88);
+        g.reg(0x88, (uint16_t)(vdr + 0x0100));
+        g.cad->pump();
+        CHECK(g.px(0, 0) == 0 && g.px(0, 1) == 1 && g.cad->programmedY() == 1, "shifted down one raster");
+        g.reg(0x88, vdr);
+
+        // A picture narrower than the monitor: HDW halved leaves the right half black.
+        g.reg(0x84, (uint16_t)((hdr & 0xFF00) | 19));   // 20 cycles = 320 px
+        g.cad->pump();
+        CHECK(g.px(319, 0) == 1 && g.px(320, 0) == 0 && g.cad->programmedWidth() == 320, "320 wide, then blanking");
+    }
+
+    SECTION("cadzilla -- the board is wired for 8 bpp and GAI +8; anything else is what the hardware would show");
+    {
+        Rig g;
+        g.programMode();
+        // Distinct bytes in the top raster's first 16 words (SAR1 = 0: memory raster 0 is the
+        // top of the screen; the ORG sits on the bottom one).
+        const uint32_t top = 0;
+        for (uint32_t i = 0; i < 16; ++i) g.cad->acrtc().pokeWord(top + i, (uint16_t)(0x2010 + i * 0x0101));
+        g.cad->pump();
+        CHECK(g.px(0, 0) == 0x10 && g.px(1, 0) == 0x20 && g.px(2, 0) == 0x11 && g.px(16, 0) == 0x18,
+              "GAI +8: the second fetch starts eight words on -- a continuous raster");
+
+        g.reg(0x04, 0x4000);                       // GAI = 000: the ACRTC steps ONE word per cycle
+        g.cad->pump();
+        CHECK(g.cad->wiring() == "OMR GAI is +1 words, the board fetches 8", "SHOW names the mismatch");
+        CHECK(g.px(0, 0) == 0x10 && g.px(16, 0) == 0x11 && g.px(17, 0) == 0x21,
+              "the board still fetches eight words per cycle, so the picture repeats itself, as the hardware would");
+        g.reg(0x04, 0x4030);
+
+        g.reg(0x02, 0x0200);                       // GBM = 010: 4 bpp
+        CHECK(g.cad->wiring() == "CCR GBM is 4 bpp, the board is wired for 8", "a wrong GBM is named too");
+        g.cmd(0x0801, {0xFFFF});                   // CL1 = $FFFF: F in every 4-bit field
+        g.cmd(0x8000, {1, 479});
+        g.cmd(0xCC00);                             // the drawing engine believes 4 bpp: dot 1 is bits 4-7
+        g.cad->pump();
+        CHECK(g.px(0, 0) == 0xF0, "so the byte the shift register sees has the high nibble lit: scrambled, faithfully");
+        g.reg(0x02, 0x0300);
+        CHECK(g.cad->wiring() == "ok", "put right, the wiring line clears");
+
+        g.reg(0x04, 0x403C);                       // ACM = 11: superimposed
+        CHECK(g.cad->wiring() == "OMR ACM is superimposed, the board wires single and interleaved only",
+              "superimposed mode is not wired");
+    }
+
+    SECTION("cadzilla -- 1024x768 in interleaved mode: doubled horizontal registers, 8 pixels a cycle");
+    {
+        Rig g;
+        std::string err;
+        CHECK(setProperty(*g.cad, "mode", "1024x768", err), "the mode strap takes 1024x768");
+        g.programMode(true);
+        CHECK((g.cad->acrtc().reg(0x84) & 0xFF) == 127 && g.cad->acrtc().accessMode() == 2,
+              "HDW = 127: 128 memory cycles of 8 pixels, ACM interleaved");
+        g.color(1);
+        g.cmd(0x8000, {0, 63});
+        g.cmd(0x9000, {960, 767});                 // corners on the 64-pixel sampling grid
+        g.cad->pump();
+        const Surface* s = g.disp.surface(g.cad);
+        CHECK(s && s->width() == 1024 && s->height() == 768, "the frame is 1024x768");
+        CHECK(g.cad->wiring() == "ok" && g.cad->programmedWidth() == 1024 &&
+                  g.cad->programmedHeight() == 768 && g.cad->programmedX() == 0 && g.cad->programmedY() == 0,
+              "the doubled registers describe the same full-frame picture");
+        TextGridOpts every64;
+        every64.xStep = 64;
+        every64.yStep = 64;
+        CHECK_FRAME_OPTS(g.disp, g.cad, R"(
+1111111111111111
+1..............1
+1..............1
+1..............1
+1..............1
+1..............1
+1..............1
+1..............1
+1..............1
+1..............1
+1..............1
+1111111111111111
+)", every64, "sampled every 64th pixel: the border, at 1024x768 through the interleaved fetch");
+        CHECK(g.px(960, 0) == 1 && g.px(961, 0) == 0 && g.px(1023, 0) == 0, "exact right edge at x = 960");
+
+        // In interleaved mode HDS is in doubled units: +2 memory cycles is one display cycle.
+        const uint16_t hdr = g.cad->acrtc().reg(0x84);
+        g.reg(0x84, (uint16_t)(hdr + 0x0200));
+        g.cad->pump();
+        CHECK(g.px(15, 0) == 0 && g.px(16, 0) == 1 && g.cad->programmedX() == 16, "shifted one display cycle: 16 pixels");
+    }
+
+    SECTION("cadzilla -- every mode: the frame is the strap's size and a full picture fills it");
+    {
+        for (int i = 0; i < CadzillaBoard::modeCount(); ++i) {
+            Rig g;
+            std::string err;
+            const auto& md = CadzillaBoard::mode(i);
+            CHECK(setProperty(*g.cad, "mode", md.name, err), "the strap takes every listed mode");
+            g.programMode();
+            g.color(1);
+            g.cmd(0x8000, {0, 0});
+            g.cmd(0xC000, {(uint16_t)(md.width - 1), (uint16_t)(md.height - 1)});   // AFRCT: fill it all
+            g.cad->pump();
+            const Surface* s = g.disp.surface(g.cad);
+            bool ok = s && s->width() == md.width && s->height() == md.height;
+            if (ok)
+                for (int y = 0; y < md.height && ok; y += 37)
+                    for (int x = 0; x < md.width && ok; x += 41)
+                        if (g.px(x, y) != 1) ok = false;
+            std::string what = std::string(md.name) + ": the frame is that size and the fill reaches everywhere";
+            CHECK(ok, what.c_str());
+            CHECK(g.px(md.width - 1, md.height - 1) == 1 && g.px(0, 0) == 1, "including both extreme corners");
+        }
+    }
+
+    SECTION("cadzilla -- the window screen lands in the frame at HWS/VWS");
+    {
+        Rig g;
+        g.programMode();
+        // A 16 x 2 window one display cycle in and three rasters down, on screen 3 at $70000.
+        const auto& md = g.cad->currentMode();
+        g.reg(0x92, (uint16_t)((md.hbp << 8) | 0));              // HWS = hbp: one cycle after the display start; HWW = 1 cycle
+        g.reg(0x94, (uint16_t)(md.vbp + 3 - 1));                  // VWS: raster 3 of the picture
+        g.reg(0x96, 2);                                           // VWW
+        g.reg(0xDA, 8);                                           // MWR3 = 8 words
+        g.reg(0xDC, 0x0007);
+        g.reg(0xDE, 0x0000);                                      // SAR3 = $70000
+        g.reg(0x06, 0x4300);                                      // SE1 + SE3 = 11
+        for (uint32_t i = 0; i < 16; ++i) g.cad->acrtc().pokeWord(0x70000 + i, 0x0505);
+        g.cad->pump();
+        CHECK(g.px(15, 3) == 0 && g.px(16, 3) == 5 && g.px(31, 3) == 5 && g.px(32, 3) == 0,
+              "raster 3: the window's 16 pixels at x = 16..31");
+        CHECK(g.px(16, 4) == 5 && g.px(16, 2) == 0 && g.px(16, 5) == 0, "two rasters tall, from raster 3");
+    }
+
+    SECTION("cadzilla -- SHOW: the straps validate, the live lines are read-only");
     {
         Rig g;
         auto prop = [&](const char* name) -> Property {
@@ -203,16 +394,18 @@ void test_cadzilla() {
             Property p = prop(name);
             return p.get ? p.get().text(p.radix) : std::string("<missing>");
         };
-        CHECK(val("video") == "off", "comes up not displaying");
-        CHECK(val("status") == "0x23", "status is the ACRTC SR");
-        CHECK(val("depth") == "1", "GBM 000 is 1 bpp");
-        CHECK(!prop("video").set && !prop("resolution").set && !prop("status").set, "status is read-only");
-        CHECK((bool)prop("port").set && (bool)prop("dac").set && (bool)prop("vram").set, "the straps are settable");
-
-        g.screen32x8();
-        CHECK(val("video") == "on" && val("resolution") == "32x8" && val("depth") == "8", "live values follow the registers");
+        CHECK(val("mode") == "640x480" && val("vram") == "512", "defaults: 640x480, 512 K words");
+        CHECK(val("video") == "off" && val("status") == "0x23", "comes up stopped");
+        CHECK(!prop("video").set && !prop("picture").set && !prop("wiring").set && !prop("status").set,
+              "live status is read-only");
+        CHECK((bool)prop("mode").set && (bool)prop("port").set && (bool)prop("dac").set && (bool)prop("vram").set,
+              "the straps are settable");
+        g.programMode();
+        CHECK(val("video") == "on" && val("picture") == "640x480 at (0,0)" && val("wiring") == "ok",
+              "live values follow the registers");
 
         std::string err;
+        CHECK(!setProperty(*g.cad, "mode", "320x200", err), "an unlisted mode is refused");
         CHECK(!setProperty(*g.cad, "port", "71", err), "an odd ACRTC base is refused");
         CHECK(!setProperty(*g.cad, "dac", "76", err), "a DAC base that is not a multiple of 4 is refused");
         CHECK(!setProperty(*g.cad, "vram", "100", err), "a non-power-of-two vram is refused");
@@ -221,19 +414,27 @@ void test_cadzilla() {
         c.type = Cycle::IoWrite;
         c.addr = 0xE1;
         CHECK(g.cad->decodes(c), "and the board now decodes there");
-        c.addr = 0x71;
-        CHECK(!g.cad->decodes(c), "and not where it was");
         CHECK(setProperty(*g.cad, "vram", "16", err) && g.cad->acrtc().vram().size() == 16 * 1024, "vram refits the frame memory");
+
+        // Changing the mode re-opens the window at the new size on the next frame.
+        Rig h;
+        h.programMode();
+        h.cad->pump();
+        CHECK(setProperty(*h.cad, "mode", "800x600", err), "SET mode=800x600");
+        h.cad->pump();
+        CHECK(h.disp.surface(h.cad)->width() == 800 && h.disp.surface(h.cad)->height() == 600,
+              "the frame is 800x600 now -- the 640x480 picture sits in its top-left corner");
+        CHECK(h.px(639, 479) == 0 && h.cad->programmedWidth() == 640, "the programmed picture did not change");
     }
 
     SECTION("cadzilla -- RESET* resets the ACRTC and keeps the palette; a snapshot restores the picture");
     {
         Rig g;
-        g.screen32x8();
+        g.programMode();
         g.lut(1, 0xFF, 0, 0);
-        g.cmd(0x0801, {0x0101});
-        g.cmd(0x8000, {0, 0});
-        g.cmd(0x9000, {31, 7});                    // a border around the whole screen
+        g.color(1);
+        g.cmd(0x8000, {0, 31});
+        g.cmd(0x9000, {608, 479});
         g.cad->pump();
 
         StateWriter w;
@@ -244,34 +445,37 @@ void test_cadzilla() {
         h.cad->deserialize(r);
         CHECK(r.ok(), "the state reads back");
         h.cad->pump();
-        CHECK_FRAME(h.disp, h.cad, R"(
-11111111111111111111111111111111
-1..............................1
-1..............................1
-1..............................1
-1..............................1
-1..............................1
-1..............................1
-11111111111111111111111111111111
-)", "the restored board repaints the same picture from its own frame memory");
+        TextGridOpts every32;
+        every32.xStep = 32;
+        every32.yStep = 32;
+        CHECK_FRAME_OPTS(h.disp, h.cad, R"(
+11111111111111111111
+1..................1
+1..................1
+1..................1
+1..................1
+1..................1
+1..................1
+1..................1
+1..................1
+1..................1
+1..................1
+1..................1
+1..................1
+1..................1
+11111111111111111111
+)", every32, "the restored board repaints the same picture from its own frame memory");
         CHECK(h.disp.palette(h.cad)[1].r == 0xFF, "with the same palette");
 
-        // The Display is injected statically, so building `h` pointed every cadzilla at
-        // h.disp; point g's back at its own before asking it to draw.
-        CadzillaBoard::setDisplay(&g.disp);
+        g.adopt();
         g.m.reset(Reset::Bus);                     // RESET*: the ACRTC stops (STR clears)
         CHECK(!g.cad->acrtc().displayOn(), "RESET* stops the display");
         CHECK(g.cad->dac().lookup(1).r == 0xFF, "the Bt453 has no reset pin: the LUT survives");
         g.cad->pump();
-        CHECK_FRAME(g.disp, g.cad, R"(
-................................
-................................
-................................
-................................
-................................
-................................
-................................
-................................
-)", "and the board paints its last geometry black");
+        const Surface* s = g.disp.surface(g.cad);
+        bool black = s && s->width() == 640 && s->height() == 480;
+        for (size_t i = 0; black && i < s->pixels().size(); i += 97)
+            if (s->pixels()[i] != 0) black = false;
+        CHECK(black, "and the monitor shows a black 640x480 frame -- the window stays, the picture is gone");
     }
 }

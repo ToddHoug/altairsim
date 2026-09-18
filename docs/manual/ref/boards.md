@@ -82,7 +82,7 @@ and within a group the boards are in **alphabetical order**.
 
 | Type | What it is |
 |---|---|
-| [`cadzilla`](#cadzilla) | cadzilla: an HD63484 ACRTC graphics board with a Bt453 RAMDAC and its own frame memory. ACRTC at BASE+0..1 (default 70), DAC at DAC+0..3 (default 74). Draws by command through the ACRTC FIFO; 1-8 bpp through a 256-entry color LUT. Needs a Display |
+| [`cadzilla`](#cadzilla) | cadzilla: an HD63484 ACRTC graphics board with a Bt453 RAMDAC and its own frame memory, on a fixed VESA monitor (mode: 640x400, 640x480, 800x600, 1024x768). ACRTC at BASE+0..1 (default 70), DAC at DAC+0..3 (default 74). Draws by command through the ACRTC FIFO; wired for 8 bpp, GAI +8, single or interleaved access. Needs a Display |
 | [`dazzler`](#dazzler) | Cromemco Dazzler: color graphics from a framebuffer in main RAM. Two ports at BASE+0..1 (default 0E): control/status and format. 32x32 to 128x128, 16 colors/greys. Needs a Display |
 | [`vdb8024`](#vdb8024) | SD Systems VDB-8024: an 80x24 video terminal on one board -- the video console for an SBC-100/200 (the alternative to the 8251). Two I/O ports at BASE+0..1 (default 00): status/keyboard/display. Unit 'keyboard' (CONNECT). Optional keyboard-strobe interrupt strap (interrupt=vi0..vi7) for the SBC-200's CTC to vector -- what the SD video CBIOS needs; polled by default. Boots sdmonv21. Needs a Display |
 | [`vdm1`](#vdm1) | Processor Technology VDM-1: memory-mapped 16x64 video, screen RAM at BASE (default CC00), scroll/status port (default CC). Needs a Display |
@@ -959,7 +959,7 @@ MITS 88-PIO: 8-bit parallel port, units 'out'/'in'. Two ports at BASE+0..1 (defa
 
 ### `cadzilla`
 
-cadzilla: an HD63484 ACRTC graphics board with a Bt453 RAMDAC and its own frame memory. ACRTC at BASE+0..1 (default 70), DAC at DAC+0..3 (default 74). Draws by command through the ACRTC FIFO; 1-8 bpp through a 256-entry color LUT. Needs a Display
+cadzilla: an HD63484 ACRTC graphics board with a Bt453 RAMDAC and its own frame memory, on a fixed VESA monitor (mode: 640x400, 640x480, 800x600, 1024x768). ACRTC at BASE+0..1 (default 70), DAC at DAC+0..3 (default 74). Draws by command through the ACRTC FIFO; wired for 8 bpp, GAI +8, single or interleaved access. Needs a Display
 
 #### Board properties
 
@@ -967,11 +967,12 @@ cadzilla: an HD63484 ACRTC graphics board with a Bt453 RAMDAC and its own frame 
 |---|---|---|---|---|
 | `port` | int | `0x70` | `0x0` .. `0xFE` | ACRTC I/O base -- BASE is the address/status port (RS=0), BASE+1 the data port (RS=1). Even; default 70 |
 | `dac` | int | `0x74` | `0x0` .. `0xFC` | Bt453 RAMDAC I/O base -- four ports: DAC+0 address, DAC+1 palette RAM, DAC+2 address, DAC+3 overlay. A multiple of 4; default 74 |
-| `vram` | int | `128` | `4` .. `1024` | Frame memory fitted, in K words of 16 bits: a power of two from 4 to 1024 (the ACRTC addresses 1 M words). Changing it clears the picture. Default 128 |
+| `mode` | enum | `640x480` | `640x400` \| `640x480` \| `800x600` \| `1024x768` | The monitor: a fixed-frequency VESA raster the ACRTC's picture is placed in by its HDS/VDS. 640x400, 640x480 (default), 800x600 or 1024x768 |
+| `vram` | int | `512` | `4` .. `1024` | Frame memory fitted, in K words of 16 bits: a power of two from 4 to 1024 (the ACRTC addresses 1 M words; 1024x768 at 8 bpp needs 384 K). Changing it clears the picture. Default 512 |
 | `width` | string | `auto` | text | Video window width in pixels: 'auto' (default) opens about half the screen wide, or a number like 1024. The height follows the board's own aspect, and the picture is a whole multiple of its pixels so it stays crisp |
 | `video` | string | — | — | LIVE: whether the ACRTC is displaying -- OMR STR and DCR SE1 both set. Read-only **(read-only — not a key you may set)** |
-| `resolution` | string | — | — | LIVE: the visible raster in pixels, from HDW, GAI and the split-screen widths. Read-only **(read-only — not a key you may set)** |
-| `depth` | int | — | — | LIVE: bits per pixel from CCR GBM (1, 2, 4, 8 or 16). The DAC sees eight of them. Read-only **(read-only — not a key you may set)** |
+| `picture` | string | — | — | LIVE: the picture the ACRTC is programmed to show -- its size in pixels (HDW memory cycles by the enabled split-screen rasters) and where its top-left corner lands in the monitor's frame, from HDS/VDS against the mode's back porch. Read-only **(read-only — not a key you may set)** |
+| `wiring` | string | — | — | LIVE: whether the ACRTC is programmed the way the board is wired -- CCR GBM = 8 bpp, OMR GAI = +8 words, ACM single or interleaved. 'ok', or what is off (the picture is then scrambled, as on the hardware). Read-only **(read-only — not a key you may set)** |
 | `status` | int | — | — | LIVE: the ACRTC status register -- CER ARD CED LPD RFF RFR WFR WFE. Read-only **(read-only — not a key you may set)** |
 
 
