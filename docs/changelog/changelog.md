@@ -8,6 +8,21 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+### `cadzilla` — an HD63484 ACRTC graphics board, and a way to prove a picture
+
+A new video board of our own design: Hitachi's **HD63484 ACRTC** — a CRT controller with a drawing
+processor and its own frame memory — and Brooktree's **Bt453** 256-entry color look-up table, on six
+I/O ports and no memory. The CPU draws by command through the ACRTC's FIFO (lines, rectangles,
+polylines, filled rectangles, dots, block clears and word transfers, in every operation, color and
+area mode), the picture scans out at 1–8 bits per pixel through the Bt453's table, and the window is
+the same host display the Dazzler and VDM-1 draw into. Both chips are models in their own right
+(`src/chips/`), built from the Hitachi and Brooktree data sheets, so the next board that carries one
+gets it for free. Circles, arcs, paint, patterns and copies are recognized but not drawn yet.
+
+Alongside it, a video board's frame can now leave the simulator: a test asserts on the **whole
+picture** as a text grid and, when it disagrees, writes what the board actually drew as a `.ppm`
+you can open. The Developer Guide's new *Writing a video board* chapter walks through it.
+
 ### The Altair 680b moves to its own simulator
 
 The **MITS Altair 680b** — the Motorola 6800 machine 1.0.0 added — leaves altairsim for a

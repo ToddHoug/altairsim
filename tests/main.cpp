@@ -1,6 +1,7 @@
 #include "test.h"
 
 #include "boards/cromemco-d7a.h"
+#include "boards/cadzilla.h"
 #include "boards/cromemco-dazzler.h"
 #include "boards/mits-2sio.h"
 #include "boards/mits-884pio.h"
@@ -104,8 +105,9 @@ const struct {
     {"telnet", test_telnet},
     {"wd17xx", test_wd17xx},
     {"i8257", test_i8257},
-    {"hd63484", test_hd63484},
     {"bt453", test_bt453},
+    {"hd63484", test_hd63484},
+    {"cadzilla", test_cadzilla},
     {"versafloppy", test_versafloppy},
     {"tarbell", test_tarbell},
     {"cromemco_fdc", test_cromemco_fdc},
@@ -191,6 +193,7 @@ int main(int argc, char** argv) {
     altair::VdmBoard::setDisplay(&g_display);
     altair::DazzlerBoard::setDisplay(&g_display);
     altair::Vdb8024Board::setDisplay(&g_display);
+    altair::CadzillaBoard::setDisplay(&g_display);
 
     // The generic terminal endpoint reads these the same way (issue #244). A NullDisplay is
     // not windowed, so `terminal:` refuses at CONNECT here -- which test_terminal asserts,

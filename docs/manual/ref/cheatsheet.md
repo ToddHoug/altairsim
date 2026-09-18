@@ -160,6 +160,7 @@ Type the part before the bracket.
 
 | Type | What it is |
 |---|---|
+| `cadzilla` | cadzilla: an HD63484 ACRTC graphics board with a Bt453 RAMDAC and its own frame memory. ACRTC at BASE+0..1 (default 70), DAC at DAC+0..3 (default 74). Draws by command through the ACRTC FIFO; 1-8 bpp through a 256-entry color LUT. Needs a Display |
 | `dazzler` | Cromemco Dazzler: color graphics from a framebuffer in main RAM. Two ports at BASE+0..1 (default 0E): control/status and format. 32x32 to 128x128, 16 colors/greys. Needs a Display |
 | `vdb8024` | SD Systems VDB-8024: an 80x24 video terminal on one board -- the video console for an SBC-100/200 (the alternative to the 8251). Two I/O ports at BASE+0..1 (default 00): status/keyboard/display. Unit 'keyboard' (CONNECT). Optional keyboard-strobe interrupt strap (interrupt=vi0..vi7) for the SBC-200's CTC to vector -- what the SD video CBIOS needs; polled by default. Boots sdmonv21. Needs a Display |
 | `vdm1` | Processor Technology VDM-1: memory-mapped 16x64 video, screen RAM at BASE (default CC00), scroll/status port (default CC). Needs a Display |
@@ -196,6 +197,7 @@ Type the part before the bracket.
 | `bankmem` | A bank-switched RAM machine: a Z80, a console, and a Vector Graphic 64K bankmem. |
 | `basic4k` | The machine Altair 4K BASIC was sold to run on: an 88-SIO Teletype, a cassette in the ACR. |
 | `basic8k` | The machine Altair 8K BASIC was sold to run on: an 88-2SIO terminal, a cassette in the ACR. |
+| `cadzilla` | An HD63484 ACRTC graphics board with a Bt453 RAMDAC in an Altair -- the bench for cadzilla. |
 | `cdbl` | The `default` machine with the Combo Disk Boot Loader in the PROM socket. |
 | `compupro` | A stock Altair with a CompuPro System Support 1 board for its clock/calendar. |
 | `cuter` | CUTER 1.3 driving a Processor Technology VDM-1 -- the real Sol/CUTS monitor. |

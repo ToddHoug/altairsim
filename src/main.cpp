@@ -12,6 +12,7 @@
 #include "boards/io4.h"
 #include "boards/cromemco-16fdc.h"
 #include "boards/cromemco-d7a.h"
+#include "boards/cadzilla.h"
 #include "boards/cromemco-dazzler.h"
 #include "boards/proctech-sol.h"
 #include "boards/proctech-vdm1.h"
@@ -268,6 +269,7 @@ int main(int argc, char** argv) {
     VdmBoard::setDisplay(&g_display);
     DazzlerBoard::setDisplay(&g_display);
     Vdb8024Board::setDisplay(&g_display);
+    CadzillaBoard::setDisplay(&g_display);
 
     // The generic built-in terminal (issue #244) draws into the SAME host video service and
     // paints with the bundled font. A `terminal:` endpoint reads these statics; on a

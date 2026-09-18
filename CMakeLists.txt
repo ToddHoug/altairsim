@@ -438,14 +438,14 @@ add_library(altair_core STATIC
   # The Intel 8259A -- a programmable interrupt controller; INT is a pure function of the
   # live IR levels the card supplies. The CompuPro System Support 1 carries two (cascade).
   src/chips/intel8259a.cpp
-  # The Hitachi HD63484 ACRTC -- a CRT controller with a drawing processor and its own
-  # frame memory: the register file, the FIFOs, a command subset and the scan-out. The
-  # cadzilla video board carries one (src/chips/hd63484.h).
-  src/chips/hd63484.cpp
   # The Brooktree Bt453 -- a 256 x 24 color-palette RAMDAC: four MPU locations, a hidden
   # modulo-3 R/G/B phase, and lookup() as the video side. The cadzilla video board
   # carries one between its ACRTC and the monitor (src/chips/bt453.h).
   src/chips/bt453.cpp
+  # The Hitachi HD63484 ACRTC -- a CRT controller with a drawing processor and its own
+  # frame memory: the register file, the FIFOs, a command subset and the scan-out. The
+  # cadzilla video board carries one (src/chips/hd63484.h).
+  src/chips/hd63484.cpp
   src/boards/s100-memory.cpp
   src/boards/bankmem.cpp
   src/boards/mits-88cpu.cpp
@@ -542,6 +542,9 @@ add_library(altair_core STATIC
   # host Display seam as the VDM-1 and takes its keyboard from a ByteStream like the
   # Sol. See sd-vdb8024.h.
   src/boards/sd-vdb8024.cpp
+  # cadzilla: an HD63484 ACRTC + Bt453 RAMDAC graphics board with its own frame memory;
+  # six I/O ports, no memory decoded. Renders the same host Display seam. See cadzilla.h.
+  src/boards/cadzilla.cpp
   # The Cromemco D+7A: analog + parallel I/O. A block of eight ports -- one parallel
   # port and seven two's-complement A/D-in/D/A-out channels -- that reads one or two
   # JS-1 joysticks from an injected host Joystick service (src/host/joystick.h), like
@@ -800,8 +803,9 @@ add_executable(altair_tests
   tests/test_telnet.cpp
   tests/test_wd17xx.cpp
   tests/test_i8257.cpp
-  tests/test_hd63484.cpp
   tests/test_bt453.cpp
+  tests/test_hd63484.cpp
+  tests/test_cadzilla.cpp
   tests/test_versafloppy.cpp
   tests/test_tarbell.cpp
   tests/test_cromemco-fdc.cpp
