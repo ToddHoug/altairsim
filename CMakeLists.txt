@@ -433,6 +433,10 @@ add_library(altair_core STATIC
   # The Intel 8259A -- a programmable interrupt controller; INT is a pure function of the
   # live IR levels the card supplies. The CompuPro System Support 1 carries two (cascade).
   src/chips/intel8259a.cpp
+  # The Hitachi HD63484 ACRTC -- a CRT controller with a drawing processor and its own
+  # frame memory: the register file, the FIFOs, a command subset and the scan-out. The
+  # cadzilla video board carries one (src/chips/hd63484.h).
+  src/chips/hd63484.cpp
   src/boards/s100-memory.cpp
   src/boards/bankmem.cpp
   src/boards/mits-88cpu.cpp
@@ -785,6 +789,7 @@ add_executable(altair_tests
   tests/test_telnet.cpp
   tests/test_wd17xx.cpp
   tests/test_i8257.cpp
+  tests/test_hd63484.cpp
   tests/test_versafloppy.cpp
   tests/test_tarbell.cpp
   tests/test_cromemco-fdc.cpp

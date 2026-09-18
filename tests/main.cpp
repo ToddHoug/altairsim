@@ -104,6 +104,7 @@ const struct {
     {"telnet", test_telnet},
     {"wd17xx", test_wd17xx},
     {"i8257", test_i8257},
+    {"hd63484", test_hd63484},
     {"versafloppy", test_versafloppy},
     {"tarbell", test_tarbell},
     {"cromemco_fdc", test_cromemco_fdc},
