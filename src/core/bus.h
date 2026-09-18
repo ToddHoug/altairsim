@@ -322,6 +322,12 @@ public:
     // nobody can answer, which is what the bus would have done anyway.
     uint8_t peek(uint16_t addr) const;
 
+    // `n` bytes of peek() from `addr` up (wrapping at 64K), in ONE call -- the same
+    // bytes n peek()s would return. CPU HISTORY reads the opcode and its operands
+    // before every instruction, and three separate trips through peek() were a
+    // sixth of the run loop's time.
+    void peekBytes(uint16_t addr, uint8_t* out, int n) const;
+
     // Reverse lookup: who answers here, and why. Backs WHO and the contention
     // detector. Returns every board that ACTUALLY decodes -- so a board that is
     // phantomed out does not appear, which is why a shadow is not contention.

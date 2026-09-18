@@ -381,6 +381,20 @@ std::vector<RegDef> Cpu8085::registers() {
     };
 }
 
+// The list above, as plain loads (CpuCore::captureRegs). SAME ORDER, entry for entry --
+// tests/test_cpu.cpp holds it to registers() so the two cannot drift.
+void Cpu8085::captureRegs(std::vector<uint32_t>& out) {
+    out.resize(30);
+    uint32_t* o = out.data();
+    o[0] = cy_; o[1] = z_; o[2] = s_; o[3] = p_; o[4] = ac_; o[5] = v_; o[6] = k_;
+    o[7] = a_; o[8] = bc(); o[9] = de(); o[10] = hl(); o[11] = sp_; o[12] = ie_; o[13] = pc_;
+    o[14] = b_; o[15] = c_; o[16] = d_; o[17] = e_; o[18] = h_; o[19] = l_;
+    o[20] = psw();
+    o[21] = m55_; o[22] = m65_; o[23] = m75_;
+    o[24] = p55_; o[25] = p65_; o[26] = p75_; o[27] = ptrap_;
+    o[28] = sid_; o[29] = sod_;
+}
+
 // Both resets: PC to zero, interrupts off, out of HLT (the 8080 set), plus the
 // 8085's own reset state -- RESET sets all three RST masks (nothing fires until
 // SIM unmasks), clears the pending latches and TRAP, and clears SOD (MCS-85 manual).
