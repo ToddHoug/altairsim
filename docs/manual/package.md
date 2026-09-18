@@ -13,6 +13,7 @@ DRIVING-WITH-AI.md       for an AI assistant driving the machine; see below.
 cheatsheet.md            the same reference as plain text, for the AI to read.
 LICENSE                  the MIT licence this is published under.
 LICENSE-SDL3             the licence of SDL3, which is built into the program.
+LICENSE-MAME-HD63484     the notice for the ACRTC model's structural source (MAME).
 examples/                machines that boot, media included.
 hostbridge/              the file-transfer utilities: source, HEX, COM.
 ```
@@ -41,6 +42,8 @@ each says at the top where to start if it is the first one you picked up.
 which opens the window the video boards draw into — is compiled *into* it rather than shipped
 beside it, so there is nothing to install and nothing that can go missing. `LICENSE-SDL3` is
 that library's licence, and it is in the package because its code is in the program.
+`LICENSE-MAME-HD63484` is here for the same reason: the HD63484 video-controller model was
+built on the structure of MAME's, whose BSD licence asks that its notice travel along.
 
 The **Developer Guide** is not in here — it is a separate download from the same release page
 this came from, and you want it only if you intend to build a board of your own.
