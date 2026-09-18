@@ -354,6 +354,17 @@ std::vector<RegDef> Cpu8080::registers() {
     };
 }
 
+// The list above, as plain loads (CpuCore::captureRegs). SAME ORDER, entry for entry --
+// tests/test_cpu.cpp holds it to registers() so the two cannot drift.
+void Cpu8080::captureRegs(std::vector<uint32_t>& out) {
+    out.resize(19);
+    uint32_t* o = out.data();
+    o[0] = cy_; o[1] = z_; o[2] = s_; o[3] = p_; o[4] = ac_;
+    o[5] = a_; o[6] = bc(); o[7] = de(); o[8] = hl(); o[9] = sp_; o[10] = ie_; o[11] = pc_;
+    o[12] = b_; o[13] = c_; o[14] = d_; o[15] = e_; o[16] = h_; o[17] = l_;
+    o[18] = psw();
+}
+
 // Both resets do the same thing to the CPU, and it is a SHORT list: PC to zero,
 // interrupts off, out of HLT. The registers are NOT cleared -- the 8080's reset
 // does not touch them, and neither does ours (DESIGN.md 6).

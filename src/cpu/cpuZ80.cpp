@@ -559,6 +559,24 @@ std::vector<RegDef> CpuZ80::registers() {
     return r;
 }
 
+// The list above, as plain loads (CpuCore::captureRegs). SAME ORDER, entry for entry --
+// tests/test_cpu.cpp holds it to registers() so the two cannot drift.
+void CpuZ80::captureRegs(std::vector<uint32_t>& out) {
+    auto bit = [](uint8_t f, uint8_t m) { return (uint32_t)((f & m) ? 1 : 0); };
+    auto w   = [](uint8_t hi, uint8_t lo) { return (uint32_t)((hi << 8) | lo); };
+    out.resize(38);
+    uint32_t* o = out.data();
+    o[0] = bit(f_, FC); o[1] = bit(f_, FZ); o[2] = bit(f_, FS);
+    o[3] = bit(f_, FPV); o[4] = bit(f_, FH); o[5] = bit(f_, FN);
+    o[6] = a_; o[7] = bc(); o[8] = de(); o[9] = hl(); o[10] = sp_; o[11] = iff1_; o[12] = pc_;
+    o[13] = bit(f2_, FC); o[14] = bit(f2_, FZ); o[15] = bit(f2_, FS);
+    o[16] = bit(f2_, FPV); o[17] = bit(f2_, FH); o[18] = bit(f2_, FN);
+    o[19] = a2_; o[20] = w(b2_, c2_); o[21] = w(d2_, e2_); o[22] = w(h2_, l2_);
+    o[23] = ix_; o[24] = iy_; o[25] = i_; o[26] = im_; o[27] = iff2_;
+    o[28] = b_; o[29] = c_; o[30] = d_; o[31] = e_; o[32] = h_; o[33] = l_;
+    o[34] = f_; o[35] = f2_; o[36] = r_; o[37] = wz_;
+}
+
 // Reset: PC and I and R to zero, interrupts off, IM 0, out of HALT. The Z80's
 // reset does not clear the general registers, and neither does ours (DESIGN.md 6).
 void CpuZ80::reset(Reset) {
