@@ -47,9 +47,14 @@ through MCP:
 
 The shape of a session is therefore: `run {from: 0xFF00, until: "A0>"}` to boot, then
 `run {input: "ASM FOO\r", until: "A0>"}` per command, reading the reply each time. A `run`
-**never blocks** — it advances the guest for at most `timeout_ms` (default 2000) and
-returns — so a `tools/call` always comes back, unlike a bare `RUN` through the `monitor`
-tool, which under a pipe waits on a stdin that is the JSON-RPC channel itself.
+**never blocks** — it advances the guest for at most `timeout_ms` (default 2000, maximum
+600000) and returns — so a `tools/call` always comes back, unlike a bare `RUN` through the
+`monitor` tool, which under a pipe waits on a stdin that is the JSON-RPC channel itself.
+
+That budget is a ceiling and not a wait. The call ends as soon as `until` matches or the
+guest reaches a prompt, so asking for more time than the work needs costs nothing: a job that
+takes fifty seconds under a budget of two minutes returns after fifty seconds. Set the budget
+to the longest you are willing to wait, not to what you expect, and let `until` end the call.
 
 By default the guest runs flat out, which is what you want for booting and for driving a
 prompt. But when a real device is on a serial line and you have set a clock speed with `SET
