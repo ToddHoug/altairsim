@@ -17,6 +17,9 @@
 #include "host/display_null.h"
 #include "host/framedump.h"
 
+#include <cstdint>
+#include <functional>
+
 // Compare `owner`'s last frame on `d` against `expected`, a grid exactly as frameText()
 // produces it under `o` (rows separated by '\n'). One leading newline is ignored so a
 // raw string literal may open on its own line, and a missing final newline is supplied.
@@ -39,3 +42,16 @@ bool checkFrameGolden(altair::NullDisplay& d, altair::Display::Owner owner, cons
 
 #define CHECK_FRAME_GOLDEN(disp, owner, name, opts, what) \
     CHECK(checkFrameGolden((disp), (owner), (name), (opts), (what)), (what))
+
+// EVERY PIXEL, against an oracle. A sampled text grid proves the geometry in a form a
+// person can read, but it looks at one pixel in a thousand of a 640x480 frame. When the
+// test knows exactly what it drew it can say what EVERY pixel should be -- a rectangle's
+// perimeter is four comparisons, a line one -- and this compares all of them. On a
+// mismatch it reports the first differing pixel (x, y, expected, actual), how many
+// differ in all, and writes the actual frame as a .ppm like the grid check does.
+// `expected(x, y)` returns the palette index for frame pixel (x, y), row 0 at the top.
+bool checkFramePixels(altair::NullDisplay& d, altair::Display::Owner owner,
+                      const std::function<uint8_t(int x, int y)>& expected, const char* what);
+
+#define CHECK_FRAME_PIXELS(disp, owner, expected, what) \
+    CHECK(checkFramePixels((disp), (owner), (expected), (what)), (what))

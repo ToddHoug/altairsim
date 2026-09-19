@@ -180,6 +180,31 @@ void test_framedump() {
               "an owner that never drew fails rather than matching an empty grid");
     }
 
+    SECTION("framedump -- CHECK_FRAME_PIXELS compares every pixel against an oracle");
+    {
+        NullDisplay disp;
+        char        tag = 0;
+        Display::Owner a = &tag;
+        std::vector<Color> pal = {{0, 0, 0, 255}, {255, 255, 255, 255}};
+        Surface* s = disp.acquire(a, "a", 64, 48, PixelFormat::Indexed8, 0);
+        disp.setPalette(a, pal);
+        s->clear(0);
+        for (int x = 0; x < 64; ++x) s->put(x, 10, 1);      // one full row
+        s->put(63, 47, 1);                                   // and the far corner
+        disp.present(a, s);
+
+        auto oracle = [](int x, int y) -> uint8_t { return (y == 10 || (x == 63 && y == 47)) ? 1 : 0; };
+        CHECK_FRAME_PIXELS(disp, a, oracle, "3072 pixels, all as the oracle says");
+
+        std::printf("  (the next 'frame:' lines are the failure path being exercised, not a failure)\n");
+        s->put(5, 20, 1);                                    // one stray pixel the oracle does not know
+        CHECK(!checkFramePixels(disp, a, oracle, "framedump pixels negative"),
+              "a single wrong pixel anywhere in the frame fails the check -- nothing is sampled");
+        char unknown = 0;
+        CHECK(!checkFramePixels(disp, &unknown, oracle, "framedump pixels no owner"),
+              "an owner that never drew fails");
+    }
+
     SECTION("framedump -- a golden file is compared, and only rewritten on request");
     {
         NullDisplay disp;

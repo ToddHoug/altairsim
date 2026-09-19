@@ -165,11 +165,30 @@ CHECK_FRAME_OPTS(g.disp, g.cad, R"(
 
 Every character is a pixel's palette index. A rectangle one row too high, a mirrored X axis, a
 picture placed one memory cycle late — each is visible in the diff, and the `.ppm` beside it
-shows the full-resolution picture through the colors the guest loaded. Pair the sampled grid
-with a few **exact probes** (`g.px(608, 0) == 1 && g.px(609, 0) == 0`) for the edges the grid
-steps over, or keep a golden file under `tests/golden/` and `CHECK_FRAME_GOLDEN` it; the golden
-is rewritten only under `ALTAIR_TEST_WRITE_GOLDEN=1`, because a golden that rewrites itself
-asserts nothing.
+shows the full-resolution picture through the colors the guest loaded.
+
+**Be clear about what a sampled grid proves.** It looks at one pixel in a thousand: it proves
+the *geometry* in a form a person can read, and nothing about the pixels between the samples.
+So pair it with **`CHECK_FRAME_PIXELS`**, which compares **every** pixel against an oracle the
+test writes — a function from `(x, y)` to the palette index the commands must have left there.
+For a rectangle, a line and a dot that is four comparisons:
+
+```cpp
+auto oracle = [](int x, int y) -> uint8_t {
+    if (x == 320 && y == 352) return 2;                                  // the dot
+    if (y == 224 && x >= 64 && x <= 544) return 3;                       // the line, end excluded
+    bool onRect = (y == 0 || y == 448) ? (x <= 608)                      // top and bottom edges
+                                        : ((x == 0 || x == 608) && y < 448);   // the sides
+    return onRect ? 1 : 0;
+};
+CHECK_FRAME_PIXELS(g.disp, g.cad, oracle, "all 307,200 pixels match the oracle");
+```
+
+A single wrong pixel anywhere fails it, and the failure names the first differing pixel, how
+many differ in all, and the `.ppm`. The grid is for the reader; the oracle is for the proof.
+Use both. For a frame you cannot describe in a function, keep a golden file under
+`tests/golden/` and `CHECK_FRAME_GOLDEN` it; the golden is rewritten only under
+`ALTAIR_TEST_WRITE_GOLDEN=1`, because a golden that rewrites itself asserts nothing.
 
 Then prove the two things a picture alone does not: that a **palette-only change** reaches the
 host (`frames()` advanced, `frameCrc()` moved, the pixel bytes unchanged), and that a

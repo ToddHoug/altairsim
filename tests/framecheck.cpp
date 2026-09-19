@@ -39,6 +39,8 @@ std::string stem(const char* what) {
     return s.empty() ? std::string("frame") : s;
 }
 
+void dumpActual(NullDisplay& d, Display::Owner owner, const Surface& s, const char* what);
+
 // The comparison and the diagnostics, shared by the inline and golden forms.
 bool compare(NullDisplay& d, Display::Owner owner, const std::string& expected,
              const TextGridOpts& o, const char* what) {
@@ -66,15 +68,21 @@ bool compare(NullDisplay& d, Display::Owner owner, const std::string& expected,
     }
 
     // The picture itself, for a person.
+    dumpActual(d, owner, *s, what);
+    return false;
+}
+
+// The actual frame as a .ppm in the temp directory, path printed -- shared by every
+// failing check so the picture is always one open away.
+void dumpActual(NullDisplay& d, Display::Owner owner, const Surface& s, const char* what) {
     std::string path =
         (std::filesystem::temp_directory_path() / ("altair_frame_" + stem(what) + ".ppm"))
             .string();
     std::string err;
-    if (writePpm(path, *s, d.palette(owner), err))
+    if (writePpm(path, s, d.palette(owner), err))
         std::printf("        actual frame written to %s\n", path.c_str());
     else
         std::printf("        (%s)\n", err.c_str());
-    return false;
 }
 
 std::string goldenPath(const char* name) {
@@ -88,6 +96,35 @@ std::string goldenPath(const char* name) {
 bool checkFrame(NullDisplay& d, Display::Owner owner, const char* expected,
                 const TextGridOpts& o, const char* what) {
     return compare(d, owner, normalize(expected), o, what);
+}
+
+bool checkFramePixels(NullDisplay& d, Display::Owner owner,
+                      const std::function<uint8_t(int, int)>& expected, const char* what) {
+    const Surface* s = d.surface(owner);
+    if (!s) {
+        std::printf("        frame: the board has drawn nothing -- no surface for this owner\n");
+        return false;
+    }
+    const auto px   = s->pixels();
+    size_t     bad  = 0;
+    int        fx   = -1, fy = -1;
+    uint8_t    fexp = 0, fact = 0;
+    for (int y = 0; y < s->height(); ++y) {
+        for (int x = 0; x < s->width(); ++x) {
+            uint8_t e = expected(x, y);
+            uint8_t a = px[(size_t)y * (size_t)s->pitch() + (size_t)x];
+            if (e == a) continue;
+            if (bad++ == 0) {
+                fx = x; fy = y; fexp = e; fact = a;
+            }
+        }
+    }
+    if (bad == 0) return true;
+    std::printf("        frame: %dx%d surface, %zu of %zu pixels differ from the oracle\n",
+                s->width(), s->height(), bad, px.size());
+    std::printf("        first at (%d, %d): expected index %u, actual %u\n", fx, fy, fexp, fact);
+    dumpActual(d, owner, *s, what);
+    return false;
 }
 
 bool checkFrameGolden(NullDisplay& d, Display::Owner owner, const char* name,
