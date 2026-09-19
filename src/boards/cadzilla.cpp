@@ -86,8 +86,7 @@ void CadzillaBoard::reset(Reset r) {
 void CadzillaBoard::power() {
     acrtc_.power();
     dac_.reset();
-    dirty_  = true;
-    everOn_ = false;
+    dirty_ = true;   // the monitor shows its (black) frame from power-on, signal or not
 }
 
 // ---------------------------------------------------------------------------
@@ -97,15 +96,13 @@ void CadzillaBoard::serialize(StateWriter& w) const {
     Board::serialize(w);
     acrtc_.serialize(w);
     dac_.serialize(w);
-    w.boolean(everOn_);
 }
 
 void CadzillaBoard::deserialize(StateReader& r) {
     Board::deserialize(r);
     acrtc_.deserialize(r);
     dac_.deserialize(r);
-    everOn_ = r.boolean();
-    dirty_  = true;  // the restored picture owes the host a full redraw
+    dirty_ = true;  // the restored picture owes the host a full redraw
 }
 
 // ---------------------------------------------------------------------------
@@ -164,12 +161,12 @@ void CadzillaBoard::pump() {
     dirty_ = false;
 }
 
+// THE MONITOR IS ALWAYS THERE. A fixed-frequency display with no signal shows a black frame,
+// so the window opens on the first pump after power -- like the Dazzler's and the VDM-1's --
+// at the mode's size, and the ACRTC's picture appears in it once a program starts the chip.
 void CadzillaBoard::render() {
-    const bool on = acrtc_.displayOn();
-    if (on) everOn_ = true;
-    if (!everOn_) return;                     // never displayed: no window opens
-
-    const Mode& m = currentMode();
+    const bool  on = acrtc_.displayOn();
+    const Mode& m  = currentMode();
     // `this` keys this board's own window (issue #234); id titles it; videoWidth_ sizes it.
     Surface* s = g_display->acquire(this, id, m.width, m.height, PixelFormat::Indexed8, videoWidth_);
     if (!s) return;

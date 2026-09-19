@@ -146,7 +146,6 @@ private:
 
     // ---- Render bookkeeping ----
     bool dirty_ = true;           // something in the picture moved since the last frame
-    bool everOn_ = false;         // the ACRTC has displayed at least once: keep a window
 };
 
 } // namespace altair
