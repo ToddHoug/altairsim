@@ -169,7 +169,7 @@ off the board itself, so ask `board_types` what a card can be told rather than g
 
 | Tool | Args | Does |
 |---|---|---|
-| `run` | `from?`, `input?`, `until?`, `timeout_ms?` (2000), `max_steps?` | Type `input`, advance the guest, return what it printed. Stops on `until` match, a **prompt** (guest idle on console input), `timeout_ms`, `max_steps`, HLT or breakpoint — see `stopped`. `from` sets PC first (that is how you boot). **Never blocks.** |
+| `run` | `from?`, `input?`, `until?`, `timeout_ms?` (2000, max 600000), `max_steps?` | Type `input`, advance the guest, return what it printed. Stops on `until` match, a **prompt** (guest idle on console input), `timeout_ms`, `max_steps`, HLT or breakpoint — see `stopped`. `timeout_ms` is a ceiling, not a wait: the call returns as soon as one of the others fires. `from` sets PC first (that is how you boot). **Never blocks.** |
 | `send` | `text` | Type at the console without running. |
 | `recv` | — | Drain output since last read, without running. |
 | `regs` | — | CPU registers now (`pc`, `halted`, `registers{}`). |
@@ -202,8 +202,14 @@ run {input: "ASM FOO\r", until: "A>", timeout_ms: 20000}
 ```
 
 `\r` submits a CP/M line. `run` also returns on its own when the guest reaches a prompt
-(`stopped: "idle"`), so you rarely need to guess a timeout for interactive commands — set a
-generous `timeout_ms` only for long silent work (assembling, a disk load).
+(`stopped: "idle"`), so you rarely need to guess a timeout for interactive commands.
+
+**`timeout_ms` is a ceiling, not a wait.** The call ends the moment `until` matches or the
+guest reaches a prompt, so a budget larger than the job costs you nothing — a 50-second
+assembly under `timeout_ms: 120000` returns in 50 seconds, not 120. There is no reason to
+trim it to what you expect the work to take, and no need to re-issue `run` by hand to walk a
+long job forward. Set it to the worst case you are willing to sit through and let `until` end
+the call. The maximum is 600000 (ten minutes); anything larger is clamped to it.
 
 ## Recipe: build a CP/M program end to end
 
