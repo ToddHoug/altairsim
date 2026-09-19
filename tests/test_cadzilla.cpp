@@ -210,10 +210,17 @@ void test_cadzilla() {
 11111111111111111111
 )", every32, "sampled every 32nd pixel: the rectangle, the line and the dot, right way up");
 
-        CHECK(g.px(0, 0) == 1 && g.px(608, 0) == 1 && g.px(609, 0) == 0 && g.px(639, 0) == 0,
-              "exact: the top edge runs x = 0..608 on frame row 0");
-        CHECK(g.px(0, 479) == 0 && g.px(0, 448) == 1, "and the bottom edge is on frame row 448 (Y = 31)");
-        CHECK(g.px(544, 224) == 3 && g.px(545, 224) == 0, "the line's end point is not drawn");
+        // EVERY PIXEL, against what the three commands must have drawn (frame y = 479 - Y).
+        // The rectangle's perimeter: x 0..608 on rows 0 and 448, x = 0 and 608 on rows 0..448.
+        // The line: x 64..544 on row 224 (its end point 545 not drawn). The dot: (320, 352).
+        auto oracle = [](int x, int y) -> uint8_t {
+            if (x == 320 && y == 352) return 2;
+            if (y == 224 && x >= 64 && x <= 544) return 3;
+            bool onRect = (y == 0 || y == 448) ? (x >= 0 && x <= 608)
+                                                : ((x == 0 || x == 608) && y > 0 && y < 448);
+            return onRect ? 1 : 0;
+        };
+        CHECK_FRAME_PIXELS(g.disp, g.cad, oracle, "all 307,200 pixels match the oracle for the three commands");
 
         // THE RAMDAC IS THE PALETTE: what the wire carries is the LUT, not the index.
         const auto& pal = g.disp.palette(g.cad);
@@ -336,7 +343,11 @@ void test_cadzilla() {
 1..............1
 1111111111111111
 )", every64, "sampled every 64th pixel: the border, at 1024x768 through the interleaved fetch");
-        CHECK(g.px(960, 0) == 1 && g.px(961, 0) == 0 && g.px(1023, 0) == 0, "exact right edge at x = 960");
+        // Every pixel: the perimeter of (0,63)-(960,767) is rows 0 and 704, columns 0 and 960.
+        CHECK_FRAME_PIXELS(g.disp, g.cad, [](int x, int y) -> uint8_t {
+            bool on = (y == 0 || y == 704) ? (x <= 960) : ((x == 0 || x == 960) && y < 704);
+            return on ? 1 : 0;
+        }, "all 786,432 pixels of the interleaved 1024x768 frame match");
 
         // In interleaved mode HDS is in doubled units: +2 memory cycles is one display cycle.
         const uint16_t hdr = g.cad->acrtc().reg(0x84);
@@ -358,14 +369,9 @@ void test_cadzilla() {
             g.cmd(0xC000, {(uint16_t)(md.width - 1), (uint16_t)(md.height - 1)});   // AFRCT: fill it all
             g.cad->pump();
             const Surface* s = g.disp.surface(g.cad);
-            bool ok = s && s->width() == md.width && s->height() == md.height;
-            if (ok)
-                for (int y = 0; y < md.height && ok; y += 37)
-                    for (int x = 0; x < md.width && ok; x += 41)
-                        if (g.px(x, y) != 1) ok = false;
-            std::string what = std::string(md.name) + ": the frame is that size and the fill reaches everywhere";
-            CHECK(ok, what.c_str());
-            CHECK(g.px(md.width - 1, md.height - 1) == 1 && g.px(0, 0) == 1, "including both extreme corners");
+            CHECK(s && s->width() == md.width && s->height() == md.height, "the frame is the mode's size");
+            std::string what = std::string(md.name) + ": every pixel of the frame is the fill";
+            CHECK_FRAME_PIXELS(g.disp, g.cad, [](int, int) -> uint8_t { return 1; }, what.c_str());
         }
     }
 

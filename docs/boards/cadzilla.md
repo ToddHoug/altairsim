@@ -247,12 +247,14 @@ color and area modes, scan-out geometry, the window overlay, and a snapshot roun
 `tests/test_cadzilla.cpp` proves the board: the six-port decode both directions, the ports
 reaching the chips, and an **end-to-end 640x480 picture** — LUT loaded through the four DAC
 ports, a rectangle, a line and a dot drawn through the two ACRTC ports, the frame read back
-with `CHECK_FRAME_OPTS` sampled every 32nd pixel (`tests/framecheck.h`) plus exact pixel
-probes, its colors resolved through the palette; the picture's placement by HDS/VDS (one
+with `CHECK_FRAME_OPTS` sampled every 32nd pixel for a reader and `CHECK_FRAME_PIXELS`
+against an oracle for **every one of the 307,200 pixels** (`tests/framecheck.h`), its colors
+resolved through the palette; the picture's placement by HDS/VDS (one
 cycle right, one cycle clipped, one raster down, a narrower picture); the wiring — GAI +1
 repeating each fetch and a 4 bpp dot landing in the wrong nibble, as the hardware would, with
 `wiring` naming each; **1024x768 in interleaved mode** with the doubled registers, sampled
-every 64th pixel; every mode's frame filled corner to corner by one `AFRCT`; the window at
+every 64th pixel and checked pixel by pixel; every mode's frame filled by one `AFRCT` and
+every pixel of it checked; the window at
 HWS/VWS; the `mode` strap re-opening the frame at 800x600; then a palette-only change moving
 the frame, a snapshot repainting it, and RESET\* leaving a black frame while the LUT survives.
 
