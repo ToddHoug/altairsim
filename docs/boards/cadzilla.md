@@ -177,7 +177,9 @@ and the same three for *inside*).
   sixteen 8-bit pixels at the cycle's frame x (HDS/HWS against the horizontal back porch),
   clipped to the frame. The Bt453's 256-entry table goes to `Display::setPalette()`. Nothing is
   translated: the surface *is* the pixel bus and the palette *is* the RAMDAC. Off (STR or SE1
-  clear) after having been on, the frame is black; never on, no window opens.
+  clear) the frame is black -- the monitor is there from power-on, signal or not, so the
+  window opens at the prompt like the Dazzler's and shows the picture once a program starts
+  the chip.
 - **`properties()`**: straps `port`, `dac`, `mode` (the monitor), `vram` (kilobytes, a power of
   two 8–2048; refits the frame memory), `width` (the window); live, read-only `video`, `picture`
   (programmed size and position in the frame), `wiring` (GBM/GAI/ACM against the board) and

@@ -144,12 +144,19 @@ void test_cadzilla() {
               "and IN 75 x3 reads it back R, G, B");
     }
 
-    SECTION("cadzilla -- nothing to show, no window: a chip that has never displayed draws nothing");
+    SECTION("cadzilla -- the monitor is there from power-on: a black frame before the ACRTC starts");
     {
         Rig g;
         g.cad->pump();
-        CHECK(g.disp.frames(g.cad) == 0, "no frame presented while the ACRTC is stopped");
-        CHECK(g.disp.surface(g.cad) == nullptr, "and no surface acquired -- no window opens");
+        CHECK(g.disp.frames(g.cad) == 1, "the first pump presents a frame -- the window opens at the prompt");
+        const Surface* s = g.disp.surface(g.cad);
+        CHECK(s && s->width() == 640 && s->height() == 480, "at the mode's size");
+        bool black = s != nullptr;
+        for (size_t i = 0; black && i < s->pixels().size(); i += 97)
+            if (s->pixels()[i] != 0) black = false;
+        CHECK(black, "and black: no signal");
+        g.cad->pump();
+        CHECK(g.disp.frames(g.cad) == 1, "and nothing repaints it until something changes");
     }
 
     SECTION("cadzilla -- the default monitor is 640x480: LUT, ORG, a rectangle, a line, a dot");
