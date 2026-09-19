@@ -56,6 +56,13 @@ guest reaches a prompt, so asking for more time than the work needs costs nothin
 takes fifty seconds under a budget of two minutes returns after fifty seconds. Set the budget
 to the longest you are willing to wait, not to what you expect, and let `until` end the call.
 
+What you type goes to the guest byte for byte, control characters included, and every line in
+the machine is 8-bit clean. A control byte is written as a JSON `\uXXXX` escape: `\u0003` is
+^C, `\u001a` is ^Z. So `send {text: "\u0003"}` breaks a running BASIC program, and
+`run {input: "\u001a"}` ends a `PIP` copy from the console, exactly as the keys would. Note
+that `\x03` is **not** JSON — JSON has no `\x` escape — and it arrives at the guest as the
+three ordinary characters `x03` rather than as a control byte.
+
 By default the guest runs flat out, which is what you want for booting and for driving a
 prompt. But when a real device is on a serial line and you have set a clock speed with `SET
 cpu0 clock_hz=…`, `run` paces the guest to that clock, so a reply the device sends a fraction

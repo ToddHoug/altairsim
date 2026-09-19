@@ -174,6 +174,20 @@ off the board itself, so ask `board_types` what a card can be told rather than g
 | `recv` | — | Drain output since last read, without running. |
 | `regs` | — | CPU registers now (`pc`, `halted`, `registers{}`). |
 
+**Control bytes: use `\uXXXX`.** `input` and `text` are raw bytes — whatever you pass reaches
+the guest untouched, control characters included, and every line in the machine is 8-bit
+clean. Write a control byte as the JSON escape it is: `\u0003` for ^C, `\u001a` for ^Z,
+`\u001b` for ESC.
+
+```
+send {text: "\u0003"}                        # break a running MBASIC program
+run  {input: "\u001a", until: "A>"}          # ^Z ends a PIP copy from the console
+```
+
+`\x03` is **not** JSON — there is no `\x` escape in the format — and it is not rejected
+either: it reaches the guest as the three ordinary characters `x03`. If a control byte seems
+to vanish while printable text gets through, that is the reason.
+
 **`monitor`** `{command}` runs any one monitor command (`CONNECT`, `MOUNT`, `SET`, `IN`,
 `OUT`, `DISASM`, …) and returns its text — the escape hatch for anything without a dedicated
 tool.
