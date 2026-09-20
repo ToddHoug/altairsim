@@ -18,6 +18,7 @@
 #   examples/basic/           \  the examples, each a self-contained folder: a machine file
 #   examples/hdsk/            /  and the media it mounts, lying beside it
 #   examples/diskbasic/      /
+#   skills/altairsim/        SKILL.md + the briefing again, for a client that reads skills
 #
 # ONE ARCHIVE, FOR ONE PLATFORM, BUILT ON THAT PLATFORM. --target names it and picks the
 # format; it does not cross-compile, because nothing here does. See DISTRIBUTION.md 1 and 4.2.
@@ -438,11 +439,20 @@ while IFS='|' read -r dest src; do
   # cannot notice that one image of two went missing. What notices that is the acceptance
   # suite, which boots every shipped example WITH its media (tests/acceptance/examples.cmake,
   # plus trek80.exp and diskbasic.exp) and goes red the moment a file it mounts is absent.
-  if [ "$image" = no ] &&
-     ! ls "$pkg/$dest"/*.hex "$pkg/$dest"/*.HEX 2>/dev/null | head -1 | grep -q .; then
-    echo "  !! $dest has a machine file and NO MEDIA" >&2
-    missing="$missing $dest"
-  fi
+  #
+  # ONLY FOR AN EXAMPLE. Not every DIR line is a machine: hostbridge/ is utility source and
+  # skills/ is documentation, and neither has media to be missing. hostbridge/ passed this
+  # check by ACCIDENT -- it ships R/W/HDIR as .HEX -- which is the kind of pass that holds
+  # until the next non-example DIR arrives and is refused for shipping exactly what it means to.
+  case "$dest" in
+  examples/*)
+    if [ "$image" = no ] &&
+       ! ls "$pkg/$dest"/*.hex "$pkg/$dest"/*.HEX 2>/dev/null | head -1 | grep -q .; then
+      echo "  !! $dest has a machine file and NO MEDIA" >&2
+      missing="$missing $dest"
+    fi
+    ;;
+  esac
 done <<EOF
 $DIRS
 EOF
@@ -460,6 +470,31 @@ if [ -n "$missing" ]; then
   echo "Each one is tracked; restore it with: git checkout -- examples/" >&2
   exit 1
 fi
+
+# ---------------------------------------------------------------------------
+# THE SKILL'S BRIEFING -- the one file the DIR copy above could not bring with it.
+#
+# skills/altairsim/ ships SKILL.md; the long form it points at is docs/DRIVING-WITH-AI.md,
+# which already went into the zip at the ROOT through the FILE table. It goes in a SECOND time
+# here, under the skill, because a skill has to survive being dragged out of the package into
+# ~/.claude/skills/ -- a reference that walked back up to the package root would not. One
+# master in the tree, two copies in the zip, and this is the line that makes the second.
+#
+# THROUGH expand(), like the FILE loop: same token substitution, same refusal on a leftover
+# token. The two copies are then byte-identical, which is the point -- a skill that quietly
+# shipped a different briefing from the one at the root would be worse than no skill.
+skill_ref=$pkg/skills/altairsim/references
+mkdir -p "$skill_ref"
+expand "$root/docs/DRIVING-WITH-AI.md" "$skill_ref/driving-with-ai.md"
+if grep -q '{{[A-Z_]*}}' "$skill_ref/driving-with-ai.md"; then
+  echo "build-package: skills/altairsim/references/driving-with-ai.md has UNEXPANDED TOKENS" >&2
+  exit 1
+fi
+
+# The cheatsheet SKILL.md names beside itself. Straight from the staged root copy, so it is the
+# same text the package's own cheatsheet.md is -- not a second read of the tree that could be
+# a different generation of it.
+cp "$pkg/cheatsheet.md" "$pkg/skills/altairsim/cheatsheet.md"
 
 name=altairsim-$ver-$target
 archive=$out/$name.$ext
