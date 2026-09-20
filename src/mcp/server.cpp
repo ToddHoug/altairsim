@@ -192,9 +192,10 @@ Json toolList() {
                        "Advance the running guest a bounded slice and return what it printed to "
                        "the console. STOPS on: `until` matched, a prompt reached (the guest is "
                        "spinning on console input with nothing to say), timeout_ms, max_steps, a "
-                       "HLT, a breakpoint, or a SIGINT to the altairsim process itself (an "
-                       "out-of-band ^C -- there is no in-band way to interrupt a call yet) -- "
-                       "reported in `stopped`. This is the expect loop: type a command with "
+                       "HLT, a breakpoint, a `notifications/cancelled` naming this call's "
+                       "request id, or a SIGINT to the altairsim process itself (an "
+                       "out-of-band ^C) -- reported in `stopped`, the last two as "
+                       "`interrupted`. This is the expect loop: type a command with "
                        "`input`, read the reply, call again. Never blocks.",
                        p, {}));
     }

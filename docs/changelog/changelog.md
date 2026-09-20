@@ -8,12 +8,16 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
-### ^C stops a `run` that is going nowhere
+### A `run` can be stopped early over `--mcp`
 
 Over `--mcp` there was no way to stop a `run` early: it kept going until its `timeout_ms`, and
-a client that gave up on it could only kill the whole server. **Send the `altairsim` process a
-^C (or `kill -INT`) and the `run` in progress stops at once**, returning `stopped:
-"interrupted"` with what the guest had printed so far, and leaving the machine as it was.
+a client that gave up on it could only kill the whole server. Now there are two ways. **Cancel
+the request** with the standard MCP `notifications/cancelled` message — the server reads its
+input while a `run` is going, so it sees the cancel at once — or **send the `altairsim` process
+a ^C** (or `kill -INT`). Either way the `run` in progress stops, returning `stopped:
+"interrupted"` with what the guest had printed so far and leaving the machine as it was. A
+cancel for some other request is ignored, and requests sent during a `run` are answered in
+order once it returns.
 
 ^C on a hand-started `--mcp` server is no longer instantly fatal — the first is caught. A
 second ^C, pressed before the server has reported the first, ends it as before. A server

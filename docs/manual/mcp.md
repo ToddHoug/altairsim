@@ -79,12 +79,23 @@ failure, and `regs`/`mem_dump` can confirm a destination pointer is still climbi
 
 ### Stopping a `run` that will not end
 
-A `run` ends by itself at `timeout_ms`, but you may not want to wait that long. Send the
-`altairsim` process a ^C — press it in the terminal that started the server, or run
-`kill -INT` on its process ID — and the `run` in progress stops at once and returns
-`stopped: "interrupted"` with what the guest printed so far. The machine is left exactly as it
+A `run` ends by itself at `timeout_ms`, but you may not want to wait that long. There are
+two ways to stop it early, and both make the `run` in progress stop at once and return
+`stopped: "interrupted"` with what the guest printed so far:
+
+- **Cancel the request.** Send the standard MCP `notifications/cancelled` message naming the
+  request id of the `run`. The server keeps reading its input while a `run` is going, so the
+  cancel is seen straight away. A cancel that names some other request, or one that arrives
+  after the `run` has returned, is ignored, and it never carries over to the next call. Other
+  requests sent during a `run` are queued and answered in order once it returns.
+- **Send the process a ^C.** Press it in the terminal that started the server, or run
+  `kill -INT` on its process ID.
+
+ The machine is left exactly as it
 was, so you can look at it and carry on with another `run`. A ^C that arrives while no `run`
 is in progress does nothing to the guest, and a new `run` always starts clean.
+
+The rest of this section is about the ^C.
 
 This changes what ^C does to an `--mcp` server you started by hand: the first ^C is caught,
 not fatal. If you press ^C again before the server has reported the first one, the second
