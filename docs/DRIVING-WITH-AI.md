@@ -169,7 +169,7 @@ off the board itself, so ask `board_types` what a card can be told rather than g
 
 | Tool | Args | Does |
 |---|---|---|
-| `run` | `from?`, `input?`, `until?`, `timeout_ms?` (2000, max 600000), `max_steps?` | Type `input`, advance the guest, return what it printed. Stops on `until` match, a **prompt** (guest idle on console input), `timeout_ms`, `max_steps`, HLT or breakpoint — see `stopped`. `timeout_ms` is a ceiling, not a wait: the call returns as soon as one of the others fires. `from` sets PC first (that is how you boot). **Never blocks.** |
+| `run` | `from?`, `input?`, `until?`, `timeout_ms?` (2000, max 600000), `max_steps?` | Type `input`, advance the guest, return what it printed. Stops on `until` match, a **prompt** (guest idle on console input), `timeout_ms`, `max_steps`, HLT, a breakpoint, or a ^C sent to the altairsim process (`stopped: "interrupted"`) — see `stopped`. `timeout_ms` is a ceiling, not a wait: the call returns as soon as one of the others fires. `from` sets PC first (that is how you boot). **Never blocks.** |
 | `send` | `text` | Type at the console without running. |
 | `recv` | — | Drain output since last read, without running. |
 | `regs` | — | CPU registers now (`pc`, `halted`, `registers{}`). |

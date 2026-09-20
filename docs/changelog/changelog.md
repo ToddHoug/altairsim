@@ -8,6 +8,17 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+### ^C stops a `run` that is going nowhere
+
+Over `--mcp` there was no way to stop a `run` early: it kept going until its `timeout_ms`, and
+a client that gave up on it could only kill the whole server. **Send the `altairsim` process a
+^C (or `kill -INT`) and the `run` in progress stops at once**, returning `stopped:
+"interrupted"` with what the guest had printed so far, and leaving the machine as it was.
+
+^C on a hand-started `--mcp` server is no longer instantly fatal — the first is caught. A
+second ^C, pressed before the server has reported the first, ends it as before. A server
+started in the background or under `nohup` ignores ^C, as such programs do.
+
 ### `run`'s `timeout_ms` is a real ceiling now
 
 Driving a guest over `--mcp` with a real device on a line — a serial cable, a socket, anything
