@@ -1280,6 +1280,51 @@ void Monitor::showVersion(std::ostream& out) {
         row("tree", "clean");
 }
 
+// ---------------------------------------------------------------------------
+// SHOW CLOCK -- emulated time, which the machine has always known and never told
+// anyone (issue #492). Clock::now() is T-states since POWER; nothing before this
+// printed it, so the only way to answer "how long has the guest been running, in
+// its own seconds" was to count instructions and assume a rate.
+//
+// SECONDS COME FROM THE CRYSTAL, NEVER FROM THE HOST. now()/hz() is the guest's
+// own experience of time -- the same division a 9600-baud line does to turn a
+// character time into T-states -- so it stays true under replay and under a
+// snapshot. Reading steady_clock here would produce a number that looked similar
+// and meant something else.
+//
+// hz() is a DIVISOR and is never 0 (clock.h); free() is the pacing POLICY. So
+// emulated seconds are well defined even flat out -- they simply pass faster
+// than real ones, which is the distinction this command has to make plain.
+// ---------------------------------------------------------------------------
+void Monitor::showClock(std::ostream& out) {
+    const uint64_t  t  = m_.clock.now();
+    const long long hz = m_.clock.hz();
+
+    char buf[256];
+    auto row = [&](const char* label, const std::string& value) {
+        std::snprintf(buf, sizeof buf, "  %-9s  %s", label, value.c_str());
+        out << buf << "\n";
+    };
+
+    out << "clock  (emulated time -- T-states since POWER, and what they are worth)\n\n";
+
+    std::snprintf(buf, sizeof buf, "%.6f s   (%llu T-states)", (double)t / (double)hz,
+                  (unsigned long long)t);
+    row("elapsed", buf);
+
+    std::snprintf(buf, sizeof buf, "%lld Hz   SET cpu0 clock_hz=N", hz);
+    row("crystal", buf);
+
+    row("pacing", m_.clock.free()
+                      ? "free -- emulated seconds pass as fast as the host allows"
+                      : "paced -- emulated seconds keep step with real ones");
+
+    out << "\n  Elapsed is the GUEST's time, counted from the crystal above: the same\n"
+           "  division a 9600-baud line does to turn a character into T-states. It is\n"
+           "  not how long you have been sitting here, and running flat out is exactly\n"
+           "  when the two differ most.\n";
+}
+
 // A tiny glob: '*' matches any run, '?' any one character. Both operands are already
 // uppercased by the caller, so the match is case-insensitive like every name lookup.
 static bool globMatch(const std::string& pat, const std::string& s) {
@@ -3186,7 +3231,7 @@ bool Monitor::exec(const std::string& line, std::ostream& out) {
         if (!need(2, "SHOW <id> | SHOW BOARDS | SHOW BOARD <type> | SHOW MACHINES"
                      " | SHOW MACHINE [<name>] | SHOW BUS [MAP|IO|IRQ|CONTENTION] | SHOW ROMS"
                      " | SHOW MOUNTS | SHOW PATHS | SHOW DEBUG | SHOW JOYSTICKS"
-                     " | SHOW VERSION"))
+                     " | SHOW CLOCK | SHOW VERSION"))
             return true;
         // The selector resolves by prefix -- `SHOW MOU` reaches MOUNTS, `SHOW VER` VERSION --
         // built-ins first, exactly the ordering the top-level dispatcher keeps (a keyword
@@ -3197,7 +3242,7 @@ bool Monitor::exec(const std::string& line, std::ostream& out) {
             {"BUS", "ROMS", "MOUNTS", "MOUNT", "PATHS", "PATH", "PWD", "CONSOLE", "DEBUG",
              "VERSION", "BUILD", "DISPLAY", "VIDEO", "WINDOW", "TERMINAL", "JOYSTICKS",
              "JOYSTICK", "JOY", "SYMBOLS", "SYMBOL", "SYM", "BOARDS", "BOARD", "MACHINES",
-             "MACHINE"});
+             "MACHINE", "CLOCK", "TIME"});
         if (sub.empty()) sub = upper(a[1]);
         // Reject trailing junk uniformly: a subcommand that has consumed all the arguments
         // it understands must report the first leftover token, not silently drop it -- a
@@ -3241,6 +3286,13 @@ bool Monitor::exec(const std::string& line, std::ostream& out) {
         if (sub == "DEBUG") {
             if (tooMany(2)) return true;
             showDebug(out);
+            return true;
+        }
+        // TIME as well as CLOCK: the question is asked both ways ("what time is it in
+        // there", "how fast is the clock"), and this one command answers both.
+        if (sub == "CLOCK" || sub == "TIME") {
+            if (tooMany(2)) return true;
+            showClock(out);
             return true;
         }
         // BUILD as well as VERSION: half the time the question being asked is "which

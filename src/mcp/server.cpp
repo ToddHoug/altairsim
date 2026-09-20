@@ -1048,6 +1048,7 @@ Json callTool(Machine& m, McpSession& sess, const std::string& name, const Json&
         const auto hardDeadline = start + std::chrono::milliseconds(600000);  // absolute 10-min cap
         std::string     out;
         uint64_t        steps = 0;
+        uint64_t        tStates = 0;       // emulated time this call spent -- see below
         int             quietSlices = 0;         // consecutive quiet slices -- the instruction-count rule
         clk::time_point idleSince{};             // when this unbroken run of quiet began; unset = busy
         clk::time_point lastRxAt{};              // wall time of the last byte in on any line; unset = none
@@ -1078,6 +1079,7 @@ Json callTool(Machine& m, McpSession& sess, const std::string& name, const Json&
             RunResult r = m.debug.run(2000);
             m.pump();
             steps += r.steps;
+            tStates += r.tStates;
 
             // Keep wall-clock in step with the crystal (see the baseline above). Only when a
             // clock_hz was asked for; free() is the flat-out default and never sleeps here.
@@ -1129,6 +1131,12 @@ Json callTool(Machine& m, McpSession& sess, const std::string& name, const Json&
         d["stopped"] = Json(stopped);
         d["pc"]      = Json((long long)cpu->pc());
         d["steps"]   = Json((long long)steps);
+        // EMULATED TIME THIS CALL SPENT, which `steps` cannot give you: instructions are
+        // 4-17 T-states apiece, so a count of them is not a duration (issue #492). `step`
+        // has always reported t_states for its own call; run not doing so was an oversight.
+        // Seconds are t_states divided by the crystal -- `monitor {command: "SHOW CLOCK"}`
+        // prints that, plus the total since power-on.
+        d["t_states"] = Json((long long)tStates);
         std::string text = out;
         if (!text.empty() && text.back() != '\n') text += '\n';
         text += "[stopped: " + stopped + "]";
