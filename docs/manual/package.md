@@ -15,6 +15,7 @@ LICENSE                  the MIT licence this is published under.
 LICENSE-SDL3             the licence of SDL3, which is built into the program.
 examples/                machines that boot, media included.
 hostbridge/              the file-transfer utilities: source, HEX, COM.
+skills/                  the same AI briefing, packaged for a client that reads skills.
 ```
 
 That is the whole archive. There is no library to install, no runtime, and no configuration
@@ -51,6 +52,14 @@ This one is not for you, exactly. It is a briefing document for an **AI assistan
 a working directory, start an assistant there, and say *"using altairsim, boot CP/M and show me
 what is on the disk."* It tells the assistant how to drive the machine over the program's MCP
 interface. Ignore it if that is not how you work — nothing else depends on it.
+
+`skills/altairsim/` is that same briefing with a cover sheet on it. An assistant that reads
+**Agent Skills** picks a skill up by its description, so copying that folder into your client's
+skills directory is enough — you ask for a machine and it goes and reads the briefing itself,
+instead of you first telling it which file to open. The folder is self-contained: move it
+wherever your client keeps skills and nothing inside it breaks. If your assistant does not know
+what a skill is, ignore the folder and hand it `DRIVING-WITH-AI.md` the way this section
+describes.
 
 The quick reference travels beside it: the whole command surface — every option, every monitor
 command, every board and machine — generated from this very program so it matches the binary you

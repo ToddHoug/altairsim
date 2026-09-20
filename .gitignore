@@ -250,8 +250,22 @@ printout.txt
 # connects the 88-PIO's `out` line to `file:parallel-out.txt`.
 parallel-out.txt
 
-# Agent scratch worktrees -- not repository content.
-.claude/worktrees/
+# .claude/ IS MOSTLY LOCAL, AND ONE DIRECTORY IN IT IS NOT.
+#
+# settings.local.json is this machine's permission grants, scheduled_tasks.lock is a runtime
+# file, and worktrees/ is agent scratch -- none of it is repository content, and a `git add -A`
+# would sweep every one of them into a commit (the same mistake printout.txt records above).
+# So the default is EXCLUDE, and the exception is named.
+#
+# .claude/skills/ IS TRACKED ON PURPOSE. It holds the altairsim skill -- the briefing an
+# assistant reads to drive a guest over MCP -- and Claude Code discovers a project skill at
+# exactly that path, so committing it is what makes a fresh clone work with no setup. It is
+# also the packaged skill's source (docs/package.map ships it as `skills/`).
+#
+# The pattern must exclude the CONTENTS (`.claude/*`), not the directory (`.claude/`): git
+# does not descend into an excluded directory, so a `!` re-include underneath one never fires.
+.claude/*
+!.claude/skills/
 
 # TODO.md is an internal, fast-moving brainstorming/working document, not a
 # shipped artifact. Anything in it that is meant for the public becomes a GitHub

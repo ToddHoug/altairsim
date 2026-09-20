@@ -85,6 +85,36 @@ DIR  examples/printing   <=  examples/printing
 # tree, hostbridge/ in the zip.
 DIR  hostbridge          <=  cpm/hostbridge
 
+# ALSO NOT AN EXAMPLE. skills/altairsim/ is DRIVING-WITH-AI.md's front door for an assistant
+# that reads Agent Skills: a short SKILL.md whose frontmatter `description` is what makes a
+# client load the briefing WITHOUT the user remembering to say "read DRIVING-WITH-AI.md".
+# Copy the folder to your client's skills directory and asking for a machine is enough.
+#
+# THE SOURCE IS .claude/skills/, WHICH IS WHERE CLAUDE CODE LOOKS. A clone gets a working
+# skill with no setup, which is the case that matters most -- the repository is where a guest
+# actually gets driven. A root-level skills/ would have been the PLUGIN layout, scanned only
+# for a repo installed as a plugin, so a plain clone would have seen nothing. The package path
+# stays `skills/` regardless: a zip has no .claude/ and its reader copies the folder wherever
+# their own client keeps skills.
+#
+# THE BRIEFING IS NOT DUPLICATED IN THE TREE. The skill directory holds SKILL.md and nothing
+# else; build-package.sh copies docs/DRIVING-WITH-AI.md into skills/altairsim/references/ on
+# the way into the zip, so there is ONE master and the shipped skill is still self-contained --
+# it keeps working when a user drags it into their own skills directory, which a relative path
+# back up to the package root would not. In a CLONE that references/ file does not exist, and
+# SKILL.md's closing line names docs/DRIVING-WITH-AI.md for a reader standing in the tree.
+#
+# PROSE, NOT A SYMLINK, and that was a near miss. A committed symlink would checkout on
+# Windows as a text file containing the path (git core.symlinks is off in many installs), and
+# on Unix the DIR copy below preserves the link, so the expand() that follows would write
+# THROUGH it back into docs/DRIVING-WITH-AI.md -- source and destination the same file, cp
+# refuses, and the release build dies under set -eu. One sentence in SKILL.md costs nothing.
+#
+# A DIR, not a FILE, and deliberately: a FILE line's package path is the literal string
+# tests/acceptance/docs-package.cmake makes the manual contain, and the reader's manifest
+# should say `skills/`, not `skills/altairsim/references/driving-with-ai.md`.
+DIR  skills              <=  .claude/skills
+
 # ---------------------------------------------------------------------------
 # FILES -- <package path>  <=  <path in this repo>
 #

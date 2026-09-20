@@ -158,14 +158,15 @@ covers it in full.)
 
 ## The tools
 
-`tools/list` is authoritative — it returns **19** tools on this build. Each tool's schema comes
-off the board itself, so ask `board_types` what a card can be told rather than guessing.
+`tools/list` is authoritative — ask it rather than working from the tables below. Each tool's
+schema comes off the board itself, so ask `board_types` what a card can be told rather than
+guessing.
 
-**Build / inspect a machine:** `board_types`, `board_list`, `board_get`, `board_add`,
-`board_set`, `who`, `bus_map`, `bus_io`, `bus_contention`, `mem_dump`, `mem_deposit`,
-`mem_load`, `roms`, `reset`.
+**Building and inspecting a machine** — fitting boards and reading them back, mapping the bus,
+reading and writing memory, the ROMs, reset — is a `board_*`, `bus_*` or `mem_*` tool, and
+`tools/list` names them with their arguments.
 
-**Drive a running guest:**
+**Driving a running guest** is the handful below, and they are the ones worth knowing by heart:
 
 | Tool | Args | Does |
 |---|---|---|
