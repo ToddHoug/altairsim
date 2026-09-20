@@ -8,6 +8,24 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+### `run`'s `timeout_ms` is a real ceiling now
+
+Driving a guest over `--mcp` with a real device on a line — a serial cable, a socket, anything
+but the console and an empty jack — a `run` could outlast its budget without limit. Bytes
+arriving off the wire renewed the deadline, so a peer that said anything at all, however
+slowly, kept the call going; the only true bound was an internal ten-minute cap. Ask for six
+seconds and you could wait two minutes. **`timeout_ms` now bounds the call in wall-clock time
+no matter what is arriving on any line.**
+
+The leniency was there for a reason — a boot loader pulling its system image in 512-byte
+blocks over a 38.4k line runs many seconds, and cutting it at a modest budget truncated the
+transfer. The answer is to ask for the time up front instead: give such a call a `timeout_ms`
+as long as its worst case (up to 600000 ms) and let `until` end it early, which costs nothing
+because the budget is a ceiling and not a wait. A call that does hit it mid-transfer returns
+`stopped: "timeout"` with what it read so far — a normal result to resume another `run` on,
+not a failure. The separate grace that keeps a quiet wire from being mistaken for a finished
+prompt is unchanged.
+
 ### The Altair 680b moves to its own simulator
 
 The **MITS Altair 680b** — the Motorola 6800 machine 1.0.0 added — leaves altairsim for a
