@@ -4,6 +4,7 @@
 #include "boards/registry.h"
 #include "cli/monitor.h"
 #include "core/crc32.h"
+#include "core/debug.h"
 #include "core/hex.h"
 #include "core/roms.h"
 #include "core/version.h"
@@ -17,9 +18,12 @@
 #include "util/json.h"
 
 #include <chrono>
+#include <condition_variable>
+#include <deque>
 #include <fstream>
 #include <iostream>
 #include <istream>
+#include <mutex>
 #include <ostream>
 #include <sstream>
 #include <thread>
@@ -188,8 +192,11 @@ Json toolList() {
                        "Advance the running guest a bounded slice and return what it printed to "
                        "the console. STOPS on: `until` matched, a prompt reached (the guest is "
                        "spinning on console input with nothing to say), timeout_ms, max_steps, a "
-                       "HLT, or a breakpoint -- reported in `stopped`. This is the expect loop: "
-                       "type a command with `input`, read the reply, call again. Never blocks.",
+                       "HLT, a breakpoint, a `notifications/cancelled` naming this call's "
+                       "request id, or a SIGINT to the altairsim process itself (an "
+                       "out-of-band ^C) -- reported in `stopped`, the last two as "
+                       "`interrupted`. This is the expect loop: type a command with "
+                       "`input`, read the reply, call again. Never blocks.",
                        p, {}));
     }
     {
@@ -1064,6 +1071,20 @@ Json callTool(Machine& m, McpSession& sess, const std::string& name, const Json&
         for (;;) {
             drain();
             if (!until.empty() && out.find(until) != std::string::npos) { stopped = "match"; break; }
+            // ASK BEFORE THE SLICE, not just after it. Debugger::run() clears the flag as it
+            // enters, so an interrupt that arrived since the last slice returned -- and with a
+            // clock_hz set, most of this loop's wall time is the pacing sleep below -- would be
+            // wiped by the very call meant to report it. Measured before this check: five of
+            // eight ^Cs swallowed at clock_hz=2000000.
+            if (Debugger::interrupted()) {
+                // CONSUME it: reporting it to the client is what "handled" means. Leave it
+                // standing and the next ^C -- the one that means "I said stop" -- would find
+                // an unconsumed flag and kill the process (SigintGuard, core/debug.h) even
+                // though this one was heard and answered.
+                Debugger::clearInterrupt();
+                stopped = "interrupted";
+                break;
+            }
             if (clk::now() >= deadline) { stopped = "timeout"; break; }
             if (maxSteps && steps >= maxSteps) { stopped = "steps"; break; }
 
@@ -1089,9 +1110,11 @@ Json callTool(Machine& m, McpSession& sess, const std::string& name, const Json&
             const bool received = m.rxBytes() != rxBefore;
             const uint64_t hungry = con->hungry() - hungryBefore;
 
-            if (r.why == StopReason::Halted)     { stopped = "halt";       break; }
-            if (r.why == StopReason::Breakpoint) { stopped = "breakpoint"; break; }
-            if (r.why == StopReason::NoCpu)      { stopped = "no-cpu";      break; }
+            if (r.why == StopReason::Halted)      { stopped = "halt";        break; }
+            if (r.why == StopReason::Breakpoint)  { stopped = "breakpoint";  break; }
+            if (r.why == StopReason::NoCpu)       { stopped = "no-cpu";      break; }
+            if (r.why == StopReason::Interrupted) { Debugger::clearInterrupt();
+                                                    stopped = "interrupted"; break; }
 
             // IDLE-STOP -- hand control back when the guest has nothing to do, so the AI is not
             // made to wait out timeout_ms for its next command. Gated on clock.idle() like
@@ -1566,6 +1589,31 @@ void replyError(std::ostream& out, const Json& id, int code, const std::string& 
     out << r.dump() << "\n" << std::flush;
 }
 
+// One line off the wire, already parsed (or not). Queued so the WORKER thread -- the only
+// one that ever touches the Machine or writes to `out` -- drains it in order, while the
+// READER thread (runMcp) keeps consuming stdin even during a long `run`. A parse failure
+// is queued too rather than answered on the spot: `out` has exactly one writer, ever.
+struct QueuedMsg {
+    bool        parseOk = true;
+    std::string parseErr;
+    Json        req;
+};
+
+// HOW DEEP THE QUEUE MAY GET before the reader stops taking more on. A client that
+// pipelines faster than the guest can execute -- or one that talks to a server parked
+// in a long `run` -- would otherwise grow this without limit, and the memory it costs
+// is the client's to spend and ours to pay. At the cap the reader simply stops reading
+// stdin until the worker has drained one; the kernel's pipe buffer takes up the slack
+// and the client blocks on its own write, which is what backpressure is supposed to
+// feel like. Nothing is dropped and nothing is answered out of order.
+//
+// The cap is generous on purpose: a cancellation is acted on in the reader BEFORE the
+// queue is touched, so it overtakes anything waiting -- but only if the reader is still
+// reading. Parking it is therefore the one thing that can delay a cancel, and it takes
+// this many un-drained requests to get there, which a client driving a guest will never
+// do by accident.
+constexpr size_t kMaxPending = 4096;
+
 } // namespace
 
 int runMcp(Machine& m, std::istream& in, std::ostream& out, const std::string& mirror) {
@@ -1585,17 +1633,84 @@ int runMcp(Machine& m, std::istream& in, std::ostream& out, const std::string& m
     if (!mirror.empty() && !bindErr.empty())
         std::cerr << "altairsim: --mirror " << mirror << " failed: " << bindErr << "\n";
 
-    std::string line;
-    while (std::getline(in, line)) {
-        if (line.empty()) continue;
-        Json req;
-        std::string err;
-        if (!Json::parse(line, req, err)) {
-            replyError(out, Json(), -32700, "parse error: " + err);
+    // ^C AS AN OUT-OF-BAND STOP for a wedged `run` (#488, part 1): belt-and-braces for an
+    // external `kill -INT` on the whole process. Installed for the whole session, restored
+    // on return so nothing outlives this function.
+    SigintGuard sigintGuard;
+
+    // THE READER/WORKER SPLIT (#488, part 2): a single getline-then-dispatch loop cannot
+    // see a `notifications/cancelled` that arrives while it is blocked inside a long
+    // `run` -- it is not reading stdin again until that call returns. So a separate
+    // thread does nothing but read and parse lines, forever, and hands them to the loop
+    // below over a queue -- except `notifications/cancelled`, which it acts on
+    // immediately against the in-flight request's id instead of queuing, since queuing it
+    // would defeat the entire point: it would just wait behind the very call it is meant
+    // to interrupt. The reader thread touches stdin, `pending`, `eof`, `currentId` and
+    // `haveCurrentId` ONLY -- never the Machine, never `out` -- so a tool call's existing
+    // single-threaded access to either needs no change at all.
+    std::mutex              mu;
+    std::condition_variable cv;
+    std::deque<QueuedMsg>   pending;
+    bool                    eof = false;
+    Json                    currentId;               // the request the worker is running now
+    bool                    haveCurrentId = false;    // false: nothing in flight to cancel
+
+    std::thread reader([&] {
+        std::string rline;
+        while (std::getline(in, rline)) {
+            if (rline.empty()) continue;
+            QueuedMsg qm;
+            qm.parseOk = Json::parse(rline, qm.req, qm.parseErr);
+            if (qm.parseOk && qm.req.at("method").str() == "notifications/cancelled") {
+                std::lock_guard<std::mutex> lk(mu);
+                const Json& target = qm.req.at("params").at("requestId");
+                if (haveCurrentId && !target.isNull() && target.dump() == currentId.dump())
+                    Debugger::interrupt();
+                continue;  // acted on immediately -- never queued, never replied to
+            }
+            std::unique_lock<std::mutex> lk(mu);
+            cv.wait(lk, [&] { return pending.size() < kMaxPending; });
+            pending.push_back(std::move(qm));
+            cv.notify_all();
+        }
+        std::lock_guard<std::mutex> lk(mu);
+        eof = true;
+        cv.notify_all();
+    });
+
+    for (;;) {
+        QueuedMsg qm;
+        {
+            std::unique_lock<std::mutex> lk(mu);
+            cv.wait(lk, [&] { return !pending.empty() || eof; });
+            if (pending.empty() && eof) break;
+            qm = std::move(pending.front());
+            pending.pop_front();
+            cv.notify_all();  // room again -- a reader parked on the cap can take the next line
+        }
+
+        if (!qm.parseOk) {
+            replyError(out, Json(), -32700, "parse error: " + qm.parseErr);
             continue;
         }
+        const Json& req    = qm.req;
         std::string method = req.at("method").str();
-        Json id = req.at("id");
+        Json        id     = req.at("id");
+
+        {
+            // A stale interrupt -- a ^C that landed after the previous call already
+            // returned, or while some other tool ran -- must not carry into this request
+            // and kill it on the first slice. Clear it HERE, under the same lock that
+            // publishes the id, and not at the top of the `run` tool: everything between
+            // marking a request in flight and that handler running is a window in which
+            // the reader could match a cancel, call interrupt(), and have the handler
+            // wipe it on the way past. Clearing before the id is visible closes it -- a
+            // cancel that arrives from this point on is for THIS request and survives.
+            std::lock_guard<std::mutex> lk(mu);
+            Debugger::clearInterrupt();
+            currentId     = id;
+            haveCurrentId = true;
+        }
 
         if (method == "initialize") {
             Json r = Json::obj();
@@ -1611,28 +1726,28 @@ int runMcp(Machine& m, std::istream& in, std::ostream& out, const std::string& m
             info["version"] = Json(versionNumber());
             r["serverInfo"] = info;
             reply(out, id, r);
-            continue;
-        }
-        if (method == "notifications/initialized") continue;
-
-        if (method == "tools/list") {
+        } else if (method == "notifications/initialized") {
+            // no reply -- a notification, not a request
+        } else if (method == "tools/list") {
             Json r = Json::obj();
             r["tools"] = toolList();
             reply(out, id, r);
-            continue;
-        }
-        if (method == "tools/call") {
+        } else if (method == "tools/call") {
             const Json& params = req.at("params");
             std::string name = params.at("name").str();
             reply(out, id, callTool(m, sess, name, params.at("arguments")));
-            continue;
-        }
-        if (method == "ping") {
+        } else if (method == "ping") {
             reply(out, id, Json::obj());
-            continue;
+        } else {
+            replyError(out, id, -32601, "method not found: " + method);
         }
-        replyError(out, id, -32601, "method not found: " + method);
+
+        {
+            std::lock_guard<std::mutex> lk(mu);
+            haveCurrentId = false;  // done -- a cancel for this id from here on matches nothing
+        }
     }
+    reader.join();
     return 0;
 }
 

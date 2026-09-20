@@ -40,7 +40,8 @@ through MCP:
   (a prompt like `A0>`) appears, `from` to set the PC first (booting is `from` the boot
   PROM). It **also stops on its own when the guest reaches a prompt** — spinning on the
   console with nothing to say — so you get control back without guessing a timeout. Every
-  stop says why in `stopped`: `match`, `idle`, `timeout`, `steps`, `halt`, `breakpoint`.
+  stop says why in `stopped`: `match`, `idle`, `timeout`, `steps`, `halt`, `breakpoint`,
+  `interrupted`.
 - **`send`** — type at the console without running (then `run` to let it be read).
 - **`recv`** — drain what the guest has printed since you last looked, without running.
 - **`regs`** — the CPU registers right now.
@@ -75,6 +76,31 @@ worst case takes (up to 600000 ms), and let it return early on `until` or a prom
 finishes, exactly as a fast call does. A call that hits `timeout_ms` mid-transfer returns
 `stopped: "timeout"` with whatever it has read so far — a normal result to loop `run` on, not a
 failure, and `regs`/`mem_dump` can confirm a destination pointer is still climbing while you do.
+
+### Stopping a `run` that will not end
+
+A `run` ends by itself at `timeout_ms`, but you may not want to wait that long. There are
+two ways to stop it early, and both make the `run` in progress stop at once and return
+`stopped: "interrupted"` with what the guest printed so far:
+
+- **Cancel the request.** Send the standard MCP `notifications/cancelled` message naming the
+  request id of the `run`. The server keeps reading its input while a `run` is going, so the
+  cancel is seen straight away. A cancel that names some other request, or one that arrives
+  after the `run` has returned, is ignored, and it never carries over to the next call. Other
+  requests sent during a `run` are queued and answered in order once it returns.
+- **Send the process a ^C.** Press it in the terminal that started the server, or run
+  `kill -INT` on its process ID.
+
+ The machine is left exactly as it
+was, so you can look at it and carry on with another `run`. A ^C that arrives while no `run`
+is in progress does nothing to the guest, and a new `run` always starts clean.
+
+The rest of this section is about the ^C.
+
+This changes what ^C does to an `--mcp` server you started by hand: the first ^C is caught,
+not fatal. If you press ^C again before the server has reported the first one, the second
+one ends the server as ^C normally would. A server started in the background, or with
+`nohup`, ignores ^C altogether, as any such program does.
 
 Under `--mcp` the console line is quietly re-seated onto an in-memory terminal the server
 owns (there is no host keyboard behind a pipe), which is what `send`/`run`/`recv` read and

@@ -22,6 +22,7 @@
 #include "core/expr.h"
 
 #include <array>
+#include <csignal>
 #include <cstdint>
 #include <memory>
 #include <ostream>
@@ -284,6 +285,14 @@ public:
     static void interrupt();
     static void clearInterrupt();
 
+    // Is one pending RIGHT NOW? run() clears the flag on entry, so a caller that
+    // drives run() in SLICES cannot learn from the slice alone that an interrupt
+    // arrived between two of them -- the next slice wipes it first. Such a caller
+    // asks here at the top of its own loop instead; see the --mcp run tool, which
+    // sleeps between slices to pace a clock and would otherwise lose every ^C that
+    // landed in the sleep.
+    static bool interrupted();
+
 private:
     bool armObserver();
     void disarmObserver();
@@ -394,6 +403,33 @@ private:
 
     // STEP-OVER's internal one-shot PC target, or -1 for none. See setStepTarget.
     int stepTarget_ = -1;
+};
+
+// ^C AS AN OUT-OF-BAND STOP for a run with no other way to interrupt it -- a piped
+// monitor session (no raw terminal, so no ISIG, and no ATTN either), and an `--mcp`
+// server, whose stdin is the JSON-RPC channel itself, not a keyboard `run` can poll
+// for ATTN on. Install for exactly the span that should honour ^C this way (a RUN, a
+// STEP, or the whole of runMcp) and the previous handler comes back on scope exit, so
+// ^C at an ordinary prompt still kills the process exactly as it always did.
+//
+// A SECOND ^C KILLS. The first sets the flag and the run stops on it; but an `--mcp`
+// server holds this guard for its whole session, not for one call, so without that
+// rule a ^C at a server sitting idle -- or at one wedged somewhere the flag is never
+// read -- would be swallowed, and the process could not be stopped from the keyboard
+// at all. So the handler checks whether a previous interrupt is STILL unconsumed: if
+// it is, it puts the default disposition back and re-raises, and the process dies the
+// way the operator plainly meant. Everything it does is what a handler is allowed to
+// do -- an atomic flag, signal(), raise() -- and nothing else runs on that thread.
+class SigintGuard {
+  public:
+    SigintGuard();
+    ~SigintGuard();
+    SigintGuard(const SigintGuard&)            = delete;
+    SigintGuard& operator=(const SigintGuard&) = delete;
+
+  private:
+    void (*prev_)(int) = nullptr;
+    bool installed_    = false;  // false: SIGINT was inherited ignored -- we left it that way
 };
 
 } // namespace altair
