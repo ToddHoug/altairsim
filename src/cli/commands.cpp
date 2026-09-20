@@ -334,7 +334,7 @@ static const std::vector<CommandDef> kCommands = {
      "                           (also CONTENTION=WARN|ERROR|SILENT, UNCLAIMED=WARN|HALT|SILENT)"},
     {"SHOW", true, nullptr,
      "SHOW <id>|BOARDS|BOARD <type> [UNITS]|MACHINES|MACHINE [<name>]|BUS [MAP|IO|IRQ|CONTENTION]|"
-     "ROMS|MOUNTS|PATHS|CONSOLE|DISPLAY|SYMBOLS|VERSION",
+     "ROMS|MOUNTS|PATHS|CONSOLE|DISPLAY|SYMBOLS|CLOCK|VERSION",
      "  SHOW mem0        regions and properties\n"
      "  SHOW BOARDS      the board types you can add\n"
      "  SHOW BOARD sol   one type's description and properties (add UNITS for just those)\n"
@@ -349,6 +349,7 @@ static const std::vector<CommandDef> kCommands = {
      "  SHOW TERMINAL    the built-in terminal's transforms (strip7out, cr, bsdel, ...)\n"
      "  SHOW JOYSTICKS   the host game controllers a D+7A can read (SDL builds)\n"
      "  SHOW SYMBOLS     the loaded symbols (SHOW SYMBOLS SIO* filters); load them with SYMBOLS\n"
+     "  SHOW CLOCK       emulated time: T-states since POWER, and what they are in seconds\n"
      "  SHOW ROMS        the ROM images built into this binary, and where each came from\n"
      "  SHOW VERSION     which build this is, and the commit it was built from"},
     {"DEPOSIT", true, nullptr, "DEPOSIT <addr> <bytes...>",  // DE

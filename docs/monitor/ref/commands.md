@@ -1026,7 +1026,7 @@ SET BUS UNCLAIMED=WARN   warn on a cycle no board answered
 ### SHOW — `SH[OW]`
 
 ```
-SHOW <id>|BOARDS|BOARD <type> [UNITS]|MACHINES|MACHINE [<name>]|BUS [MAP|IO|IRQ|CONTENTION]|ROMS|MOUNTS|PATHS|CONSOLE|DISPLAY|SYMBOLS|VERSION
+SHOW <id>|BOARDS|BOARD <type> [UNITS]|MACHINES|MACHINE [<name>]|BUS [MAP|IO|IRQ|CONTENTION]|ROMS|MOUNTS|PATHS|CONSOLE|DISPLAY|SYMBOLS|CLOCK|VERSION
 ```
 
 ```
@@ -1044,6 +1044,7 @@ SHOW DISPLAY     the host video window: keyboard focus, and the CRT look
 SHOW TERMINAL    the built-in terminal's transforms (strip7out, cr, bsdel, ...)
 SHOW JOYSTICKS   the host game controllers a D+7A can read (SDL builds)
 SHOW SYMBOLS     the loaded symbols (SHOW SYMBOLS SIO* filters); load them with SYMBOLS
+SHOW CLOCK       emulated time: T-states since POWER, and what they are in seconds
 SHOW ROMS        the ROM images built into this binary, and where each came from
 SHOW VERSION     which build this is, and the commit it was built from
 ```
