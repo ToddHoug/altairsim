@@ -10,13 +10,9 @@
 ;       ASM R                   -> R.HEX
 ;       LOAD R                  -> R.COM
 ;
-; THE NAME IS AltairZ80'S. THE CODE IS NOT.
-; AltairZ80 has an R.COM and a W.COM, and the muscle memory is worth
-; keeping, so ours are called the same thing. Nothing else is shared: that
-; R.COM talks to a "SIMH pseudo device" at port 0FEH, which in a real
-; Altair is the 88-VI/RTC's control register, and it was written in SPL.
-; This one talks to a card of our own at 0B0H and is 8080 assembler.
-; AltairZ80's R.COM will not run here, and this one will not run there.
+; The name is one letter because it is typed constantly. R talks to the
+; Host Bridge card at 0B0H and to nothing else: no pseudo-device, no port
+; 0FEH -- in a real Altair that is the 88-VI/RTC's control register.
 ;
 ;-----------------------------------------------------------------------
 ; EVERY DISK OPERATION IN THIS PROGRAM IS A BDOS CALL, AND THAT IS THE
@@ -82,10 +78,9 @@ CRESET  EQU     8
 ;=======================================================================
 START:  LXI     SP,STACK
 
-; RESET first. Not the 128-times-in-a-row ritual AltairZ80's utilities
-; need -- ONE byte, because this card has no undefined state to climb out
-; of. It costs nothing and it means we start from a known place even if
-; the last program to run left a transfer half-finished.
+; RESET first -- ONE byte, because this card has no undefined state to
+; climb out of. It costs nothing and it means we start from a known place
+; even if the last program to run left a transfer half-finished.
         MVI     A,CRESET
         OUT     HBCMD
 
@@ -396,9 +391,8 @@ RPE2:   LXI     D,MCRLF
 ;
 ; What we CANNOT undo is the upper-casing: the CCP folds the whole tail
 ; before we see it. The card compensates (it folds host names when looking
-; for a match), which is why there is no `L` switch here. AltairZ80's READ
-; has one, and it puts the burden on the human to remember which of their
-; files are in which case.
+; for a match), which is why there is no `L` switch here: nobody should
+; have to remember which of their files are in which case.
 ;-----------------------------------------------------------------------
 PARSE:  LXI     H,TAIL
         MOV     B,M             ; length of the tail
@@ -516,6 +510,13 @@ BN9:    MOV     H,B
 ; characters CP/M cannot store in a filename. Dropping rather than
 ; refusing is the friendly choice for a name that came off a host
 ; filesystem, where `my-notes(2).txt` is perfectly ordinary.
+;
+; IT ALSO FOLDS THE NAME TO UPPER CASE, and that is not cosmetic. A CP/M
+; directory entry holds upper case; the CCP upper-cases everything the
+; user types, so a file stored as `foo.asm` can never be named again --
+; not by ERA, not by the assembler, not by DIR's own match. A name that
+; arrives here in lower case did not come from the tail: it came off the
+; host, either as a directory match under a wildcard or through BASENM.
 ;-----------------------------------------------------------------------
 MKFCB:  PUSH    H
 
@@ -545,6 +546,7 @@ MF1:    MVI     M,' '
         JNZ     MF2             ; no colon -> no drive; back up
         DCX     H
         MOV     A,M             ; the letter
+        CALL    UPCASE
         SUI     'A'-1           ; 'A' -> 1, 'B' -> 2 ... 0 means "current"
         STA     FCB
         INX     H
@@ -560,6 +562,7 @@ MF4:    MOV     A,M
         JZ      MF9             ; end of string: no extension at all
         CPI     '.'
         JZ      MF5
+        CALL    UPCASE
         CALL    LEGAL           ; CY = CP/M cannot store this character
         JC      MF4N
         MOV     C,A             ; LEGAL gives A back; stash it
@@ -580,6 +583,7 @@ MF5:    INX     H               ; step over the '.'
 MF6:    MOV     A,M
         ORA     A
         RZ
+        CALL    UPCASE
         CALL    LEGAL
         JC      MF6N
         MOV     C,A
@@ -594,6 +598,17 @@ MF6N:   INX     H
         JMP     MF6
 
 MF9:    RET
+
+;-----------------------------------------------------------------------
+; UPCASE -- fold a lower case letter in A to upper case. Everything else
+;           passes through untouched. Clobbers nothing but A and the flags.
+;-----------------------------------------------------------------------
+UPCASE: CPI     'a'
+        RC
+        CPI     'z'+1
+        RNC
+        SUI     'a'-'A'
+        RET
 
 ;-----------------------------------------------------------------------
 ; LEGAL -- CY set if A is a character CP/M cannot put in a filename.
@@ -866,7 +881,7 @@ MNOHB:  DB      CR,LF,'R: no host bridge at B0H.',CR,LF
         DB      'This machine has no `hostbridge` card in it, or it is at'
         DB      ' another port.',CR,LF,'$'
 
-MUSAGE: DB      CR,LF,'R -- copy a file from the host into CP/M.  (1.0)',CR,LF,CR,LF
+MUSAGE: DB      CR,LF,'R -- copy a file from the host into CP/M.  (1.1)',CR,LF,CR,LF
         DB      '   R <hostfile> [cpmfile]',CR,LF
         DB      '   R <pattern>',CR,LF,CR,LF
         DB      'Examples',CR,LF

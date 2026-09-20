@@ -10,10 +10,9 @@
 ;       ASM W                   -> W.HEX
 ;       LOAD W                  -> W.COM
 ;
-; THE NAME IS AltairZ80'S. THE CODE IS NOT -- see the same paragraph at the
-; top of R.ASM. Our W talks to a card of our own at 0B0H; theirs talks to a
-; "SIMH pseudo device" at 0FEH, which in a real Altair is the 88-VI/RTC's
-; control register.
+; The name is one letter because it is typed constantly -- see the same
+; paragraph at the top of R.ASM. W talks to the Host Bridge card at 0B0H
+; and to nothing else.
 ;
 ;-----------------------------------------------------------------------
 ; EVERY DISK OPERATION IN THIS PROGRAM IS A BDOS CALL, AND THAT IS THE
@@ -25,8 +24,7 @@
 ;
 ; AND BDOS CLOBBERS EVERY REGISTER (A,B,C,D,E,H,L -- only SP survives).
 ;-----------------------------------------------------------------------
-; B OR T, AND B IS THE DEFAULT. THIS IS DELIBERATE AND IT IS THE OPPOSITE
-; OF AltairZ80'S CHOICE.
+; B OR T, AND B IS THE DEFAULT. THAT IS DELIBERATE.
 ;
 ; CP/M stores whole 128-byte records and keeps NO BYTE COUNT anywhere, so a
 ; file's true length is simply not recorded: the last record is padded, by
@@ -42,11 +40,10 @@
 ;                binary file that happens to contain a 1AH byte comes out
 ;                TRUNCATED, which is why this is not the default.
 ;
-; AltairZ80's W defaults to text and keeps an exception list of extensions
-; (.COM, .REL, .DAT...) that it treats as binary instead. A file whose name
-; is not on the list and whose contents contain a 1AH is then silently
-; truncated. Defaulting to EXACT costs a few pad bytes. Defaulting to text
-; costs your data.
+; WE DO NOT GUESS FROM THE EXTENSION. Keeping a list of names that "are
+; really binary" (.COM, .REL, .DAT...) only moves the damage to the file
+; that is not on it: one 1AH and it is silently truncated. Defaulting to
+; EXACT costs a few pad bytes. Defaulting to text costs your data.
 ;-----------------------------------------------------------------------
 
         ORG     100H
@@ -99,8 +96,8 @@ CRESET  EQU     8
 ;=======================================================================
 START:  LXI     SP,STACK
 
-; RESET first -- ONE byte, not the 128-times-in-a-row ritual AltairZ80's
-; utilities open with. This card has no undefined state to climb out of.
+; RESET first -- ONE byte. This card has no undefined state to climb
+; out of.
         MVI     A,CRESET
         OUT     HBCMD
 
