@@ -93,7 +93,7 @@ two ways to stop it early, and both make the `run` in progress stop at once and 
   cancel is seen straight away. A cancel that names some other request, or one that arrives
   after the `run` has returned, is ignored, and it never carries over to the next call. Other
   requests sent during a `run` are queued and answered in order once it returns — except
-  `status` (#490), which is the one call that is never queued: poll it to check whether a
+  `status`, which is the one call that is never queued: poll it to check whether a
   `run` you are considering cancelling is actually still alive, or already back to idle.
 - **Send the process a ^C.** Press it in the terminal that started the server, or run
   `kill -INT` on its process ID.
