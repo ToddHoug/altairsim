@@ -22,7 +22,8 @@ system C/C++ runtime and `ws2_32` (Winsock).
 **A clean Windows 10 22H2 was taken from nothing to a working build on 2026-07-20** — MSVC Build
 Tools, CMake/Ninja and Git installed with only `curl.exe`, then `altairsim` built from a plain
 PowerShell and the suite run. That walk-through, with the commands and the traps a bare machine
-actually has, is **§1.1**.
+actually has, is **§1.1** — and it is now one script, **`tools\windows\RUN-ME-setup-windows-worker.bat`**,
+which also sets up ssh access so another computer can drive the build.
 
 ---
 
@@ -60,6 +61,35 @@ Optionally install the **GitHub CLI** (`gh`) from <https://cli.github.com/> for 
 | git | any | Git for Windows |
 
 ### 1.1 From a bare machine, scripted — the reproducible route
+
+> **The short version: double-click `tools\windows\RUN-ME-setup-windows-worker.bat`.** (Not the
+> `.ps1` beside it — double-clicking that only opens it in Notepad.) It approves its own elevation
+> (one UAC prompt) and does everything in this section, plus the rest of a build worker: OpenSSH
+> Server with the firewall open, the ssh key of the computer that will connect (it asks you to
+> paste one; press Enter to skip), the static SDL3 of §6 approach C, and no sleeping on AC power.
+> **The repo is the checkout you run it from** — it is used exactly as it is (no clone, no fetch,
+> `origin` untouched). Only a copy taken out of the repo needs `-RepoDir <folder>`, and then it
+> clones there. It ends by configuring altairsim and **requiring** `SDL3 found -- video boards
+> enabled (windowed)`; add `-Build` to run the full Release build and `ctest -LE slow` as well.
+>
+> **Safe to run again.** Every step checks first and skips what is done. Each line is labelled
+> `[changed]`, `[already]`, `[check]` or `[todo]`, and the summary at the end says what *this
+> run* changed on the machine — on a finished machine, nothing. It deliberately leaves Git Bash's
+> `bin` directory off `PATH` (System32's `bash.exe` is WSL, so which `bash` you got would be a
+> coin toss) and it looks only for Visual Studio **2022** (17.x), so
+> a newer or older Visual Studio on the same machine is left alone. If a previous uninstall left
+> debris in the Build Tools folder — which the installer refuses to install over — it clears
+> that folder, but only when no Visual Studio instance is registered there.
+>
+> **Verified 2026-09-21** on Windows 10 22H2, from scratch and again as a no-op (PR #511).
+> **Not yet exercised:** `-Build`, a pristine machine with no
+> Visual Studio at all, the OpenSSH and Git *installation* paths (both were already present), and
+> the `-RepoDir` clone path (a copy of the script taken out of the repo).
+> It makes **no scp delivery key** — that stays a manual step, because its public half has to be
+> added on the coordinator (`DISTRIBUTION.md` §4.5).
+>
+> The manual commands below are what the script runs, kept here so you can see the reasons and
+> do one step by hand.
 
 **Proven end to end on a clean Windows 10 22H2 (build 19045), 2026-07-20.** The GUI installer
 above works, but a machine set up by clicking is not reproducible and the next person cannot

@@ -11,10 +11,12 @@
 # re-runs itself elevated in a new window.
 #
 # It needs nothing but a working internet connection and Windows 10 1803+ (curl.exe, tar.exe).
-# It deliberately does NOT need the repo first: copy just this file and the .bat to a USB drive.
+# The repo is the checkout this script is in (tools\windows\ under the repo root) and is left
+# exactly as it is. Only a script copied out of the repo (say, onto a USB stick) needs
+# -RepoDir <folder>, and then it clones the repo into that folder.
 #
 # Modelled on the worker documented in DISTRIBUTION.md 4.5 Box 3 (Windows 10, MSVC 2022 Build
-# Tools, static SDL3 3.4.12, repo in C:\altairsim), inventoried 2026-09-21.
+# Tools, static SDL3 3.4.12), inventoried 2026-09-21.
 #
 # What it sets up, in order:
 #   1. OpenSSH Server, running and automatic, with an inbound firewall rule on TCP 22
@@ -22,7 +24,7 @@
 #   3. Visual Studio 2022 Build Tools (MSVC + the bundled CMake and Ninja)
 #   4. CMake and Ninja on the USER path (the installer does not put them there)
 #   5. Git for Windows (git + Git Bash, which tools/build-package.sh needs)
-#   6. the repo, cloned over anonymous https into C:\altairsim
+#   6. the repo: the checkout this script is in, used as it is (cloned only if -RepoDir is given)
 #   7. a STATIC SDL3, built by tools\build-sdl3-static.bat into %USERPROFILE%\opt\sdl3-static
 #   8. no sleeping on AC power, so the machine is still there when the ssh arrives
 #   9. a check that altairsim configures with video enabled -- and, with -Build, a full build
@@ -34,7 +36,10 @@
 
 [CmdletBinding()]
 param(
-    [string]   $RepoDir = 'C:\altairsim',
+    # The repo is the checkout this script is in (tools\windows\ under the repo root). Give
+    # -RepoDir only if the script was copied out of the repo (e.g. onto a USB stick): it is then
+    # cloned from -RepoUrl into that folder.
+    [string]   $RepoDir,
     [string]   $RepoUrl = 'https://github.com/deltecent/altairsim.git',
     # Public keys allowed to ssh in (one line each, e.g. the contents of id_ed25519.pub).
     # If none are given the script asks for them; press Enter at the prompt to skip.
@@ -110,6 +115,21 @@ try {
     if (-not $isAdmin) { throw 'Not elevated. Double-click RUN-ME-setup-windows-worker.bat, or use an Administrator PowerShell.' }
     if (-not (Get-Command curl.exe -ErrorAction SilentlyContinue)) { throw 'curl.exe is missing (needs Windows 10 1803 or later).' }
     $userName = $env:USERNAME
+
+    # Which repo? The one this script lives in: tools\windows\ under the repo root. Only a script
+    # copied somewhere else (a USB stick) needs -RepoDir, and then it clones there. Settled NOW,
+    # before anything is installed, so a bad answer costs seconds and not a multi-GB install.
+    $isRepo = { param($d) (Test-Path (Join-Path $d 'tools\build-sdl3-static.bat')) -or (Test-Path (Join-Path $d '.git')) }
+    if (-not $RepoDir) {
+        $RepoDir = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
+        if (-not (& $isRepo $RepoDir)) {
+            throw "This script is not inside an altairsim checkout (it expects to be in tools\windows\ under the repo root, and $RepoDir is not one). Run it from the repo, or pass -RepoDir <folder> to clone the repo into an empty or new folder."
+        }
+    }
+    $repoIsCheckout = [bool](& $isRepo $RepoDir)
+    if (-not $repoIsCheckout -and (Test-Path $RepoDir) -and (Get-ChildItem $RepoDir -Force | Select-Object -First 1)) {
+        throw "$RepoDir already exists, is not empty, and is not an altairsim checkout, so the repo cannot be cloned there. Nothing in it was touched. Choose an empty or new folder for -RepoDir."
+    }
 
     # --- 1. OpenSSH Server -----------------------------------------------------------------
     Step 'OpenSSH Server'
@@ -286,26 +306,30 @@ try {
     else { Todo 'Git Bash not found; tools/build-package.sh needs it.' }
 
     # --- 6. the repo -----------------------------------------------------------------------
-    Step "repo in $RepoDir"
-    $safe = $RepoDir -replace '\\', '/'
-    if (@(git config --global --get-all safe.directory) -notcontains $safe) { git config --global --add safe.directory $safe; Did "marked $RepoDir as a safe git directory" }
-    if (-not (Test-Path (Join-Path $RepoDir '.git'))) {
-        if ((Test-Path $RepoDir) -and (Get-ChildItem $RepoDir -Force | Select-Object -First 1)) {
-            throw "$RepoDir exists and is not empty, and is not a git checkout."
+    Step "repo: $RepoDir"
+    if ($repoIsCheckout) {
+        # The repo is the checkout this script was run from. It is used exactly as it is: no fetch,
+        # no checkout, and above all its origin is NOT rewritten (a developer's checkout usually
+        # pushes over ssh). Whoever drives a build does the fetch and checkout.
+        Had "using the repo at $RepoDir, left exactly as it is"
+        if (Test-Path (Join-Path $RepoDir '.git')) {
+            # Only if git refuses the folder (owned by another account, "dubious ownership"): allow it.
+            git -C $RepoDir rev-parse --git-dir 2>&1 | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                git config --global --add safe.directory ($RepoDir -replace '\\', '/')
+                Did "told git the repo at $RepoDir is safe (it is owned by another account)"
+            }
+            Note "at $(git -C $RepoDir describe --tags --always)   origin = $(git -C $RepoDir remote get-url origin)"
+        } else {
+            Note 'no .git here (a source download, not a clone): fine for building; a release build needs a real clone (git fetch --tags, git checkout).'
         }
+    } else {
+        # -RepoDir named a folder that is not a checkout yet: clone there. A worker reads over
+        # ANONYMOUS https and holds no credential (DISTRIBUTION.md 4.1).
         git clone $RepoUrl $RepoDir
         if ($LASTEXITCODE -ne 0) { throw 'git clone failed' }
         Did "cloned $RepoUrl into $RepoDir"
-    } else {
-        # A worker reads over ANONYMOUS https and holds no credential (DISTRIBUTION.md 4.1).
-        $origin = (git -C $RepoDir remote get-url origin 2>$null)
-        if ($origin -ne $RepoUrl) { git -C $RepoDir remote set-url origin $RepoUrl; Did "origin was '$origin'; reset to $RepoUrl" }
-        # Refs only -- the working tree and the checked-out tag are never touched. Offline is not fatal.
-        git -C $RepoDir fetch --tags --force --quiet
-        if ($LASTEXITCODE -ne 0) { Note 'WARNING: git fetch failed (offline?); carrying on with what is already here.' }
-        Had "$RepoDir is already a checkout (branches and tags fetched; nothing checked out or changed)"
     }
-    Note "origin = $(git -C $RepoDir remote get-url origin)   at $(git -C $RepoDir describe --tags --always)"
 
     # --- 7. static SDL3 --------------------------------------------------------------------
     Step 'static SDL3'
