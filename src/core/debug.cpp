@@ -457,7 +457,7 @@ void Debugger::serviceDma() {
 // ---------------------------------------------------------------------------
 // The run loop. This is the debugger, and it asks only generic questions.
 // ---------------------------------------------------------------------------
-RunResult Debugger::run(uint64_t maxSteps) {
+RunResult Debugger::run(uint64_t maxSteps, bool clearPending) {
     RunResult r;
 
     CpuCore* cpu = m_.cpu();
@@ -478,7 +478,7 @@ RunResult Debugger::run(uint64_t maxSteps) {
     // an unrelated hit at the new address.
     if (skipArmed_ && cpu->pc() != resumeCyclePc_) skipArmed_ = false;
 
-    clearInterrupt();
+    if (clearPending) clearInterrupt();
     bool armed = armObserver();
     m_.running = true;
 
