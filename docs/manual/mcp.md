@@ -45,6 +45,11 @@ through MCP:
 - **`send`** — type at the console without running (then `run` to let it be read).
 - **`recv`** — drain what the guest has printed since you last looked, without running.
 - **`regs`** — the CPU registers right now.
+- **`status`** — a guaranteed-non-blocking check: whether the server is currently busy on
+  ANY call (not just `run`), plus the CPU board id and the last `run`'s step count/PC. It
+  never queues behind anything, including a `run` that never ends — see "Stopping a `run`
+  that will not end" below for why that matters and what its fields mean when nothing is
+  running.
 
 The shape of a session is therefore: `run {from: 0xFF00, until: "A0>"}` to boot, then
 `run {input: "ASM FOO\r", until: "A0>"}` per command, reading the reply each time. A `run`
@@ -87,7 +92,9 @@ two ways to stop it early, and both make the `run` in progress stop at once and 
   request id of the `run`. The server keeps reading its input while a `run` is going, so the
   cancel is seen straight away. A cancel that names some other request, or one that arrives
   after the `run` has returned, is ignored, and it never carries over to the next call. Other
-  requests sent during a `run` are queued and answered in order once it returns.
+  requests sent during a `run` are queued and answered in order once it returns — except
+  `status` (#490), which is the one call that is never queued: poll it to check whether a
+  `run` you are considering cancelling is actually still alive, or already back to idle.
 - **Send the process a ^C.** Press it in the terminal that started the server, or run
   `kill -INT` on its process ID.
 
@@ -96,6 +103,11 @@ was, so you can look at it and carry on with another `run`. A ^C that arrives wh
 is in progress does nothing to the guest, and a new `run` always starts clean.
 
 The rest of this section is about the ^C.
+
+`status`'s `pc`/`steps` are only ever as fresh as the last `run` — a `step` or a `monitor`
+command moves the real PC without updating them, and `steps` resets to zero on the next
+`run`, so it is not monotonic across runs. `generation` is: it climbs on every publish, so
+it is the field to watch for "still advancing" versus "stuck on the same slice."
 
 This changes what ^C does to an `--mcp` server you started by hand: the first ^C is caught,
 not fatal. If you press ^C again before the server has reported the first one, the second
