@@ -1,0 +1,53 @@
+name: Bug report
+description: Something in the simulator does not behave as the hardware or the manual says
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you saw instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: The command line, the machine file, and what you typed at the guest. Paste the machine file if it is short.
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: boards
+    attributes:
+      label: Boards involved
+      description: For example `2sio`, `88dcdd`, `vdm1`.
+  - type: input
+    id: software
+    attributes:
+      label: Guest software
+      description: The OS, ROM, disk image or program running when it went wrong.
+  - type: input
+    id: version
+    attributes:
+      label: altairsim version
+      description: The output of `altairsim --version`, or the commit if you built from source.
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Host system
+      options:
+        - macOS (Apple silicon)
+        - macOS (Intel)
+        - Windows
+        - Linux
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Real hardware behaviour you know of, logs, screenshots.
