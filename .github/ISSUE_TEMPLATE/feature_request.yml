@@ -1,0 +1,26 @@
+name: Feature request
+description: Suggest a new board, machine, command or other change
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: want
+    attributes:
+      label: What you would like
+      description: Describe the board, machine or feature, and what you want to do with it.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: The software or workflow this would let you run.
+  - type: textarea
+    id: sources
+    attributes:
+      label: Hardware documentation
+      description: For a new board or machine, links to manuals, schematics or ROM and disk images you know of. Say if you can test it against real hardware.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do today
+      description: Any workaround you use now.
