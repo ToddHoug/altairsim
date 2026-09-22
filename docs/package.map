@@ -116,8 +116,8 @@ DIR  hostbridge          <=  cpm/hostbridge
 #
 # ONE SKILL, NAMED, NOT THE WHOLE FOLDER. .claude/skills/ also holds the release skills
 # (release-worker, release-coordinator, release-verify) and the workflow skills (work-task,
-# ship-change), which are for whoever BUILDS or CHANGES this package and mean nothing to
-# someone holding it. The map has no exclude, so a DIR of the whole
+# ship-change, review-pr), which are for whoever BUILDS or CHANGES this package and mean
+# nothing to someone holding it. The map has no exclude, so a DIR of the whole
 # folder would ship every skill added there. Name each shipped skill on its own line instead.
 DIR  skills/altairsim    <=  .claude/skills/altairsim
 

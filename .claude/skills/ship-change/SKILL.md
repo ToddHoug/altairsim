@@ -67,4 +67,5 @@ tested by hand, a window check a person has not done.
 
 ## A PR from another contributor
 
-If the PR's author is not `deltecent`, stop and ask. The rules for those are not written yet.
+If the PR's author is not `deltecent`, this skill does not apply: use `review-pr`. Its merge
+needs green CI **and** the maintainer's approval.

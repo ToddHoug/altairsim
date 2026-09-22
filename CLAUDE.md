@@ -22,8 +22,9 @@ whether or not a skill is loaded:
 8. **After the merge, comment on the related issues.** Never close them.
 
 The three gates are **plan approved**, **commit approved** and **PR approved**. Each
-approval covers that one step only; it never carries over to the next. A PR from anyone but
-`deltecent`: stop and ask — those rules are not written yet.
+approval covers that one step only; it never carries over to the next. **A PR from anyone but
+`deltecent` goes through the `review-pr` skill: its merge needs green CI *and* the
+maintainer's approval.**
 
 ## If you are here to build or ship a release
 
