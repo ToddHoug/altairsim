@@ -256,3 +256,13 @@ learned, and save where you are in a note in the folder. At the start, have it r
 the `Reference` folder, boot the machine, and tell you where you left off. The note in the folder is
 what makes a session resumable; without it the assistant reconstructs the state from scratch each
 time, and reconstructs it wrong.
+
+**Don't rename the project folder mid-project.** The assistant builds its memory of the project
+around that folder's name and path. A rename breaks that link.
+
+Recovery is possible, but it costs time. You must remember the folder's old name. Tell the
+assistant the old name and the new name, then ask it to rebuild its memory from that information.
+Ask it directly what it cannot recover — some information will not come back, even after you push
+for more.
+
+Settle on the folder's name before you start the project, not after.
