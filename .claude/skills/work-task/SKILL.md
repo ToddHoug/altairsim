@@ -29,6 +29,9 @@ Ask with `AskUserQuestion` only when different answers would lead to different w
 
 ## 1a. A feature must earn its place
 
+**When the task starts from an incoming issue, `review-issue` settles the verdict first** —
+this step then builds on it rather than repeating it.
+
 For a feature — anything that is not fixing a bug — settle this **before** designing anything:
 
 1. **The need, in the requester's terms.** What were they trying to do, what did they try,

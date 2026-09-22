@@ -5,8 +5,8 @@ description: How a pull request from another contributor (author not deltecent) 
 
 # Review a contributor's PR
 
-Our own changes go through `work-task` and `ship-change`. **This skill is for a PR whose
-author is not `deltecent`.** The PR that merges is always **theirs** — never open our own PR
+Our own changes go through `work-task` and `ship-change`; an *issue* goes through
+`review-issue`. **This skill is for a PR whose author is not `deltecent`.** The PR that merges is always **theirs** — never open our own PR
 in its place.
 
 The rules, set by the maintainer:
