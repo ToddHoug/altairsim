@@ -8,6 +8,14 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+### A `telnet:` line says who you reached
+
+Someone telnetting in to a board line saw nothing until the guest printed, with no way to tell
+whether they had reached the right machine and the right line. A `telnet:PORT` line now greets
+each caller with one line, `Connected to AltairSim 1.0.0 (sio0:b) on port 2323`, which the
+guest never sees. `?banner=off` turns it off. A raw `socket:PORT` stays silent unless you add
+`?banner`, because another machine is often the one calling it.
+
 ### A `run` can be stopped early over `--mcp`
 
 Over `--mcp` there was no way to stop a `run` early: it kept going until its `timeout_ms`, and

@@ -335,7 +335,8 @@ answers to. What belongs here is why a few of them are shaped the way they are:
 - **`socket:` is raw and `telnet:` negotiates**, and they are two endpoints rather than an option
   because they are for different far ends. A program, or another machine, wants the guest's
   bytes and nothing else. A person with a `telnet` client needs the echo and line-mode
-  handshake, or every key appears twice.
+  handshake, or every key appears twice. `telnet:` also greets its caller by default, and
+  `socket:` does not, because a banner is data to a machine on the far end.
 - **`serial:` is the one place where the pins are the pins.** The card programs its baud and
   frame, and with `SET sio0:a cts=wired` the far end can genuinely stop your transmitter.
 
