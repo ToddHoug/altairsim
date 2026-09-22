@@ -428,10 +428,11 @@ reaches the coordinator over the LAN.
 
 > **This box is new (2026-09-21) and has not yet built a release.** It replaced the VMware guest
 > that was Box 3 at `.27`. `tools\windows\RUN-ME-setup-windows-worker.bat` has run on it (Visual
-> Studio 2026, static SDL3, `-Build` passing `ctest -LE slow`), but **it has no delivery key yet**
-> (`~/.ssh/altairsim_deploy` and its `Host dist.altairsim.com` entry — set up below), and the
-> package, `verify-package.sh` and `scp` steps have not run here. The note that follows is the
-> record of the old box.
+> Studio 2026, static SDL3, `-Build` passing `ctest -LE slow`), and its delivery key is in place
+> (`~/.ssh/altairsim_deploy`, comment `altairsim-deploy-windows-29`, with its `Host
+> dist.altairsim.com` entry; a test file `scp`'d into the coordinator's `dist/`). The package and
+> `verify-package.sh` steps have not run here yet. The note that follows is the record of the old
+> box.
 
 > **PROVEN end-to-end on the former Box 3 (the `.27` VMware guest), 2026-07-21.** This leg now matches the other three: native MSVC build
 > (static SDL3 + static `/MT` CRT), 17/17 tests, `dumpbin /dependents` showing system DLLs only
