@@ -12,7 +12,7 @@ rem
 rem   VERIFIED on Windows 10 (MSVC 2022 Build Tools), 2026-07-22: a from-scratch run built
 rem   and installed a static SDL3 3.4.12 in ~3.5 min (exit 0 -- SDL3-static.lib, headers,
 rem   cmake config, version marker), and the idempotent "already installed" path works too.
-rem   See DISTRIBUTION.md 8. Written 2026-07-20 from the working macOS script.
+rem   Written 2026-07-20 from the working macOS script.
 rem   RE-VERIFIED with Visual Studio 2026 (MSVC 19.51), 2026-09-21: from scratch into a fresh
 rem   prefix, exit 0, and altairsim built against it came out windowed. It uses whatever
 rem   Visual Studio the cmake on PATH picks -- the newest that cmake knows.

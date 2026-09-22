@@ -380,7 +380,7 @@ aggregate with `0xC0000409`, §6 shows how to isolate it.
 **This section is a job, not a description** — but most of it is now discharged. Of the three
 approaches it lists, **A and C are settled** (A on 2026-07-20; C's `build-sdl3-static.bat`
 re-verified from scratch on 2026-07-22 — exit 0 in ~3.5 min, valid `SDL3-static.lib` — see the
-note above and `DISTRIBUTION.md` §8). **Only approach B (Ninja + chained `vcvars`) remains
+note above). **Only approach B (Ninja + chained `vcvars`) remains
 untried.** The commands to settle it, and how to report back, follow. **If you are an assistant
 on the Windows box, approach B is the work that is left.**
 

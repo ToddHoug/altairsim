@@ -15,7 +15,7 @@
 # exactly as it is. Only a script copied out of the repo (say, onto a USB stick) needs
 # -RepoDir <folder>, and then it clones the repo into that folder.
 #
-# Modelled on the worker documented in DISTRIBUTION.md 4.5 Box 3 (Windows 10, static SDL3
+# Modelled on the Windows worker of DISTRIBUTION.md 4 (Windows 10, static SDL3
 # 3.4.12), inventoried 2026-09-21. The compiler is Visual Studio 2026 (18.x) -- the same MSVC
 # as CI's windows-2025-vs2026 runner, so a release is built by the compiler every PR is
 # checked with.

@@ -5,15 +5,22 @@ compiler and CMake; SDL3 is optional and detected, never required.
 
 ## If you are here to build or ship a release
 
-**Read [`DISTRIBUTION.md`](DISTRIBUTION.md) and follow it.** It is written to be executed
-step by step on a machine that has never seen this repository — literal commands, the exact
-output to check after each, and a STOP condition on every check.
+**Use the release skills; they are the procedure.** Each is written to be executed step by
+step on a machine that has never seen this repository — literal commands, the exact output to
+check after each, and a STOP condition on every check. [`DISTRIBUTION.md`](DISTRIBUTION.md) is
+the reasoning behind them.
 
-**If you are on the Intel Mac, the Windows box, or the Linux box, your job is §4.2 and
-nothing else.** Build, test, package, upload to the draft release. **A build machine never
-tags, never publishes, and never decides a version number.** If a check in §4.2 fails, stop
-and report it — do not work around it and do not judge it probably fine. Nothing gates a
-package after you upload it.
+| | |
+|---|---|
+| `release-worker` | **Any build machine.** Build, test, package, deliver one archive — nothing else. |
+| `release-coordinator` | **The coordinator only.** Version, changelog, tag, draft, drive the builds, publish. |
+| `release-verify` | Prove an archive works as downloaded. |
+
+**A build machine never tags, never publishes, and never decides a version number.** If a
+check fails, stop and report it — do not work around it and do not judge it probably fine.
+Nothing gates a package after you deliver it. **This site's addresses, paths and serial ports
+are in `distribution.conf`** (gitignored; `distribution.conf.example` is the template) — never
+in a tracked file.
 
 **On Windows, you do not need a Developer shell.** With CMake's default Visual Studio
 generator, MSBuild finds the toolchain itself — a plain PowerShell works. Remember that your
