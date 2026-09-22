@@ -15,14 +15,18 @@
 # exactly as it is. Only a script copied out of the repo (say, onto a USB stick) needs
 # -RepoDir <folder>, and then it clones the repo into that folder.
 #
-# Modelled on the worker documented in DISTRIBUTION.md 4.5 Box 3 (Windows 10, MSVC 2022 Build
-# Tools, static SDL3 3.4.12), inventoried 2026-09-21.
+# Modelled on the worker documented in DISTRIBUTION.md 4.5 Box 3 (Windows 10, static SDL3
+# 3.4.12), inventoried 2026-09-21. The compiler is Visual Studio 2026 (18.x) -- the same MSVC
+# as CI's windows-2025-vs2026 runner, so a release is built by the compiler every PR is
+# checked with.
 #
 # What it sets up, in order:
 #   1. OpenSSH Server, running and automatic, with an inbound firewall rule on TCP 22
 #   2. authorized ssh keys, in the file sshd really reads for this account
-#   3. Visual Studio 2022 Build Tools (MSVC + the bundled CMake and Ninja)
-#   4. CMake and Ninja on the USER path (the installer does not put them there)
+#   3. Visual Studio 2026 Build Tools (MSVC + the bundled CMake and Ninja), unless a Visual
+#      Studio 2026 with the C++ tools (Community, say) is already there
+#   4. CMake and Ninja on the USER path (the installer does not put them there), replacing
+#      any other Visual Studio's CMake and Ninja there
 #   5. Git for Windows (git + Git Bash, which tools/build-package.sh needs)
 #   6. the repo: the checkout this script is in, used as it is (cloned only if -RepoDir is given)
 #   7. a STATIC SDL3, built by tools\build-sdl3-static.bat into %USERPROFILE%\opt\sdl3-static
@@ -218,14 +222,15 @@ try {
         Did 'fixed the permissions on the key file'
     } else { Had 'key file permissions are correct' }
 
-    # --- 3. Visual Studio Build Tools ------------------------------------------------------
-    Step 'Visual Studio 2022 Build Tools (MSVC + CMake + Ninja)'
+    # --- 3. Visual Studio 2026 Build Tools -------------------------------------------------
+    Step 'Visual Studio 2026 (MSVC + CMake + Ninja)'
     $vsw = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
     function Find-VS {
         if (-not (Test-Path $vsw)) { return $null }
-        # 17.x only: the project builds with the "Visual Studio 17 2022" generator, and a newer
-        # VS (2026 is 18.x) on the machine must not be picked up in its place.
-        $p = & $vsw -products * -version '[17.0,18.0)' -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+        # 18.x only -- Visual Studio 2026, the MSVC that CI builds with. Any edition will do
+        # (Build Tools, or a Community that is already there), but an older VS on the same
+        # machine must not be picked up in its place, and is left installed and untouched.
+        $p = & $vsw -products * -version '[18.0,19.0)' -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
         if ($p) { return "$p".Trim() } else { return $null }
     }
     $vs = Find-VS
@@ -247,7 +252,9 @@ try {
         # nonempty directory", exit 1). If Visual Studio has NO instance registered at that path
         # (-all also lists half-installed ones), whatever is there is orphaned debris: stop
         # anything still running from it, then clear it. A registered instance is never touched.
-        $btDir = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\BuildTools"
+        # The install path is given explicitly (--installPath below), so this is exactly where
+        # it goes and the check here looks in the right place.
+        $btDir = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\18\BuildTools"
         $registered = @(if (Test-Path $vsw) { & $vsw -all -products * -property installationPath }) | ForEach-Object { "$_".Trim().TrimEnd('\') }
         if ((Test-Path $btDir) -and ($registered -notcontains $btDir)) {
             Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($btDir, 'OrdinalIgnoreCase') } | Stop-Process -Force
@@ -256,8 +263,11 @@ try {
         }
         Note 'installing (multi-GB download, several silent minutes -- this is the slow step)'
         $setup = Join-Path $env:TEMP 'vs_BuildTools.exe'
-        Fetch 'https://aka.ms/vs/17/release/vs_BuildTools.exe' $setup
+        # vs/18/stable is Visual Studio 2026's channel. (vs/18/release does not exist; vs/17/release
+        # is 2022's.)
+        Fetch 'https://aka.ms/vs/18/stable/vs_BuildTools.exe' $setup
         $p = Start-Process $setup -Wait -PassThru -ArgumentList '--quiet', '--wait', '--norestart',
+            '--installPath', "`"$btDir`"",
             '--add', 'Microsoft.VisualStudio.Workload.VCTools',
             '--add', 'Microsoft.VisualStudio.Component.VC.CMake.Project',
             '--includeRecommended'
@@ -267,21 +277,34 @@ try {
     }
     if (-not $vs) { throw 'MSVC (VC.Tools.x86.x64) still not found after the install.' }
     $msvc = (Get-ChildItem (Join-Path $vs 'VC\Tools\MSVC') | Sort-Object Name | Select-Object -Last 1).Name
-    if ($vsInstalledNow) { Did "installed Visual Studio 2022 Build Tools: $vs  (MSVC $msvc)" }
-    else                 { Had "Visual Studio 2022 Build Tools: $vs  (MSVC $msvc)" }
+    if ($vsInstalledNow) { Did "installed Visual Studio 2026 Build Tools: $vs  (MSVC $msvc)" }
+    else                 { Had "Visual Studio 2026: $vs  (MSVC $msvc)" }
 
     # --- 4. CMake + Ninja on the user PATH -------------------------------------------------
     Step 'CMake and Ninja on PATH'
     $mk = Join-Path $vs $cmakeRel
+    $want = @("$mk\CMake\bin", "$mk\Ninja")
+    # Another Visual Studio's bundled CMake/Ninja on the PATH (2022's, from an earlier run of this
+    # script) would be found FIRST, and 2022's CMake cannot even make the VS 2026 generator. So
+    # those entries come off -- only entries inside a Visual Studio's own CMake folder; nothing
+    # else on the PATH is touched, and the other Visual Studio stays installed.
+    $isOtherVsCMake = { param($e) $e -match '\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\' -and $want -notcontains $e }
     $u = [Environment]::GetEnvironmentVariable('Path', 'User'); if (-not $u) { $u = '' }
     $u0 = $u
-    foreach ($d in @("$mk\CMake\bin", "$mk\Ninja")) {
+    $gone = @($u -split ';' | Where-Object { $_ -and (& $isOtherVsCMake $_) })
+    $u = (@($u -split ';' | Where-Object { $_ -and -not (& $isOtherVsCMake $_) }) -join ';')
+    foreach ($d in $want) {
         if (($u -split ';') -notcontains $d) { $u = ($u.TrimEnd(';') + ';' + $d) }
-        AddToProcessPath $d
     }
-    # Written only when something was missing, so a finished machine is left exactly as it was.
-    if ($u -ne $u0) { [Environment]::SetEnvironmentVariable('Path', $u.TrimStart(';'), 'User'); Did 'added CMake and Ninja to the user PATH (new shells and ssh sessions see them)' }
-    else             { Had 'CMake and Ninja already on the user PATH' }
+    # This run's own PATH too: drop the other VS's entries and put ours FIRST.
+    $env:Path = ((@($want) + @($env:Path -split ';' | Where-Object { $_ -and -not (& $isOtherVsCMake $_) -and $want -notcontains $_ })) -join ';')
+    # Written only when something changed, so a finished machine is left exactly as it was.
+    if ($u -ne $u0) {
+        [Environment]::SetEnvironmentVariable('Path', $u.TrimStart(';'), 'User')
+        foreach ($g in $gone) { Did "took another Visual Studio's CMake/Ninja off the user PATH: $g" }
+        Did 'CMake and Ninja of Visual Studio 2026 are on the user PATH (new shells and ssh sessions see them)'
+    }
+    else { Had 'CMake and Ninja of Visual Studio 2026 already on the user PATH' }
     Ok ((cmake --version | Select-Object -First 1) + ' / ninja ' + (ninja --version))
 
     # --- 5. Git for Windows ----------------------------------------------------------------
@@ -370,9 +393,28 @@ try {
     if ($Build) { $bdir = Join-Path $RepoDir 'build' } else { $bdir = Join-Path $env:TEMP "altairsim-verify-$PID" }
     $prevEap = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'   # PS 5.1 turns a native command's stderr into an error under 'Stop'
+    $gen = 'Visual Studio 18 2026'
+    $genOf = {
+        $cache = Join-Path $bdir 'CMakeCache.txt'
+        if (-not (Test-Path $cache)) { return '' }
+        $m = Select-String -Path $cache -Pattern '^CMAKE_GENERATOR:INTERNAL=(.*)$' | Select-Object -First 1
+        if ($m) { return $m.Matches[0].Groups[1].Value.Trim() } else { return '' }
+    }
+    # A build\ made with another generator (Visual Studio 2022's, from before this machine moved
+    # to 2026) cannot be reconfigured with this one -- CMake refuses. It holds only build output,
+    # so it is cleared and made again.
+    $oldGen = & $genOf
+    if ($oldGen -and $oldGen -ne $gen) {
+        Remove-Item $bdir -Recurse -Force
+        Did "cleared $bdir, which was made with '$oldGen', so it is made again with '$gen'"
+    }
     try {
-        $out = cmake -S $RepoDir -B $bdir -DCMAKE_PREFIX_PATH="$sdl" -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded 2>&1 | Out-String
+        $out = cmake -S $RepoDir -B $bdir -G $gen -DCMAKE_PREFIX_PATH="$sdl" -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded 2>&1 | Out-String
+        # -G names the compiler outright: Visual Studio 2026's, the MSVC that CI checks every PR
+        # with. A CMake too old to know that generator (2022's) fails here rather than quietly
+        # building with something else.
         if ($LASTEXITCODE -ne 0) { Write-Host $out; throw 'cmake configure failed' }
+        Ok "generator: $gen"
         if ($out -match 'SDL3 found -- video boards enabled \(windowed\)') { Ok 'SDL3 found -- video boards enabled (windowed)' }
         else { Write-Host $out; throw 'STOP: configure did not report "SDL3 found -- video boards enabled". A headless binary is what v0.2.0 shipped.' }
 
@@ -412,7 +454,7 @@ try {
     Write-Host "  From the other computer:   ssh $userName@$($ips | Select-Object -First 1)"
     Write-Host "  All addresses: $($ips -join ', ')   (DHCP addresses can change -- use a reservation or the hostname $env:COMPUTERNAME)"
     Write-Host "  Repo: $RepoDir     SDL3 prefix: $sdl"
-    Write-Host "  Build: cmake -B build -DCMAKE_PREFIX_PATH=`"$sdl`" -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded ; cmake --build build --config Release"
+    Write-Host "  Build: cmake -B build -G `"Visual Studio 18 2026`" -DCMAKE_PREFIX_PATH=`"$sdl`" -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded ; cmake --build build --config Release"
     Write-Host "  Log: $log"
 }
 catch {
