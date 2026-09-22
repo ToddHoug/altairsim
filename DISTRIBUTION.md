@@ -217,12 +217,12 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release \
 #    Install SDL3 and configure again. DO NOT CONTINUE -- a headless binary is
 #    exactly what v0.2.0 shipped on all three platforms, and it looks fine.
 
-# 3. Build.  On a RAM-starved VM -- the Windows and Linux guests share the Intel
-#    Mac's memory (§4.5) -- build SINGLE-THREADED: drop --parallel. Uncapped, the
-#    kernel OOM-kills the compiler ("Killed signal terminated program cc1plus" /
-#    Error 2) and the swap-thrash can wedge the guest. --parallel is only safe on
-#    a machine with the RAM for it: the M4 coordinator and the Intel Mac host.
-cmake --build build --config Release --parallel   # NOT --parallel on the VMs (see above)
+# 3. Build.  On a RAM-starved VM -- the Linux guest shares the Intel Mac's memory
+#    (§4.5) -- build SINGLE-THREADED: drop --parallel. Uncapped, the kernel
+#    OOM-kills the compiler ("Killed signal terminated program cc1plus" / Error 2)
+#    and the swap-thrash can wedge the guest. --parallel is only safe on a machine
+#    with the RAM for it: the M4 coordinator, the Intel Mac host and the Windows box.
+cmake --build build --config Release --parallel   # NOT --parallel on the Linux VM (see above)
 
 # 4. Prove the machine before it packages anything.
 ctest --test-dir build -C Release -LE slow
@@ -328,21 +328,20 @@ worker, the **`scp` back**. Filled in with the project's real paths (verified 20
 |---|---|---|---|---|
 | 1 · coordinator | `macos-arm64` | *local (this M4 Mac)* | — | `~/src/altairsim` |
 | 2 | `macos-x86_64` | `ssh patrick@192.168.94.22` | `Patricks-iMac-2` | `~/src/altairsim` |
-| 3 | `windows-x86_64` | `ssh patrick@192.168.94.27` | `DESKTOP-KM1QG0H` | `c:\altairsim` |
+| 3 | `windows-x86_64` | `ssh patrick@192.168.94.29` | `DESKTOP-21TUO4M` | `c:\altairsim-dev` |
 | 4 | `linux-x86_64` | `ssh patrick@192.168.94.28` | `claude-ubuntu` | `~/src/altairsim` |
 
-Boxes 2–4 are one physical Intel Mac (box 2) hosting the Windows and Linux VMware guests; these LAN
-IPs are static. If one ever moves, find it from box 2's VMware NAT leases / `arp -a`; a reassigned
-address may need `ssh-keygen -R <ip>` to clear a stale host key. (Ubuntu was DHCP `.246` until made
-static `.28` on 2026-07-22.)
+Boxes 2 and 4 are one physical Intel Mac (box 2) hosting the Linux VMware guest. **Box 3 is its own
+machine** (an i7-4790 with 32 GB, since 2026-09-21; it replaced a Windows VMware guest on the Intel
+Mac at `.27`). These LAN IPs are static. If the Linux guest ever moves, find it from box 2's VMware
+NAT leases / `arp -a`; a reassigned address may need `ssh-keygen -R <ip>` to clear a stale host key.
+(Ubuntu was DHCP `.246` until made static `.28` on 2026-07-22.)
 
-**THREE OF THE FOUR BOXES ARE ONE PHYSICAL MACHINE — build the x86 targets serially (2026-07-21).**
-The Intel Mac is the physical host; the **Windows box and the Linux box are both VMware guests
-running on that same Intel Mac.** So `macos-x86_64`, `windows-x86_64` and `linux-x86_64` share one
-CPU and one pool of RAM, and running their builds at the same time only makes them contend — do
-them **one at a time**. `macos-arm64` (the coordinator) is the only box that is genuinely separate
-and can run in parallel with any of them. This is why §5 step 5 says "any order" but not "all at
-once".
+**TWO OF THE FOUR BOXES ARE ONE PHYSICAL MACHINE — build `macos-x86_64` and `linux-x86_64` one at a
+time (2026-07-21).** The Intel Mac is the physical host and **the Linux box is a VMware guest on
+it**, so those two share one CPU and one pool of RAM, and building them at the same time only makes
+them contend. The coordinator (`macos-arm64`) and the Windows box are separate machines and can
+build alongside either. This is why §5 step 5 says "any order" but not "all at once".
 
 ```
                  ┌─────────────────────────────────────────────────┐
@@ -356,7 +355,7 @@ once".
      workers read it over ANONYMOUS https │ (public repo — no login, no token on a worker)
                                           ▼
    ┌───────────────────────┬──────────────────────────┬───────────────────────┐
-   │ Intel Mac   ssh .22   │ Windows 10   ssh .27      │ Ubuntu Linux ssh .28  │
+   │ Intel Mac   ssh .22   │ Windows 10   ssh .29      │ Ubuntu Linux ssh .28  │
    │ build macos-x86_64    │ build windows-x86_64      │ build linux-x86_64    │
    │        .tar.gz        │        .zip               │        .tar.gz        │
    └───────────┬───────────┴─────────────┬────────────┴───────────┬───────────┘
@@ -420,14 +419,22 @@ scp dist/altairsim-X.Y.Z-macos-x86_64.tar.gz patrick@dist.altairsim.com:~/src/al
 > `export PATH="/usr/local/bin:$PATH"` (verified 2026-07-21). At the machine's own terminal this
 > does not arise, and Linux is unaffected — its `cmake` is in `/usr/bin`, always on `PATH`.
 
-**Box 3 — Windows 10 worker** *(`ssh patrick@192.168.94.27`; VMware guest on the Intel Mac)*. Steps 1–5
+**Box 3 — Windows 10 worker** *(`ssh patrick@192.168.94.29`; its own machine, not a VM)*. Steps 1–5
 in **PowerShell**; steps 6–8 in **Git Bash**. `MultiThreaded` and `--config Release` are
 load-bearing (§4.4); the binary lands in `build\Release\`. `scp.exe` ships in Windows 10 and
 reaches the coordinator over the LAN.
 
-> **A new Windows worker: run `tools\windows\RUN-ME-setup-windows-worker.bat` first** (§4.1; `docs/building-windows.md` §1.1). It gets a machine to the state this box is in: the toolchain, the static SDL3 in `%USERPROFILE%\opt\sdl3-static`, and inbound ssh with the key of the computer that will drive it (the coordinator) authorised — it asks you to paste that public key. **The repo is the checkout you run it from** (it lives in `tools\windows\`) and is left exactly as it is — no clone, no fetch, and `origin` is not touched; where that checkout sits is up to you (`c:\altairsim` in the table above is just where Box 3's happens to be). Only a copy of the script taken out of the repo needs `-RepoDir <folder>`, and then it clones there. **Two things it deliberately leaves to you:** the `~/.ssh/altairsim_deploy` delivery key and its `Host dist.altairsim.com` entry, and adding that key's public half on the coordinator — see the one-time setup note below.
+> **A new Windows worker: run `tools\windows\RUN-ME-setup-windows-worker.bat` first** (§4.1; `docs/building-windows.md` §1.1). It gets a machine to the state this box is in: the toolchain, the static SDL3 in `%USERPROFILE%\opt\sdl3-static`, and inbound ssh with the key of the computer that will drive it (the coordinator) authorised — it asks you to paste that public key. **The repo is the checkout you run it from** (it lives in `tools\windows\`) and is left exactly as it is — no clone, no fetch, and `origin` is not touched; where that checkout sits is up to you (`c:\altairsim-dev` in the table above is just where Box 3's happens to be; that machine's `c:\altairsim` is an installed copy, not a checkout). Only a copy of the script taken out of the repo needs `-RepoDir <folder>`, and then it clones there. **Two things it deliberately leaves to you:** the `~/.ssh/altairsim_deploy` delivery key and its `Host dist.altairsim.com` entry, and adding that key's public half on the coordinator — see the one-time setup note below.
 
-> **PROVEN end-to-end, 2026-07-21.** This leg now matches the other three: native MSVC build
+> **This box is new (2026-09-21) and has not yet built a release.** It replaced the VMware guest
+> that was Box 3 at `.27`. `tools\windows\RUN-ME-setup-windows-worker.bat` has run on it (Visual
+> Studio 2026, static SDL3, `-Build` passing `ctest -LE slow`), and its delivery key is in place
+> (`~/.ssh/altairsim_deploy`, comment `altairsim-deploy-windows-29`, with its `Host
+> dist.altairsim.com` entry; a test file `scp`'d into the coordinator's `dist/`). The package and
+> `verify-package.sh` steps have not run here yet. The note that follows is the record of the old
+> box.
+
+> **PROVEN end-to-end on the former Box 3 (the `.27` VMware guest), 2026-07-21.** This leg now matches the other three: native MSVC build
 > (static SDL3 + static `/MT` CRT), 17/17 tests, `dumpbin /dependents` showing system DLLs only
 > (no `SDL3.dll`, no `VCRUNTIME140`), a conformant `.zip`, and `scp` outbound into the
 > coordinator's `dist/`. Three findings worth keeping:
@@ -451,7 +458,7 @@ git fetch --tags --force; git checkout -f vX.Y.Z
 cmake -B build -G "Visual Studio 18 2026" -DCMAKE_BUILD_TYPE=Release `
       -DCMAKE_PREFIX_PATH="$env:USERPROFILE\opt\sdl3-static" `
       -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
-cmake --build build --config Release          # single-threaded: RAM-starved VM, no --parallel (§4.2)
+cmake --build build --config Release --parallel   # its own machine with 32 GB: --parallel is fine
 ctest --test-dir build -C Release -LE slow
 .\build\Release\altairsim.exe --version
 ```
@@ -515,7 +522,7 @@ Steps 1–4 and 6 are the coordinator's. Step 5 is the four build machines — t
 
 **4. Open the draft.** `gh release create vX.Y.Z --draft --notes-file <notes>`. The collection point has to exist before any machine starts building.
 
-**5. Build, on all four machines.** §4.2 / §4.5. Independent, and any order — but **build the three x86 targets one at a time, not all at once.** The Intel Mac, the Windows box and the Linux box are **one physical machine** — the Intel Mac is the host, and Windows and Linux are VMware guests on it (§4.5) — so building `macos-x86_64`, `windows-x86_64` and `linux-x86_64` concurrently just makes them fight for one CPU and one pool of RAM. Only `macos-arm64` (the M4 coordinator, a genuinely separate machine) can build in parallel with them. **The three workers `scp` their archive into the coordinator's repo `dist/` (over `dist.altairsim.com`); the coordinator builds `macos-arm64` straight into the same `dist/`.** No worker authenticates to GitHub.
+**5. Build, on all four machines.** §4.2 / §4.5. Independent, and any order — but **build `macos-x86_64` and `linux-x86_64` one at a time, not together.** The Intel Mac and the Linux box are **one physical machine** — the Intel Mac is the host, and Linux is a VMware guest on it (§4.5) — so building those two concurrently just makes them fight for one CPU and one pool of RAM. `macos-arm64` (the M4 coordinator) and `windows-x86_64` (its own machine since 2026-09-21) can build in parallel with them. **The three workers `scp` their archive into the coordinator's repo `dist/` (over `dist.altairsim.com`); the coordinator builds `macos-arm64` straight into the same `dist/`.** No worker authenticates to GitHub.
 
 **6. Checksum, upload all five, then publish — all on the coordinator.** When `dist/` holds all four and §7 passes, generate the checksum file over them first: `tools/build-checksums.sh` — it refuses unless all four of one version are present, writes `dist/SHA256SUMS`, and verifies it against the archives before returning. Then upload the four archives *and* `SHA256SUMS`: `gh release upload vX.Y.Z dist/altairsim-X.Y.Z-*.tar.gz dist/altairsim-X.Y.Z-*.zip dist/SHA256SUMS`, then `gh release edit vX.Y.Z --draft=false`, then mirror the identical files — `SHA256SUMS` included — to altairsim.com (concretely, below). **Only the coordinator has GitHub credentials.**
 
