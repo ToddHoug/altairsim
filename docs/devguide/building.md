@@ -214,14 +214,13 @@ on a local port, serving a copy of the image. It runs when `de-tnfsd` is on `PAT
 skips (77) otherwise. On Windows it is not registered at all: `de-tnfsd` is POSIX-only.
 `tests/test_tnfs.cpp`, in `unit`, covers the same client against a fake server on every push.
 
-## Catching lifetime bugs: `-DSANITIZE=on`
+## Catching memory bugs: `-DSANITIZE=on`
 
-Twice now the `unit` suite has SEGFAULTed on **Windows CI only**, green on Mac and Linux, and
-both times the cause was a use-after-scope the macOS allocator silently tolerated — a board/chip
-test whose `Clock` was declared *after* the board, so the Clock died first and the board's
-destructor cancelled its wake event on freed memory. No compiler warning fires for it.
+A crash on one platform only — typically Windows CI red, macOS and Linux green — is usually a
+use-after-free or use-after-scope that one allocator tolerates and another does not. No compiler
+warning fires for it.
 
-`-DSANITIZE=on` is the local oracle. It threads AddressSanitizer + UndefinedBehaviorSanitizer
+`-DSANITIZE=on` finds it locally. It threads AddressSanitizer + UndefinedBehaviorSanitizer
 (just ASan on MSVC) through the whole binary, so the crash names its own `file:line` instead of
 you guessing from a block-buffered stack trace. Configure it in its **own build directory** — an
 instrumented binary is slower and is not what you ship:
@@ -232,10 +231,8 @@ cmake --build build-asan --target altair_tests
 ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1 ./build-asan/altair_tests
 ```
 
-It is off by default and not in CI — CI catches the Windows crash by running on Windows, and this
-is the tool you reach for once it does. Run it before merging anything that changes board or chip
-object lifetimes. **The rule it enforces:** in a board/chip test, declare `Clock c;` *before* the
-board it drives (`tests/test_dcdd.cpp` is the precedent).
+It is off by default and not in CI — CI catches a platform-only crash by running on that
+platform, and this is the tool you reach for once it does.
 
 ## The documentation is part of the build
 
