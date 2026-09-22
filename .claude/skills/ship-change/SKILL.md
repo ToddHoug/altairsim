@@ -65,6 +65,25 @@ tested by hand, a window check a person has not done.
 - Sync: `git switch master && git pull --ff-only`.
 - If `TODO.md` tracks the item, update it. It is untracked, so it needs no branch or PR.
 
+## 7. Close out, so the session can be cleared
+
+**The merge is not the end of the work — finish these before saying the task is done, so the
+maintainer can `/clear` without losing anything.** Say explicitly when they are all done.
+
+- **Wait for CI's PDF commit, then pull again.** If the change touched anything under `docs/`,
+  the `Documents` workflow rebuilds `docs/*.pdf` and pushes a `Rebuild the PDFs for <sha>`
+  commit to `master` a minute or two AFTER the merge. Poll it
+  (`gh run list --workflow=docs.yml -L 1`), then `git pull --ff-only`. Skip this and the next
+  session starts a branch on a stale `master` and rediscovers it as a conflict.
+- **Confirm the branch is gone** both locally and on origin (`git fetch --prune`), and that
+  `git status` is clean. A leftover branch or a stray edit is the thing a `/clear` hides.
+- **Write back what was learned.** A non-obvious trace, a trap paid for once, or a procedure
+  that is now a skill goes into a memory note (and its one-line pointer in `MEMORY.md`) — or
+  into `docs/devguide/` when the fact is about how the code is built. Nothing durable should
+  exist only in the transcript.
+- **Report the final state in the reply**: the merge commit, the PDF commit if there was one,
+  what was written back, and anything deliberately left undone.
+
 ## A PR from another contributor
 
 If the PR's author is not `deltecent`, this skill does not apply: use `review-pr`. Its merge
