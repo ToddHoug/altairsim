@@ -24,7 +24,8 @@ whether or not a skill is loaded:
 The three gates are **plan approved**, **commit approved** and **PR approved**. Each
 approval covers that one step only; it never carries over to the next. **A PR from anyone but
 `deltecent` goes through the `review-pr` skill: its merge needs green CI *and* the
-maintainer's approval.**
+maintainer's approval.** **An incoming issue goes through the `review-issue` skill**, which
+reaches a verdict and stops there — it never builds anything.
 
 ## If you are here to build or ship a release
 
