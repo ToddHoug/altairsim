@@ -3,7 +3,9 @@
 # The board is our own design (docs/boards/cadzilla.md), built from two real mid-1980s chips,
 # on a fixed VESA monitor (`mode`, 640x480 here). It is wired for 8 bits per pixel and an
 # address increment of 8 words per display cycle; the register values for every mode are in
-# the board's reference.
+# the board's reference. One 8-port I/O block: `port`/`port+1` the ACRTC, `port+3` the board's
+# own MODE register (single vs. interleaved access, sync polarity), `port+4..+7` the Bt453 --
+# there is no separate DAC strap any more, the RAMDAC moves with the ACRTC.
 #
 # `altairsim cadzilla` comes up at the monitor prompt. The board draws nothing until a program
 # sets the ACRTC's timing registers, starts it, loads the Bt453's color table and issues drawing
@@ -20,6 +22,7 @@
 #     OUT 71 00 / OUT 71 00 / OUT 71 00 / OUT 71 00      ; SAR1: 0
 #     OUT 70 06 / OUT 71 40 / OUT 70 07 / OUT 71 00      ; DCR $4000: base screen on
 #     OUT 70 04 / OUT 71 40 / OUT 70 05 / OUT 71 30      ; OMR $4030: start, GAI +8
+#     OUT 73 00                                          ; MODE: HSPOL/VSPOL positive, single access
 #     SHOW cad0                                          ; video on, picture 640x480 at (0,0), wiring ok
 #
 # It needs a host Display. With SDL3 present the picture shows in a window titled after the
@@ -46,13 +49,13 @@ port = 10
   [board.unit.b]
   connect = "null"
 
-# THE BOARD. ACRTC at 70/71, Bt453 at 74-77, a 640x480 monitor, 2 MB of frame memory (all
-# the defaults). It decodes no memory at all; the picture lives on the board.
+# THE BOARD. One 8-port block at 70-77 (ACRTC at 70/71, MODE at 73, Bt453 at 74-77), a
+# 640x480 monitor, 2 MB of frame memory (all the defaults). It decodes no memory at all;
+# the picture lives on the board.
 [[board]]
 type = "cadzilla"
 id   = "cad0"
 port = 0x70
-dac  = 0x74
 mode = "640x480"
 vram = 2048
 

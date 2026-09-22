@@ -2,7 +2,7 @@
 
 **Status:** milestone 1 — registers, FIFOs, a drawing subset, scan-out through the LUT into a
 fixed VESA monitor. Built 2026-09-18; the monitor model and the 8 bpp / GAI +8 wiring added
-2026-09-19.
+2026-09-19; the MODE register and the single 8-port I/O map added 2026-09-21.
 
 ## The real hardware
 
@@ -26,34 +26,45 @@ The board's own decisions, which no chip made — and every one of them is visib
 | Decision | cadzilla |
 |---|---|
 | ACRTC bus mode | 8-bit (DACK\* strapped at reset), the only mode an S-100 8080/Z80 can use |
+| **I/O map** | ONE 8-port block from `port` (default `0x70`, a multiple of 8): `+0`/`+1` the ACRTC, `+2` undecoded, `+3` the board's own **MODE register** (write-only), `+4`..`+7` the Bt453. There is no separate DAC strap — the RAMDAC always sits four ports above the ACRTC |
+| **MODE register** (`port+3`, write-only) | the board's own glue-logic strap, not a register on either chip: `HSPOL`/`VSPOL` sync polarity, `AMODE` the access mode the board's *own* fetch logic runs (single/interleaved — must agree with the ACRTC's own OMR ACM bit, or `wiring` says so), `OLEN` overlay enable (TBD, wired to nothing). Bit layout below |
 | **Shift register** | wired for **8 bits per pixel and 8 words per display fetch**: each display cycle the board fetches eight consecutive words (128 bits) at the address the ACRTC puts on MAD and shifts them out as sixteen 8-bit pixels, low byte of the low word first. This is a hardware fact, not a register — see *Programming model* below |
 | **Monitor** | a fixed-frequency VESA display chosen by the `mode` strap: **640x400, 640x480 (default), 800x600, 1024x768**. The frame is always the mode's size; the ACRTC's picture is placed in it by HDS/VDS against the mode's porches |
-| **Access modes** | single (OMR ACM = `0x`) and interleaved (ACM = `10`). Superimposed (`11`) is not wired |
+| **Access modes** | single and interleaved, selected by **MODE AMODE** (not read from the ACRTC's own OMR ACM bit — the two are independent straps a driver must set in agreement). Superimposed is not wired |
 | Frame memory fitted | `vram` kilobytes, default **2048** — 2 MB, the full 1 M words the ACRTC addresses (1024x768 at 8 bpp needs 768 KB); a smaller fit aliases above its size |
 | Pixel bus to the DAC | P0–P7 from the shift register; the Bt453 sees exactly the byte the frame memory holds |
-| Overlay inputs | OL0, OL1 tied low: the overlay registers can be loaded but nothing selects them |
+| Overlay inputs | OL0, OL1 tied low regardless of OLEN: the overlay registers can be loaded but nothing selects them yet |
 | IRQ\* | not wired to the bus (a later milestone) |
 
-### Programming model
+### The MODE register (`port+3`, write-only)
 
-The ACRTC does not serialize pixels — it only puts a word address on its MAD bus once per
-display cycle and advances that address by GAI words for the next one. What the board does
-with each address is the board's business, and cadzilla's is fixed: **eight words, sixteen
-8-bit pixels**. So a program must tell the chip the same thing, or the two disagree:
+| Bit | Field | Meaning |
+|---|---|---|
+| 0 | `HSPOL` | horizontal sync polarity: 0 = positive sync pulse, 1 = negative |
+| 1 | `VSPOL` | vertical sync polarity: 0 = positive sync pulse, 1 = negative |
+| 2 | `AMODE` | access mode the board's own fetch logic runs: 0 = single, 1 = interleaved |
+| 3 | `OLEN` | overlay enable — TBD, keep 0 |
+| 4–7 | — | unused |
 
-- **CCR GBM = `011` (8 bits per pixel)**, so the drawing engine's pixel arithmetic matches the
-  bytes the shift register emits. At any other GBM the drawing commands still run — the chip
-  has no idea what the board fetches — but they pack pixels the board will not unpack, and the
-  picture is scrambled exactly as it would be on the real card.
-- **OMR GAI = `011` (+8 words per display cycle)**, so the ACRTC steps over exactly the eight
-  words the board just fetched. At GAI +1 the board still fetches eight words per cycle from an
-  address that only moved by one: the raster shows each eight-word run overlapping the last.
-- **OMR ACM** single or interleaved. In interleaved mode the ACRTC takes two memory cycles per
-  display cycle, so **every horizontal register is in doubled units** for the same picture
-  (`HC`, `HSW`, `HDS`, `HDW`, `HWS`, `HWW`) and one memory cycle is worth 8 pixels of the
-  frame instead of 16.
+The bit positions are this implementation's own choice — 0..3 in the order the fields were
+specified — recorded in `src/boards/cadzilla.h`, not settled by any external spec. The
+register is write-only on the wire, like the Dazzler's format port; `SHOW <id>` decodes it
+back into four read-only status lines (`hspol`, `vspol`, `amode`, `olen`) the same way the
+Dazzler turns its write-only control/format bytes into `video`/`resolution`/`color`.
 
-`SHOW <id>` has a `wiring` line that reads `ok` or names which of GBM / GAI / ACM is off.
+`HSPOL`/`VSPOL` are recorded and reported but drive nothing else — this model has no separate
+sync-pulse signal for a polarity to invert (see Limitations). `OLEN` is likewise recorded but
+not wired: OL1..0 stay tied low regardless, so setting it changes nothing about the picture
+yet.
+
+### The programmed picture uses the board's own AMODE, not the chip's
+
+`programmedWidth()`, `programmedX()` and the paint loop all read **MODE AMODE**, not the
+ACRTC's OMR ACM bit — the board's external fetch logic cannot see inside the chip's register
+file, so it needs its own strap, exactly as `wiring()` already treats GBM and GAI as things a
+driver must set in agreement with fixed board behavior. If OMR ACM and MODE AMODE disagree,
+`wiring` names it (`"OMR ACM is interleaved, MODE AMODE says single"`) and the picture follows
+MODE, not OMR — that is what "the board's own fetch logic" means concretely.
 
 ### The monitor modes
 
@@ -103,17 +114,18 @@ porch. `SHOW`'s `picture` line reports the programmed size and where its top-lef
 
 ## Register reference
 
-Six I/O ports, no memory. ACRTC at `port` (even, default `0x70`); Bt453 at `dac` (a multiple of
-four, default `0x74`).
+One 8-port I/O block, no memory: everything at `port` (a multiple of 8, default `0x70`).
 
 | Addr | OUT (write) | IN (read) |
 |---|---|---|
 | `BASE+0` | **Address register (AR)**: which control register `BASE+1` reaches (`r00`–`rFF`) | **Status register (SR)**: `CER ARD CED LPD RFF RFR WFR WFE` (D7..D0) |
 | `BASE+1` | the control register AR names, **one byte**: even AR = high byte, odd AR = low byte. AR = 0/1: a **command word into the write FIFO**, high byte then low | the same register's byte; AR = 0/1: the next byte **out of the read FIFO**, high then low |
-| `DAC+0` | Bt453 address register (which LUT entry the next R,G,B cycles touch); resets the color phase to red | the address register |
-| `DAC+1` | color palette RAM: red, then green, then blue; the entry is written on the blue cycle and the address increments | R, G, B of the entry, one per read; increments after blue |
-| `DAC+2` | the address register again (an alias; there is no separate read-mode register on this part) | the address register |
-| `DAC+3` | overlay registers 1–3 (ADDR1..0 = 01, 10, 11), same R,G,B protocol | the same |
+| `BASE+2` | — not decoded — | — not decoded — |
+| `BASE+3` | **MODE register**: `HSPOL`(0) `VSPOL`(1) `AMODE`(2) `OLEN`(3), bits 4–7 unused. Write-only | floats — MODE cannot be read back |
+| `BASE+4` | Bt453 address register (which LUT entry the next R,G,B cycles touch); resets the color phase to red | the address register |
+| `BASE+5` | color palette RAM: red, then green, then blue; the entry is written on the blue cycle and the address increments | R, G, B of the entry, one per read; increments after blue |
+| `BASE+6` | the address register again (an alias; there is no separate read-mode register on this part) | the address register |
+| `BASE+7` | overlay registers 1–3 (ADDR1..0 = 01, 10, 11), same R,G,B protocol | the same |
 
 **Status register.** `WFE` write FIFO empty (up to 8 words may be written), `WFR` write FIFO
 not full (one word may), `RFR` read FIFO has a word, `RFF` read FIFO full, `CED` command end —
@@ -162,7 +174,8 @@ and the same three for *inside*).
 
 ## How it is simulated
 
-- **Bus cycles decoded**: `IN`/`OUT` on `port`, `port+1`, and `dac`..`dac+3`. No memory.
+- **Bus cycles decoded**: `IN`/`OUT` on `port`/`port+1` (the ACRTC); `OUT` only on `port+3`
+  (MODE); `IN`/`OUT` on `port+4`..`port+7` (the Bt453). `port+2` answers nothing. No memory.
 - **Two chips, no bus-level timing**: `Hd63484` (`src/chips/hd63484.h`) and `Bt453`
   (`src/chips/bt453.h`) hold all the state; the board forwards RS = A0 to one and C1C0 = A1A0
   to the other. A drawing command executes **at the instant its last parameter lands** — the
@@ -180,22 +193,26 @@ and the same three for *inside*).
   clear) the frame is black -- the monitor is there from power-on, signal or not, so the
   window opens at the prompt like the Dazzler's and shows the picture once a program starts
   the chip.
-- **`properties()`**: straps `port`, `dac`, `mode` (the monitor), `vram` (kilobytes, a power of
-  two 8–2048; refits the frame memory), `width` (the window); live, read-only `video`, `picture`
-  (programmed size and position in the frame), `wiring` (GBM/GAI/ACM against the board) and
-  `status` (the SR).
+- **`properties()`**: straps `port` (the whole 8-port block's base), `mode` (the monitor),
+  `vram` (kilobytes, a power of two 8–2048; refits the frame memory), `width` (the window);
+  live, read-only `video`, `picture` (programmed size and position in the frame), `wiring`
+  (GBM/GAI against the board, OMR ACM against MODE AMODE), the MODE register decoded into
+  `hspol`/`vspol`/`amode`/`olen`, and `status` (the SR).
 - **Interrupts**: none wired. `Hd63484::irq()` answers what IRQ\* would be; a later milestone
   adds the `interrupt` strap.
 - **Snapshot**: both chips — registers, FIFOs, a command in flight, the drawing state, the
-  pattern RAM, **the whole frame memory** (no memory board holds it) and the LUT.
+  pattern RAM, **the whole frame memory** (no memory board holds it) and the LUT — plus the
+  board's own MODE register, since nothing else holds that either.
 
 ### Reset
 
 - `Reset::PowerOn`: the ACRTC's registers, pattern RAM and frame memory zero, then RES\*; the
   Bt453's table black, address 0, phase red.
-- `Reset::Bus`: RES\* to the ACRTC only — SR `$23`, ABT set, STR and M/S clear, FIFOs cleared,
+- `Reset::Bus`: RES\* to the ACRTC — SR `$23`, ABT set, STR and M/S clear, FIFOs cleared,
   everything else kept, so the picture blanks (nothing is displaying) and a driver that restarts
-  the chip finds its timing intact. **The Bt453 has no reset pin**: the LUT survives.
+  the chip finds its timing intact. The MODE register is glue on the same RESET\* line and is
+  cleared too — a driver must reprogram both the ACRTC's timing and MODE after a reset.
+  **The Bt453 has no reset pin**: the LUT survives.
 
 ## Quirks reproduced
 
@@ -211,6 +228,8 @@ and the same three for *inside*).
 | In 8-bit mode WPTN's *n* counts **bytes**, so it is twice the word count (WPTN-1) | half the pattern loads and the other half is parsed as the next command |
 | A DRD "goes into an indefinite wait state after the last transfer" — CED never sets; ABT ends it (manual 6.5) | a driver waiting on CED after a DRD hangs on real silicon and would not here |
 | The shift register is 8 bpp × 8 words whatever CCR/OMR say: a wrong GBM packs pixels the board will not unpack, a wrong GAI makes each fetch overlap the last | an off-spec program shows a coherent picture here and garbage on the card, or the reverse |
+| **MODE AMODE, not OMR ACM, governs the board's own fetch pattern** — the two are independent straps a driver must agree, and only `wiring` compares them | a driver that sets the ACRTC to interleaved but forgets `port+3` gets a SINGLE-access picture out of doubled registers: half the frame, or a picture that never fills |
+| MODE is write-only and covers a gap: `port+2` answers nothing, `port+3` cannot be read back | a driver probing the block with `IN` for a live register at `+2` or `+3` finds nothing, correctly |
 | In interleaved mode every horizontal register is in doubled units and a memory cycle is 8 frame pixels | the picture is half as wide as intended, or the timing is off by half a line |
 | The picture is placed by HDS/VDS against the mode's porches; the frame does not grow to fit | a program that lands one cycle early is clipped, not shifted |
 | A Bt453 address-register **write** resets the R/G/B phase; a **read** does not; both `DAC+0` and `DAC+2` are the same register; the address increments after the blue cycle and wraps `$FF` → `$00` | colors land one channel out of phase, or a Bt458 driver's "read mask" write moves the address |
@@ -236,6 +255,15 @@ and the same three for *inside*).
 - **The frame memory is zero at power-on**; real DRAM is not.
 - **Bt453**: the analog side (sync, blank, the CS\*-blanks-video artifact) is not modeled and
   cannot be observed from the bus.
+- **MODE HSPOL/VSPOL are recorded, not modeled.** This board has no separate sync-signal
+  representation for a polarity bit to invert — the picture is painted directly into a
+  Surface, not generated as a raster with distinct sync pulses — so the two bits are decoded
+  into `SHOW`'s `hspol`/`vspol` and drive nothing further. **OLEN is likewise recorded but
+  not wired**: it is the spec's own "TBD", and OL1..0 stay tied low regardless of its value.
+- **The MODE register's bit assignment (0=HSPOL, 1=VSPOL, 2=AMODE, 3=OLEN) is this
+  implementation's own choice**, not drawn from any external document — the board is our own
+  design and the spec that named the four fields did not fix their bit positions. See
+  `src/boards/cadzilla.h`.
 
 ## Verification
 
@@ -244,15 +272,17 @@ and the same three for *inside*).
 8-bit register access, FIFO/status transitions, every worked example the manual gives (WPR-2,
 RPR-2, WPTN-2, RPTN-2, ORG-3, CLR-3/4, ALINE-2, ARCT-2, AFRCT-1, DRD/DWT-2), the operation,
 color and area modes, scan-out geometry, the window overlay, and a snapshot round trip.
-`tests/test_cadzilla.cpp` proves the board: the six-port decode both directions, the ports
-reaching the chips, and an **end-to-end 640x480 picture** — LUT loaded through the four DAC
+`tests/test_cadzilla.cpp` proves the board: the one-8-port-block decode (both directions on
+the ACRTC and the Bt453, write-only on MODE, nothing at the `+2` gap), the MODE register's
+four fields decoding independently into live status, the ports reaching the chips, and an
+**end-to-end 640x480 picture** — LUT loaded through the four DAC
 ports, a rectangle, a line and a dot drawn through the two ACRTC ports, the frame read back
 with `CHECK_FRAME_OPTS` sampled every 32nd pixel for a reader and `CHECK_FRAME_PIXELS`
 against an oracle for **every one of the 307,200 pixels** (`tests/framecheck.h`), its colors
 resolved through the palette; the picture's placement by HDS/VDS (one
 cycle right, one cycle clipped, one raster down, a narrower picture); the wiring — GAI +1
-repeating each fetch and a 4 bpp dot landing in the wrong nibble, as the hardware would, with
-`wiring` naming each; **1024x768 in interleaved mode** with the doubled registers, sampled
+repeating each fetch, a 4 bpp dot landing in the wrong nibble, and MODE AMODE disagreeing with
+OMR ACM (the picture follows MODE, not OMR), as the hardware would, with `wiring` naming each; **1024x768 in interleaved mode** with the doubled registers, sampled
 every 64th pixel and checked pixel by pixel; every mode's frame filled by one `AFRCT` and
 every pixel of it checked; the window at
 HWS/VWS; the `mode` strap re-opening the frame at 800x600; then a palette-only change moving

@@ -20,6 +20,13 @@ interleaved access, out of 2 MB of its own frame memory, and the window is the s
 (`src/chips/`), built from the Hitachi and Brooktree data sheets, so the next board that carries one
 gets it for free. Circles, arcs, paint, patterns and copies are recognized but not drawn yet.
 
+The board is one 8-port I/O block: the ACRTC at `port`/`port+1`, a write-only **MODE register**
+at `port+3` (the board's own glue, not a chip register -- `HSPOL`/`VSPOL` sync polarity, `AMODE`
+the access mode the board's *own* fetch logic runs, `OLEN` reserved), and the Bt453 fixed at
+`port+4`..`port+7` -- there is no separate `dac` strap any more, the RAMDAC moves with the
+ACRTC. `SHOW <id>` decodes MODE into read-only `hspol`/`vspol`/`amode`/`olen`, and `wiring` now
+also flags a driver that programmed OMR ACM and MODE AMODE in disagreement.
+
 Alongside it, a video board's frame can now leave the simulator: a test asserts on the **whole
 picture** as a text grid and, when it disagrees, writes what the board actually drew as a `.ppm`
 you can open. The Developer Guide's new *Writing a video board* chapter walks through it.
