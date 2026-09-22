@@ -113,7 +113,12 @@ DIR  hostbridge          <=  cpm/hostbridge
 # A DIR, not a FILE, and deliberately: a FILE line's package path is the literal string
 # tests/acceptance/docs-package.cmake makes the manual contain, and the reader's manifest
 # should say `skills/`, not `skills/altairsim/references/driving-with-ai.md`.
-DIR  skills              <=  .claude/skills
+#
+# ONE SKILL, NAMED, NOT THE WHOLE FOLDER. .claude/skills/ also holds the release skills
+# (release-worker, release-coordinator, release-verify), which are for whoever BUILDS this
+# package and mean nothing to someone holding it. The map has no exclude, so a DIR of the whole
+# folder would ship every skill added there. Name each shipped skill on its own line instead.
+DIR  skills/altairsim    <=  .claude/skills/altairsim
 
 # ---------------------------------------------------------------------------
 # FILES -- <package path>  <=  <path in this repo>
