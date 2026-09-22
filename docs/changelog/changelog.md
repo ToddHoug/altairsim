@@ -8,83 +8,13 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
-### A `telnet:` line says who you reached
+## 1.1.0
 
-Someone telnetting in to a board line saw nothing until the guest printed, with no way to tell
-whether they had reached the right machine and the right line. A `telnet:PORT` line now greets
-each caller with one line, `Connected to AltairSim X.Y.Z (sio0:b) on port 2323`, which the
-guest never sees. `?banner=off` turns it off. A raw `socket:PORT` stays silent unless you add
-`?banner`, because another machine is often the one calling it.
-
-### A `run` can be stopped early over `--mcp`
-
-Over `--mcp` there was no way to stop a `run` early: it kept going until its `timeout_ms`, and
-a client that gave up on it could only kill the whole server. Now there are two ways. **Cancel
-the request** with the standard MCP `notifications/cancelled` message — the server reads its
-input while a `run` is going, so it sees the cancel at once — or **send the `altairsim` process
-a ^C** (or `kill -INT`). Either way the `run` in progress stops, returning `stopped:
-"interrupted"` with what the guest had printed so far and leaving the machine as it was. A
-cancel for some other request is ignored, and requests sent during a `run` are answered in
-order once it returns.
-
-^C on a hand-started `--mcp` server is no longer instantly fatal — the first is caught. A
-second ^C, pressed before the server has reported the first, ends it as before. A server
-started in the background or under `nohup` ignores ^C, as such programs do.
-
-### A `status` tool answers even while the server is wedged or mid-flight
-
-There was no way to ask "is the server still alive" without risking the same block as
-everything else: `recv`, `regs`, even a fresh `who` all queue behind a `run` in progress, so
-checking on a call you suspect is stuck could only add another stuck call. **`status` now
-answers immediately, always** — board id, whether the server is currently busy on ANY call
-(not just `run` — a long `monitor`/`mem_load`/`snapshot` counts too), and the step count and
-PC as of the last `run`'s completed slice. It is deliberately a snapshot rather than a live
-read: reporting the *exact instant's* PC while the guest runs would mean reading CPU state
-from a different thread than the one advancing it, which is not a request `status` is in a
-position to make safely — `pc`/`steps` are only as fresh as the last `run`, and `generation`
-is the only field guaranteed to climb monotonically. Poll it standalone rather than
-sequencing it with the rest of a script — it can, and normally will, answer ahead of
-requests queued before it.
-
-### `run`'s `timeout_ms` is a real ceiling now
-
-Driving a guest over `--mcp` with a real device on a line — a serial cable, a socket, anything
-but the console and an empty jack — a `run` could outlast its budget without limit. Bytes
-arriving off the wire renewed the deadline, so a peer that said anything at all, however
-slowly, kept the call going; the only true bound was an internal ten-minute cap. Ask for six
-seconds and you could wait two minutes. **`timeout_ms` now bounds the call in wall-clock time
-no matter what is arriving on any line.**
-
-The leniency was there for a reason — a boot loader pulling its system image in 512-byte
-blocks over a 38.4k line runs many seconds, and cutting it at a modest budget truncated the
-transfer. The answer is to ask for the time up front instead: give such a call a `timeout_ms`
-as long as its worst case (up to 600000 ms) and let `until` end it early, which costs nothing
-because the budget is a ceiling and not a wait. A call that does hit it mid-transfer returns
-`stopped: "timeout"` with what it read so far — a normal result to resume another `run` on,
-not a failure. The separate grace that keeps a quiet wire from being mistaken for a finished
-prompt is unchanged.
-
-### The Altair 680b moves to its own simulator
-
-The **MITS Altair 680b** — the Motorola 6800 machine 1.0.0 added — leaves altairsim for a
-simulator of its own, **swtpcsim** (<https://github.com/deltecent/swtpcsim>), where it joins the
-rest of the 6800/6809 world it belongs to. The 6800 CPU core, its disassembler and assembler, the
-`altair680` machine, the `680io` / `680uio` / `680kcacr` boards, and the MON680 / KCACR PROMs go
-with it. altairsim is once again purely an 8080/Z80/8085 S-100 simulator, which is what its bus, its
-boards and its machines all are. The **Motorola S-record** support that arrived alongside the 680b
-stays — `LOAD` still reads `.S19` and takes `FORMAT=SREC`, because it is a general file format and
-not a 6800-only one.
-
-### `STARTUP` — build a machine's boot list at the prompt
-
-A machine file's `startup = [...]` is the operator's keystrokes written down — `MOUNT` the disk,
-`LOAD` the loader, `RUN`. Until now the only way to compose that list was to hand-edit the TOML
-(with the quote-escaping a path with a space needs), because nothing in the monitor wrote to it:
-`CONFIG SAVE` round-tripped whatever was loaded, but a machine loaded without a `startup` block
-saved without one. The new **`STARTUP`** command edits the list in place — `STARTUP ADD <command>`
-appends a line exactly as typed, `STARTUP REMOVE <n>` drops one, `STARTUP CLEAR` empties it, and a
-bare `STARTUP` shows it numbered. `ADD` stores the rest of the line verbatim, quotes and all, so a
-boot sequence you assemble at the prompt is what `CONFIG SAVE` writes and `CONFIG LOAD` reads back.
+**1.1.0 is the release that makes a running machine reachable.** Where 1.0.0 filled out the
+processors and the boards, 1.1 is about getting at the machine once it is running: a person
+telnets into a line and lands in a session that behaves, an AI drives one over `--mcp` and can
+stop a `run` it started, and a boot sequence is composed at the prompt instead of hand-edited
+into a TOML. The Altair 680b, meanwhile, leaves for a simulator of its own.
 
 ### A `telnet:` endpoint, so a human telnets in without the double echo
 
@@ -94,25 +24,89 @@ the terminal: the client echoes every keystroke locally *and* the guest echoes i
 Enter arrives as a whole line with the CR mangled to LF. The new **`telnet:PORT`** endpoint is
 `socket:`'s twin that speaks the Telnet protocol: on connect it offers `WILL ECHO` / `SUPPRESS
 GO AHEAD`, so a stock client drops its local echo and sends one key at a time, and it strips the
-inbound protocol bytes the guest should never see. Use it in place of `socket:` whenever a human
-telnets into a BBS or a monitor; `socket:` stays a raw pipe for machine-to-machine links and the
-live mirror. `telnet:HOST:PORT` dials out as the client, asking the far end to echo.
+inbound protocol bytes the guest should never see. `telnet:HOST:PORT` dials out as the client.
+Use it wherever a human telnets into a BBS or a monitor; `socket:` stays a raw pipe for
+machine-to-machine links and the live mirror.
 
-The PMMI modem's `dial=`/`answer=` line speaks Telnet too, and **by default** — its far end is
-almost always a person's telnet client — so a BBS the PMMI answers behaves the moment someone
-telnets in, with no configuration. Set `telnet=off` on the board for a raw modem link to another
-simulator. Both paths share one protocol engine (`TelnetCodec`).
+A `telnet:` line also **greets each caller** with one line the guest never sees — `Connected to
+AltairSim X.Y.Z (sio0:b) on port 2323` — so you can tell at once whether you reached the right
+machine and the right line. `?banner=off` turns it off; a raw `socket:` stays silent unless you
+ask for `?banner`, because another machine is usually the one calling it.
 
 ### The PMMI modem answers a real BBS
 
 A PMMI configured to answer (`answer=PORT`) now keeps its phone line **plugged in for the life of
-the machine**, instead of only while the guest is holding DTR high. Answer-mode software that waits
-for a ring with the modem on-hook — CBBS is the canonical example — can finally hear the call: it
-sits in its ring-wait loop with DTR low, and an inbound connection rings it, exactly as a real
-auto-answer modem behaves. Dropping DTR now hangs up the current call but leaves the line listening,
-so a caller who dials in after a previous session is answered rather than refused. A caller who hangs
-up **before** being answered is also cleaned up promptly, so the next call still gets through. Plain
-`socket:` endpoints on any board are unchanged.
+the machine**, instead of only while the guest is holding DTR high. Answer-mode software that
+waits for a ring with the modem on-hook — CBBS is the canonical example — can finally hear the
+call: it sits in its ring-wait loop with DTR low, and an inbound connection rings it, exactly as
+a real auto-answer modem behaves. Dropping DTR hangs up the current call but leaves the line
+listening, and a caller who hangs up before being answered is cleaned up promptly, so the next
+call still gets through.
+
+The PMMI's `dial=`/`answer=` line speaks Telnet too, and **by default** — its far end is almost
+always a person's telnet client — so a BBS the PMMI answers behaves the moment someone telnets
+in, with no configuration. Set `telnet=off` on the board for a raw modem link to another
+simulator.
+
+### Driving a machine over `--mcp`: a `run` you can stop, and a `status` that always answers
+
+Three things that made `--mcp` hard to drive are fixed together.
+
+**A `run` can be stopped early.** Cancel the request with the standard MCP
+`notifications/cancelled` message — the server reads its input while a `run` is going, so it
+sees the cancel at once — or send the `altairsim` process a ^C (or `kill -INT`). Either way the
+`run` stops, returning `stopped: "interrupted"` with what the guest had printed so far and the
+machine as it was. ^C on a hand-started server is no longer instantly fatal; a second ^C, before
+the first is reported, ends it as before.
+
+**`status` answers immediately, always** — board id, whether the server is busy on any call, and
+the step count and PC as of the last `run`'s completed slice. It is a snapshot, not a live read:
+`pc` and `steps` are only as fresh as the last `run`, and `generation` is the one field
+guaranteed to climb. Poll it standalone rather than sequencing it with the rest of a script.
+
+**`timeout_ms` is a real ceiling.** Bytes arriving on a line used to renew the deadline, so a
+peer that said anything at all kept the call going; ask for six seconds and you could wait two
+minutes. It now bounds the call in wall-clock time no matter what arrives. Give a long transfer
+the time it needs up front (up to 600000 ms) and let `until` end it early — the budget is a
+ceiling, not a wait. A call that hits it returns `stopped: "timeout"` with what it read, which is
+a normal result to resume another `run` on.
+
+### `STARTUP` — build a machine's boot list at the prompt
+
+A machine file's `startup = [...]` is the operator's keystrokes written down — `MOUNT` the disk,
+`LOAD` the loader, `RUN`. Until now the only way to compose that list was to hand-edit the TOML,
+with the quote-escaping a path with a space needs, because nothing in the monitor wrote to it.
+The new **`STARTUP`** command edits the list in place: `STARTUP ADD <command>` appends a line
+exactly as typed, `STARTUP REMOVE <n>` drops one, `STARTUP CLEAR` empties it, and a bare
+`STARTUP` shows it numbered. `ADD` stores the rest of the line verbatim, quotes and all, so a
+boot sequence you assemble at the prompt is what `CONFIG SAVE` writes and `CONFIG LOAD` reads
+back.
+
+### Smaller things
+
+**`SHOW CLOCK`** reports emulated time in the guest's own seconds, so you can see how far the
+machine thinks it has run against the wall clock. **A ROM region can relocate an image**: a HEX
+or S-record file whose addresses do not match where you want it loaded no longer has to be
+rewritten first. And the run path is faster — the bus peeks through its cached page decode
+instead of scanning the backplane, and the CPU `HISTORY` snapshot no longer builds register
+definitions it will not use.
+
+Fixes: the first byte to arrive on an idle 6850 line takes a character time to shift in, as the
+real chip does, instead of appearing instantly; the Host Bridge's `R.COM` upper-cases the CP/M
+name it creates, so the file it writes is the one CP/M can open; and a board that outlives its
+clock is no longer left holding a dead pointer.
+
+### The Altair 680b moves to its own simulator
+
+The **MITS Altair 680b** — the Motorola 6800 machine 1.0.0 added — leaves altairsim for a
+simulator of its own, **swtpcsim** (<https://github.com/deltecent/swtpcsim>), where it joins the
+rest of the 6800/6809 world it belongs to. The 6800 CPU core, its disassembler and assembler, the
+`altair680` machine, the `680io` / `680uio` / `680kcacr` boards, and the MON680 / KCACR PROMs go
+with it. altairsim is once again purely an 8080/Z80/8085 S-100 simulator, which is what its bus,
+its boards and its machines all are. The **Motorola S-record** support that arrived alongside the
+680b stays — `LOAD` still reads `.S19` and takes `FORMAT=SREC`, because it is a general file
+format and not a 6800-only one.
+
 
 ## 1.0.0
 
@@ -135,7 +129,7 @@ formats, `LOAD` now reads a **Motorola S-record** (`.S19`) file as well as Intel
 explicit `FORMAT=SREC`.
 
 > **Since moved.** The 680b and its 6800 core left altairsim after 1.0.0 for their own simulator,
-> **swtpcsim** (<https://github.com/deltecent/swtpcsim>) — see Unreleased. The S-record `LOAD`
+> **swtpcsim** (<https://github.com/deltecent/swtpcsim>) — see 1.1.0. The S-record `LOAD`
 > support described here stays.
 
 The **Intel 8085** joins them too — the 8080's binary superset, with `RIM`/`SIM` and the on-chip
