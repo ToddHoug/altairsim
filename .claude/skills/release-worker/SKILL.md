@@ -39,8 +39,8 @@ the package after you hand it over; the next stop is a user's download.
 
 **Your shell does not keep environment variables between commands.** Anything a command needs
 (`PATH`, `ALTAIR_SERIAL_A`) is set *in that same command*. If `cmake` is not found over a
-non-login ssh shell, prefix the command with `export PATH="<TARGET>_PATH:$PATH"` (on an Intel
-Mac that is `/usr/local/bin`).
+non-login ssh shell, prefix the command with `export PATH="<TARGET>_PATH:$PATH"` — the
+directory the login profile would have added.
 
 ## The eight steps — macOS and Linux
 

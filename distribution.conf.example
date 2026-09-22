@@ -34,12 +34,12 @@ COORDINATOR_DIST=src/altairsim/dist
 # <TARGET>_REPO      the worker's checkout.
 # <TARGET>_PARALLEL  yes, or no on a machine short of RAM (the compiler gets OOM-killed).
 # <TARGET>_PATH      directories to put in front of PATH for a non-login ssh shell, where the
-#                    profile that finds cmake is not read (e.g. /usr/local/bin on an Intel Mac).
+#                    profile that finds cmake is not read (a cmake tarball's bin, for one).
 
 MACOS_X86_64_SSH=builder@192.0.2.22
 MACOS_X86_64_REPO=src/altairsim
 MACOS_X86_64_PARALLEL=yes
-MACOS_X86_64_PATH=/usr/local/bin
+MACOS_X86_64_PATH=/Users/builder/opt/cmake/CMake.app/Contents/bin
 
 WINDOWS_X86_64_SSH=builder@192.0.2.29
 WINDOWS_X86_64_REPO=c:/altairsim-dev
