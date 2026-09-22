@@ -3,11 +3,14 @@
 Source: [HD63484.pdf](#) — Hitachi *HD63484 ACRTC Advanced CRT Controller* datasheet, the
 47-page section (pages 213–259) of a Hitachi microcomputer data book. This is the **primary
 trusted source** for `src/chips/hd63484.{h,cpp}`; the board that carries the chip is
-`docs/boards/cadzilla.md`. The Hitachi *HD63484 ACRTC Application Note* (#U90, April 1986,
-bitsavers) is the companion — its §7 gives the reset state (Table 7-1) and the
-initialization sequence — and the *HD63484 User's Manual* settles the 8-bit MPU-mode byte
-sequencing that this datasheet only names. See `docs/sources.md` for the sourcing decision
-that also admits MAME's `hd63484.cpp` as the *structural* basis of the model.
+`docs/boards/cadzilla.md`. Two companions do the rest: the Hitachi *HD63484 ACRTC
+Application Note* (#U90, April 1986, bitsavers) — its §7 gives the reset state (Table 7-1)
+and the initialization sequence — and
+[`Hitachi HD63484 ACRTC User's Manual.md`](Hitachi%20HD63484%20ACRTC%20User%27s%20Manual.md),
+the **primary source for semantics**: the 8-bit MPU-mode byte sequencing this datasheet only
+names, the FIFO/status rules, every register field's meaning, and a worked example for each
+of the 38 commands. See `docs/sources.md` for the sourcing decision that also admits MAME's
+`hd63484.cpp` as the *structural* basis of the model.
 
 *Converted from a 47-page scanned PDF (source pages 213–259) via OCR/transcription. Diagrams (block diagrams, timing diagrams, pinouts, waveform figures) are described in words rather than reproduced graphically. Per-page footers (the HITACHI wordmark and Hitachi America address/phone line) have been removed; page numbers are retained via the "(source page NNN)" markers.*
 
