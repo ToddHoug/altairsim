@@ -886,6 +886,21 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
+# CP/M off a REAL TNFS server. test_tnfs.cpp (in `unit`) proves the client against a fake
+# server in RAM; this boots the CP/M example with its floppy mounted over UDP from de-tnfsd,
+# SAVEs a file, and reads it back through a fresh mount. de-tnfsd is POSIX-only and not ours,
+# so the script SKIPs (77) unless it is on PATH -- installing it turns the test on. `hw` for
+# the same reason as serial-hw: it needs something outside the tree.
+# ---------------------------------------------------------------------------
+if(NOT WIN32)
+  add_test(NAME tnfs-hw
+           COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/tests/acceptance/tnfs-hw.sh
+                   $<TARGET_FILE:altairsim> ${CMAKE_CURRENT_SOURCE_DIR}
+                   ${CMAKE_CURRENT_BINARY_DIR}/tnfs-hw-work)
+  set_tests_properties(tnfs-hw PROPERTIES LABELS hw SKIP_RETURN_CODE 77 TIMEOUT 120)
+endif()
+
+# ---------------------------------------------------------------------------
 # The 8080 validation gate (DESIGN.md 3.2). Period CP/M test suites, run against
 # our core. Separate from the unit tests because these are the tests we did NOT
 # write, which is the entire reason they are worth anything.
