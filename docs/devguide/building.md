@@ -145,7 +145,7 @@ this tree.
 ```sh
 ctest --test-dir build -LE slow     # unit + acceptance. About 30 seconds.
 ctest --test-dir build              # ...plus 8080EXM, the full exerciser.
-ctest --test-dir build -L hw        # modem control, against a real null-modem cable.
+ctest --test-dir build -L hw        # a real null-modem cable, and a real TNFS server.
 ```
 
 The acceptance tests are not unit tests. They **boot period software on the whole machine
@@ -206,6 +206,13 @@ Wire it as (a DE-9 DTE pinout in parentheses, both ends):
 So B raising DTR is a *carrier appearing* at A — to a 6850 strapped `dcd=wired`,
 indistinguishable from a modem, which is the whole point of the test. The wiring is
 restated at the top of `tests/serialtest.cpp`.
+
+**`tnfs-hw` needs a TNFS server instead of a cable.** It boots the CP/M example with its
+floppy mounted from a real `de-tnfsd` (a POSIX TNFS server, not part of this tree), `SAVE`s a
+file, and reads it back through a fresh mount. The script starts and stops the server itself,
+on a local port, serving a copy of the image. It runs when `de-tnfsd` is on `PATH` and
+skips (77) otherwise. On Windows it is not registered at all: `de-tnfsd` is POSIX-only.
+`tests/test_tnfs.cpp`, in `unit`, covers the same client against a fake server on every push.
 
 ## Catching lifetime bugs: `-DSANITIZE=on`
 
