@@ -22,8 +22,9 @@ struct Rig {
     NullDisplay    disp;
     CadzillaBoard* cad = nullptr;
 
-    static constexpr uint8_t kAcrtc = 0x70;   // RS=0 at +0, RS=1 at +1
-    static constexpr uint8_t kDac   = 0x74;   // C1C0 at +0..+3
+    static constexpr uint8_t kAcrtc = 0x70;   // RS=0 at BASE+0, RS=1 at BASE+1
+    static constexpr uint8_t kMode  = 0x73;   // MODE register, BASE+3, write-only
+    static constexpr uint8_t kDac   = 0x74;   // Bt453, BASE+4..+7 -- fixed relative to BASE now
 
     Rig() {
         std::string err;
@@ -65,6 +66,9 @@ struct Rig {
         m.bus.ioWrite(kDac + 1, b);
     }
 
+    // ---- the MODE register: one write-only byte at BASE+3 ----
+    void mode_reg(uint8_t v) { m.bus.ioWrite(kMode, v); }
+
     // Program the ACRTC for the monitor mode the board is strapped to, the way the board's
     // documentation says to: 8 bpp, GAI +8, the mode's timing in memory cycles (doubled in
     // interleaved mode), the picture starting exactly where the porch ends, one raster per
@@ -84,6 +88,9 @@ struct Rig {
         reg(0xCE, 0x0000);                                                             // SAR1 = 0
         reg(0x04, (uint16_t)(0x4030 | (interleaved ? 0x08 : 0)));   // OMR: STR, GAI = 011, ACM
         reg(0x06, 0x4000);                                          // DCR: SE1
+        // The board's OWN glue reads MODE.AMODE for single/interleaved, not the ACRTC's OMR
+        // ACM bit -- both must be set in agreement, or `wiring()` says so.
+        mode_reg(interleaved ? 0x04 : 0x00);
         const uint32_t org = (uint32_t)(md.height - 1) * (uint32_t)mw;
         cmd(0x0400, {(uint16_t)(0x4000 | ((org >> 12) & 0xFF)), (uint16_t)((org & 0xFFF) << 4)});
         cmd(0x1800, {2, 0xFFFF});                             // pattern row 0 all ones
@@ -102,32 +109,71 @@ struct Rig {
 } // namespace
 
 void test_cadzilla() {
-    SECTION("cadzilla -- six I/O ports, IN and OUT, and no memory of its own");
+    SECTION("cadzilla -- one 8-port block: the ACRTC, MODE (write-only), the Bt453, the BASE+2 gap");
     {
         Rig g;
         BusCycle c;
         for (int dir = 0; dir < 2; ++dir) {
             c.type = dir ? Cycle::IoRead : Cycle::IoWrite;
             c.addr = 0x70;
-            CHECK(g.cad->decodes(c), "ACRTC RS=0 at 70, both directions (AR out, SR in)");
+            CHECK(g.cad->decodes(c), "ACRTC RS=0 at BASE+0, both directions (AR out, SR in)");
             c.addr = 0x71;
-            CHECK(g.cad->decodes(c), "ACRTC RS=1 at 71, both directions");
+            CHECK(g.cad->decodes(c), "ACRTC RS=1 at BASE+1, both directions");
             c.addr = 0x6F;
-            CHECK(!g.cad->decodes(c), "not the port below");
+            CHECK(!g.cad->decodes(c), "not the port below BASE");
             c.addr = 0x72;
-            CHECK(!g.cad->decodes(c), "nor 72-73: the DAC starts at 74");
+            CHECK(!g.cad->decodes(c), "BASE+2 is not decoded at all -- nobody answers it");
             for (uint16_t p = 0x74; p <= 0x77; ++p) {
                 c.addr = p;
-                CHECK(g.cad->decodes(c), "Bt453: all four of 74-77, both directions");
+                CHECK(g.cad->decodes(c), "Bt453: all four of BASE+4..+7, both directions");
             }
             c.addr = 0x78;
-            CHECK(!g.cad->decodes(c), "and not 78");
+            CHECK(!g.cad->decodes(c), "and not BASE+8 -- the block is eight ports");
         }
+        // BASE+3, MODE, is write-only -- like the Dazzler's format port floats on a read.
+        c.addr = 0x73;
+        c.type = Cycle::IoWrite;
+        CHECK(g.cad->decodes(c), "BASE+3 (MODE) decodes OUT");
+        c.type = Cycle::IoRead;
+        CHECK(!g.cad->decodes(c), "...but not IN");
+
         c.type = Cycle::MemRead;
         c.addr = 0x0000;
         CHECK(!g.cad->decodes(c), "no memory: the frame memory is the ACRTC's own");
         c.addr = 0xC000;
         CHECK(!g.cad->decodes(c), "nowhere");
+    }
+
+    SECTION("cadzilla -- the MODE register (BASE+3): write-only glue, decoded into live status");
+    {
+        Rig g;
+        auto prop = [&](const char* name) -> Property {
+            for (auto& p : g.cad->properties())
+                if (p.name == name) return p;
+            return Property{};
+        };
+        auto val = [&](const char* name) -> std::string {
+            Property p = prop(name);
+            return p.get ? p.get().text(p.radix) : std::string("<missing>");
+        };
+        CHECK(val("hspol") == "positive" && val("vspol") == "positive" && val("amode") == "single",
+              "the register comes up all zero");
+        CHECK(prop("olen").get().b() == false, "OLEN off");
+        CHECK(!prop("hspol").set && !prop("vspol").set && !prop("amode").set && !prop("olen").set,
+              "all four report read-only -- the register itself is write-only on the wire");
+
+        g.mode_reg(0x01);                          // HSPOL alone
+        CHECK(val("hspol") == "negative" && val("vspol") == "positive" && val("amode") == "single",
+              "HSPOL decodes on its own");
+        g.mode_reg(0x0F);                           // every bit the spec names
+        CHECK(val("hspol") == "negative" && val("vspol") == "negative" && val("amode") == "interleaved",
+              "all four bits decode independently");
+        CHECK(prop("olen").get().b() == true, "OLEN on -- TBD, wired to nothing else yet");
+
+        BusCycle c;
+        c.type = Cycle::IoRead;
+        c.addr = Rig::kMode;
+        CHECK(!g.cad->decodes(c), "and it cannot be read back on the bus");
     }
 
     SECTION("cadzilla -- the ports reach the chips: ACRTC status and registers, DAC palette");
@@ -304,6 +350,18 @@ void test_cadzilla() {
         g.reg(0x02, 0x0300);
         CHECK(g.cad->wiring() == "ok", "put right, the wiring line clears");
 
+        // The board's OWN glue (MODE AMODE) is what the picture actually uses -- not the
+        // ACRTC's OMR ACM bit, which must simply agree with it or `wiring` says so.
+        g.reg(0x04, 0x4038);                        // OMR ACM = interleaved; MODE AMODE still single
+        CHECK(g.cad->wiring() == "OMR ACM is interleaved, MODE AMODE says single",
+              "the two straps disagreeing is named");
+        CHECK(g.cad->programmedWidth() == 640, "and the picture still runs on MODE's single, unmoved");
+        g.mode_reg(0x04);                           // bring MODE AMODE into agreement: interleaved
+        CHECK(g.cad->wiring() == "ok", "agreeing again clears it");
+        CHECK(g.cad->programmedWidth() == 320, "and now the SAME HDW register reads as half the pixels");
+        g.mode_reg(0x00);
+        g.reg(0x04, 0x4030);
+
         g.reg(0x04, 0x403C);                       // ACM = 11: superimposed
         CHECK(g.cad->wiring() == "OMR ACM is superimposed, the board wires single and interleaved only",
               "superimposed mode is not wired");
@@ -412,23 +470,29 @@ void test_cadzilla() {
         CHECK(val("video") == "off" && val("status") == "0x23", "comes up stopped");
         CHECK(!prop("video").set && !prop("picture").set && !prop("wiring").set && !prop("status").set,
               "live status is read-only");
-        CHECK((bool)prop("mode").set && (bool)prop("port").set && (bool)prop("dac").set && (bool)prop("vram").set,
+        CHECK((bool)prop("mode").set && (bool)prop("port").set && (bool)prop("vram").set,
               "the straps are settable");
+        CHECK(!prop("hspol").set && !prop("vspol").set && !prop("amode").set && !prop("olen").set,
+              "the MODE register's four decoded fields are read-only, like the rest of live status");
         g.programMode();
         CHECK(val("video") == "on" && val("picture") == "640x480 at (0,0)" && val("wiring") == "ok",
               "live values follow the registers");
 
         std::string err;
         CHECK(!setProperty(*g.cad, "mode", "320x200", err), "an unlisted mode is refused");
-        CHECK(!setProperty(*g.cad, "port", "71", err), "an odd ACRTC base is refused");
-        CHECK(!setProperty(*g.cad, "dac", "76", err), "a DAC base that is not a multiple of 4 is refused");
+        CHECK(!setProperty(*g.cad, "port", "71", err), "a BASE that is not a multiple of 8 is refused");
+        CHECK(!setProperty(*g.cad, "port", "74", err), "not even a multiple of 4 is enough now -- the whole block moves together");
         CHECK(!setProperty(*g.cad, "vram", "100", err), "a non-power-of-two vram is refused");
         CHECK(!setProperty(*g.cad, "vram", "4096", err), "and more than the ACRTC can address");
-        CHECK(setProperty(*g.cad, "port", "E0", err) && setProperty(*g.cad, "dac", "E4", err), "even and 4-aligned are taken");
+        CHECK(setProperty(*g.cad, "port", "E0", err), "a multiple of 8 is taken");
         BusCycle c;
         c.type = Cycle::IoWrite;
         c.addr = 0xE1;
-        CHECK(g.cad->decodes(c), "and the board now decodes there");
+        CHECK(g.cad->decodes(c), "and the ACRTC's data port now decodes there");
+        c.addr = 0xE4;
+        CHECK(g.cad->decodes(c), "with the Bt453 four ports along, still at BASE+4 -- one strap moves both chips");
+        c.addr = 0x74;
+        CHECK(!g.cad->decodes(c), "and nothing answers at the old Bt453 address any more");
         CHECK(setProperty(*g.cad, "vram", "16", err) && g.cad->acrtc().vram().size() == 16 * 512, "vram refits the frame memory: 16 KB is 8 K words");
 
         // Changing the mode re-opens the window at the new size on the next frame.

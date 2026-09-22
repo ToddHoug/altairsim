@@ -957,15 +957,17 @@ RAM, this one keeps its picture to itself: the CPU never addresses a pixel. It *
 command** — "move here", "line to there", "clear this block" — written a word at a time into the
 ACRTC's FIFO, and the chip does the rest.
 
-Six ports. Two for the ACRTC (default `70`/`71`): the first is the *address register* going out and
-the *status register* coming back, the second is whichever 16-bit control register the address
-names, a byte at a time — high byte at an even address, low byte at the odd one, with the timing
-and display registers auto-incrementing so a whole block loads from one address write. Four for the
-Bt453 (default `74`–`77`): an address register, the palette RAM (red, green, blue in three
-successive writes), the address again, and three overlay colors. What the ACRTC scans out is an
-8-bit pixel value; what reaches the screen is that value looked up in the Bt453 — so a program
-picks its colors by loading the table, and repainting the table recolors the picture without
-redrawing it.
+One 8-port I/O block from `port` (default `0x70`). Two ports for the ACRTC: the first is the
+*address register* going out and the *status register* coming back, the second is whichever
+16-bit control register the address names, a byte at a time — high byte at an even address, low
+byte at the odd one, with the timing and display registers auto-incrementing so a whole block
+loads from one address write. One port, `port+3`, is the board's own **MODE register**
+(write-only) — sync polarity and which access mode the board's fetch logic runs, not a register
+on either chip. Four ports, `port+4`–`port+7`, are the Bt453: an address register, the palette
+RAM (red, green, blue in three successive writes), the address again, and three overlay colors.
+What the ACRTC scans out is an 8-bit pixel value; what reaches the screen is that value looked up
+in the Bt453 — so a program picks its colors by loading the table, and repainting the table
+recolors the picture without redrawing it.
 
 **The monitor is part of the board.** `mode` picks a fixed-frequency VESA display — `640x400`,
 `640x480` (the default), `800x600` or `1024x768` — and the window is always that size, exactly
@@ -978,8 +980,9 @@ and interleaved access — and `SHOW <id>` has a `wiring` line that says `ok` or
 
 **It needs a display**, and draws into it like the others: an SDL3 build opens a window titled
 with the board's id; a headless build runs identically and shows nothing. `SHOW <id>` reports the
-live `video`, `picture` (the programmed size and where it sits in the frame), `wiring` and ACRTC
-`status` alongside the straps: `port`, `dac`, `mode`, `vram` (frame memory in kilobytes, 2 MB by default) and
+live `video`, `picture` (the programmed size and where it sits in the frame), `wiring`, the MODE
+register decoded into `hspol`/`vspol`/`amode`/`olen`, and ACRTC `status`, alongside the straps:
+`port` (the whole block's base), `mode`, `vram` (frame memory in kilobytes, 2 MB by default) and
 `width`. The `cadzilla` machine is the bare board with a console to type at. The ACRTC's larger
 commands — circles, arcs, paint, pattern and area copies — are recognized but not yet drawn; the
 board says so in its status register, and the Developer Guide lists exactly what is modeled.

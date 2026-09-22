@@ -5,11 +5,15 @@
 //
 // TWO CHIPS ON SIX I/O PORTS, AND A FRAME MEMORY THE CPU NEVER SEES.
 //
-//   I/O     -- the ACRTC at BASE (default 0x70): BASE+0 is RS=0 (OUT: address register,
-//              IN: status), BASE+1 is RS=1 (the 16-bit register the address names, one
-//              byte per cycle, or the command FIFOs). The Bt453 at DAC (default 0x74): four
-//              ports by C1C0 -- address register, color palette RAM, address register
-//              again, overlay registers -- all read/write.
+//   I/O     -- ONE 8-port block from BASE (default 0x70; BASE must be a multiple of 8):
+//                BASE+0  ACRTC RS=0 (OUT: address register, IN: status)
+//                BASE+1  ACRTC RS=1 (the 16-bit register the address names, one byte per
+//                        cycle, or the command FIFOs)
+//                BASE+2  not decoded -- nobody answers it
+//                BASE+3  MODE register (write-only) -- the board's own glue-logic strap,
+//                        not a chip register; see MODE REGISTER below
+//                BASE+4..+7  Bt453 by C1C0 -- address register, color palette RAM, address
+//                        register again, overlay registers -- all read/write
 //   MEMORY  -- NONE decoded. The frame memory is DRAM on the board, private to the ACRTC;
 //              the CPU draws by issuing commands through the FIFO, never by poking a byte.
 //              The opposite reason from the Dazzler's for decoding no address.
@@ -57,6 +61,25 @@
 //   Also: how much DRAM is fitted (`vram` in kilobytes, default 2048 = the full 1 M words the
 //   ACRTC addresses; 1024x768 at 8 bpp needs 768 KB),
 //   OL1..0 tied low (no overlay source), and IRQ* not wired to the bus yet.
+//
+// THE MODE REGISTER (BASE+3, write-only) is the board's own glue logic, not a register on
+// either chip -- the host programs it in tandem with the ACRTC's own OMR when it sets up
+// the picture, and it is what the board's OWN fetch logic (programmedWidth/X, paintFrame)
+// reads for single vs. interleaved access, not the ACRTC's OMR bit. The bit assignment
+// below (0..3 in the order the fields were specified) is this implementation's own choice
+// -- the spec names the four fields and their meanings, not their bit positions -- and this
+// comment is the one place that choice is recorded:
+//
+//   bit 0  HSPOL  horizontal sync polarity: 0 = positive sync pulse, 1 = negative
+//   bit 1  VSPOL  vertical sync polarity:   0 = positive sync pulse, 1 = negative
+//   bit 2  AMODE  access mode the board's glue expects: 0 = single, 1 = interleaved --
+//                 must agree with the ACRTC's own OMR ACM bit, or `wiring` says so
+//   bit 3  OLEN   overlay enable -- TBD; keep 0. Not wired to anything yet: OL1..0 stay
+//                 tied low regardless (see above), so a set OLEN changes nothing today.
+//   bits 4-7      unused
+//
+// HSPOL/VSPOL are recorded and reported (`SHOW`'s hspol/vspol) but drive nothing: this
+// model has no separate sync-pulse signal for a polarity to invert. See Limitations.
 // ---------------------------------------------------------------------------
 
 #include "chips/bt453.h"
@@ -134,15 +157,28 @@ private:
     void render();
     void paintFrame(Surface* s, int w, int h);
 
+    // The board's own notion of access mode -- from the MODE register (BASE+3), not the
+    // ACRTC's OMR. This is what the shift register (paintFrame, programmedWidth/X) runs on;
+    // `wiring()` is what compares it against the chip's own OMR ACM bit.
+    int glueAccessMode() const { return (modeReg_ & kModeAmode) ? 2 : 1; }
+
     Hd63484 acrtc_;
     Bt453   dac_;
 
+    // MODE register bits (BASE+3) -- see the header comment for why these positions.
+    static constexpr uint8_t kModeHspol = 0x01;
+    static constexpr uint8_t kModeVspol = 0x02;
+    static constexpr uint8_t kModeAmode = 0x04;
+    static constexpr uint8_t kModeOlen  = 0x08;
+
     // ---- Straps ----
-    uint8_t port_ = 0x70;         // ACRTC: BASE (RS=0) and BASE+1 (RS=1); even
-    uint8_t dacPort_ = 0x74;      // Bt453: four ports; a multiple of 4
+    uint8_t port_ = 0x70;         // the 8-port block's BASE; a multiple of 8
     int     vramKB_ = 2048;       // frame memory fitted, in KILOBYTES (power of two); words = KB * 512
-    int     mode_ = 1;            // index into the mode table: 640x480
+    int     mode_ = 1;            // index into the VESA mode table: 640x480
     int     videoWidth_ = 0;      // host window width in px, 0 = auto
+
+    // ---- Runtime state written by the guest, not a strap ----
+    uint8_t modeReg_ = 0;         // MODE register (BASE+3): HSPOL/VSPOL/AMODE/OLEN
 
     // ---- Render bookkeeping ----
     bool dirty_ = true;           // something in the picture moved since the last frame

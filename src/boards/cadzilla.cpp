@@ -47,29 +47,37 @@ void CadzillaBoard::setDisplay(Display* d) { g_display = d; }
 CadzillaBoard::CadzillaBoard() : acrtc_((size_t)2048 * 512) {}
 
 // ---------------------------------------------------------------------------
-// Bus: six I/O ports, no memory.
+// Bus: one 8-port block from BASE, no memory. BASE+2 is not decoded; BASE+3 (MODE) is
+// write-only -- both exactly like the Dazzler's format port floats on a read.
 // ---------------------------------------------------------------------------
 bool CadzillaBoard::decodes(const BusCycle& c) const {
     if (!enabled_) return false;
     if (c.type != Cycle::IoRead && c.type != Cycle::IoWrite) return false;
-    uint8_t p = c.port();
-    if (p == port_ || p == (uint8_t)(port_ | 1)) return true;             // the ACRTC
-    return (uint8_t)(p & 0xFC) == dacPort_;                                // the Bt453
+    uint8_t off = (uint8_t)(c.port() - port_);
+    if (off > 7) return false;
+    if (off == 2) return false;                                // undecoded gap
+    if (off == 3) return c.type == Cycle::IoWrite;              // MODE: write-only
+    return true;                                                // 0,1: ACRTC; 4-7: Bt453
 }
 
 uint8_t CadzillaBoard::read(const BusCycle& c) {
-    uint8_t p = c.port();
-    if (p == port_ || p == (uint8_t)(port_ | 1)) return acrtc_.read(p & 1);   // RS = A0
-    return dac_.read(p & 3);                                                 // C1C0 = A1A0
+    uint8_t off = (uint8_t)(c.port() - port_);
+    if (off <= 1) return acrtc_.read(off & 1);      // RS = A0
+    return dac_.read(off & 3);                      // C1C0 = A1A0 (off is 4..7 here)
 }
 
 void CadzillaBoard::write(const BusCycle& c) {
-    uint8_t p = c.port();
-    if (p == port_ || p == (uint8_t)(port_ | 1)) {
-        acrtc_.write(p & 1, c.data);
+    uint8_t off = (uint8_t)(c.port() - port_);
+    if (off <= 1) {
+        acrtc_.write(off & 1, c.data);
         return;
     }
-    dac_.write(p & 3, c.data);
+    if (off == 3) {
+        if (c.data != modeReg_) dirty_ = true;      // AMODE moves the picture; the rest is status
+        modeReg_ = c.data;
+        return;
+    }
+    dac_.write(off & 3, c.data);
 }
 
 // ---------------------------------------------------------------------------
@@ -79,14 +87,22 @@ void CadzillaBoard::write(const BusCycle& c) {
 void CadzillaBoard::reset(Reset r) {
     if (r == Reset::Bus) {
         acrtc_.reset();
-        dirty_ = true;
+        // MODE is glue logic on the same RESET* line as the ACRTC, not a chip register with
+        // its own reset behavior to cite -- clearing it deterministically (rather than
+        // leaving it, which real flip-flops might or might not do) means a driver must
+        // reprogram both the ACRTC's timing and the board's glue after a reset, which is
+        // the simplest thing to be right about.
+        if (modeReg_ != 0) dirty_ = true;
+        modeReg_ = 0;
+        dirty_   = true;
     }
 }
 
 void CadzillaBoard::power() {
     acrtc_.power();
     dac_.reset();
-    dirty_ = true;   // the monitor shows its (black) frame from power-on, signal or not
+    modeReg_ = 0;
+    dirty_   = true;   // the monitor shows its (black) frame from power-on, signal or not
 }
 
 // ---------------------------------------------------------------------------
@@ -96,13 +112,15 @@ void CadzillaBoard::serialize(StateWriter& w) const {
     Board::serialize(w);
     acrtc_.serialize(w);
     dac_.serialize(w);
+    w.u8(modeReg_);
 }
 
 void CadzillaBoard::deserialize(StateReader& r) {
     Board::deserialize(r);
     acrtc_.deserialize(r);
     dac_.deserialize(r);
-    dirty_ = true;  // the restored picture owes the host a full redraw
+    modeReg_ = r.u8();
+    dirty_   = true;  // the restored picture owes the host a full redraw
 }
 
 // ---------------------------------------------------------------------------
@@ -116,7 +134,7 @@ void CadzillaBoard::deserialize(StateReader& r) {
 // Vertically: VDS rasters after VSYNC's rising edge against the mode's vertical back porch.
 // ---------------------------------------------------------------------------
 int CadzillaBoard::programmedWidth() const {
-    return acrtc_.hdw() * kPixelsPerFetch / acrtc_.accessMode();
+    return acrtc_.hdw() * kPixelsPerFetch / glueAccessMode();
 }
 int CadzillaBoard::programmedHeight() const {
     const uint16_t dcr = acrtc_.dcr();
@@ -126,7 +144,7 @@ int CadzillaBoard::programmedHeight() const {
     return h;
 }
 int CadzillaBoard::programmedX() const {
-    const int acm = acrtc_.accessMode();
+    const int acm = glueAccessMode();
     return (acrtc_.hds() - currentMode().hbp * acm) * (kPixelsPerFetch / acm);
 }
 int CadzillaBoard::programmedY() const { return acrtc_.vds() - currentMode().vbp; }
@@ -137,8 +155,17 @@ std::string CadzillaBoard::wiring() const {
         s += "CCR GBM is " + std::to_string(acrtc_.bitsPerPixel()) + " bpp, the board is wired for 8; ";
     if (acrtc_.gaiWords() != kWordsPerFetch)
         s += "OMR GAI is +" + std::to_string(acrtc_.gaiWords()) + " words, the board fetches 8; ";
-    if ((acrtc_.omr() & 0x0C) == 0x0C)
+    if ((acrtc_.omr() & 0x0C) == 0x0C) {
         s += "OMR ACM is superimposed, the board wires single and interleaved only; ";
+    } else {
+        // The chip's own OMR ACM bit and the board's MODE.AMODE strap must be programmed in
+        // agreement -- neither can see the other's setting, so a driver has to set both.
+        const bool acrtcInterleaved = (acrtc_.omr() & 0x08) != 0;
+        const bool modeInterleaved  = (modeReg_ & kModeAmode) != 0;
+        if (acrtcInterleaved != modeInterleaved)
+            s += "OMR ACM is " + std::string(acrtcInterleaved ? "interleaved" : "single") +
+                 ", MODE AMODE says " + std::string(modeInterleaved ? "interleaved" : "single") + "; ";
+    }
     if (s.empty()) return "ok";
     s.erase(s.size() - 2);
     return s;
@@ -182,7 +209,7 @@ void CadzillaBoard::render() {
 // The shift register, run over the ACRTC's addresses for every raster of the frame.
 void CadzillaBoard::paintFrame(Surface* s, int w, int h) {
     const Mode& m    = currentMode();
-    const int   acm  = acrtc_.accessMode();       // memory cycles per display cycle
+    const int   acm  = glueAccessMode();          // the board's OWN glue, from MODE AMODE
     const int   ppmc = kPixelsPerFetch / acm;     // pixels one memory cycle is worth
     const int   gai  = acrtc_.gaiWords();         // the ACRTC's own step per display cycle
     const int   hbp  = m.hbp * acm;               // the porch, in this mode's memory cycles
@@ -224,39 +251,19 @@ std::vector<Property> CadzillaBoard::properties() {
     {
         Property x;
         x.name  = "port";
-        x.help  = "ACRTC I/O base -- BASE is the address/status port (RS=0), BASE+1 the data "
-                  "port (RS=1). Even; default 70";
+        x.help  = "I/O base -- one 8-port block: BASE/BASE+1 the ACRTC (address/status, data), "
+                  "BASE+3 the MODE register, BASE+4..+7 the Bt453. A multiple of 8; default 70";
         x.kind  = Kind::Int;
         x.radix = 16;
         x.min   = 0;
-        x.max   = 0xFE;
+        x.max   = 0xF8;
         x.get   = [this] { return Value::ofInt(port_); };
         x.set   = [this](const Value& v, std::string& err) {
-            if (v.i() & 1) {
-                err = "the ACRTC occupies BASE and BASE+1 -- BASE must be even";
+            if (v.i() & 7) {
+                err = "the board occupies one 8-port block -- BASE must be a multiple of 8";
                 return false;
             }
             port_ = (uint8_t)v.i();
-            return true;
-        };
-        p.push_back(std::move(x));
-    }
-    {
-        Property x;
-        x.name  = "dac";
-        x.help  = "Bt453 RAMDAC I/O base -- four ports: DAC+0 address, DAC+1 palette RAM, "
-                  "DAC+2 address, DAC+3 overlay. A multiple of 4; default 74";
-        x.kind  = Kind::Int;
-        x.radix = 16;
-        x.min   = 0;
-        x.max   = 0xFC;
-        x.get   = [this] { return Value::ofInt(dacPort_); };
-        x.set   = [this](const Value& v, std::string& err) {
-            if (v.i() & 3) {
-                err = "the Bt453 occupies DAC..DAC+3 -- DAC must be a multiple of 4";
-                return false;
-            }
-            dacPort_ = (uint8_t)v.i();
             return true;
         };
         p.push_back(std::move(x));
@@ -338,10 +345,50 @@ std::vector<Property> CadzillaBoard::properties() {
         Property x;
         x.name = "wiring";
         x.help = "LIVE: whether the ACRTC is programmed the way the board is wired -- CCR GBM = "
-                 "8 bpp, OMR GAI = +8 words, ACM single or interleaved. 'ok', or what is off "
-                 "(the picture is then scrambled, as on the hardware). Read-only";
+                 "8 bpp, OMR GAI = +8 words, and OMR ACM agreeing with MODE AMODE. 'ok', or "
+                 "what is off (the picture is then scrambled, as on the hardware). Read-only";
         x.kind = Kind::Str;
         x.get  = [this] { return Value::ofStr(wiring()); };
+        p.push_back(std::move(x));
+    }
+    // ---- MODE register (BASE+3), write-only on the wire: these are the board's own shadow
+    // of what the guest last wrote there, reported the same way the Dazzler decodes its
+    // write-only control/format bytes into readable status. ----
+    {
+        Property x;
+        x.name = "hspol";
+        x.help = "LIVE: MODE register HSPOL -- horizontal sync polarity the board was told to "
+                 "use. Recorded, not modeled: nothing here generates a sync pulse to invert. "
+                 "Read-only";
+        x.kind = Kind::Str;
+        x.get  = [this] { return Value::ofStr((modeReg_ & kModeHspol) ? "negative" : "positive"); };
+        p.push_back(std::move(x));
+    }
+    {
+        Property x;
+        x.name = "vspol";
+        x.help = "LIVE: MODE register VSPOL -- vertical sync polarity the board was told to "
+                 "use. Recorded, not modeled, like hspol. Read-only";
+        x.kind = Kind::Str;
+        x.get  = [this] { return Value::ofStr((modeReg_ & kModeVspol) ? "negative" : "positive"); };
+        p.push_back(std::move(x));
+    }
+    {
+        Property x;
+        x.name = "amode";
+        x.help = "LIVE: MODE register AMODE -- the access mode the board's OWN fetch logic runs "
+                 "(not the ACRTC's OMR ACM bit, which must agree with it -- see wiring). Read-only";
+        x.kind = Kind::Str;
+        x.get  = [this] { return Value::ofStr((modeReg_ & kModeAmode) ? "interleaved" : "single"); };
+        p.push_back(std::move(x));
+    }
+    {
+        Property x;
+        x.name = "olen";
+        x.help = "LIVE: MODE register OLEN -- overlay enable. TBD: not wired to anything yet, "
+                 "so setting it changes nothing today. Read-only";
+        x.kind = Kind::Bool;
+        x.get  = [this] { return Value::ofBool((modeReg_ & kModeOlen) != 0); };
         p.push_back(std::move(x));
     }
     {
@@ -360,9 +407,11 @@ std::vector<MapEntry> CadzillaBoard::ioMap() const {
     return {
         {(uint32_t)port_, (uint32_t)port_, "read/write",
          "ACRTC -- status (CER ARD CED LPD RFF RFR WFR WFE) / address register"},
-        {(uint32_t)(port_ | 1), (uint32_t)(port_ | 1), "read/write",
+        {(uint32_t)(port_ + 1), (uint32_t)(port_ + 1), "read/write",
          "ACRTC -- the register the address names, or the command FIFOs at AR=0"},
-        {(uint32_t)dacPort_, (uint32_t)(dacPort_ + 3), "read/write",
+        {(uint32_t)(port_ + 3), (uint32_t)(port_ + 3), "write",
+         "MODE -- board glue: HSPOL(0) VSPOL(1) AMODE(2) OLEN(3)"},
+        {(uint32_t)(port_ + 4), (uint32_t)(port_ + 7), "read/write",
          "Bt453 RAMDAC -- address, palette RAM (R,G,B), address, overlay"},
     };
 }
