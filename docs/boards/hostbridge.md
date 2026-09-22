@@ -1,6 +1,6 @@
 # Host Bridge — guest ⇄ host file transfer
 
-**Status:** built (milestone 7). **This is our own design, not a period card** — MITS never made it, nobody ever fabricated it, and it is the one board in the default machine that is an anachronism on purpose.
+**Status:** built. **This is our own design, not a period card** — MITS never made it, nobody ever fabricated it, and it is the one board in the default machine that is an anachronism on purpose.
 
 Type `hostbridge`. Two I/O ports, default base `0xB0`. In the default machine as `hb0`.
 

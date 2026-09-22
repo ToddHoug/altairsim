@@ -72,7 +72,7 @@ If you name **nothing at all**, and the working directory contains a file called
 ```
 $ altairsim
 altairsim: no machine named -- using ./altairsim.toml (`-m default` for the built-in).
-AltairSim 1.0.0 -- 8080, full speed.
+AltairSim X.Y.Z -- 8080, full speed.
 machine: bench.  HELP for commands.
 altairsim>
 ```
@@ -161,9 +161,8 @@ altairsim> MOUNT dsk0:drive1 cpm22b23-56k.dsk
 ```
 
 you get the **same file**, from the **same folder** — the one the machine came from — no matter
-which directory you launched `altairsim` from. Typed paths used to resolve against your shell
-instead, which is how the identical disk could show up under two different names; that split is
-gone.
+which directory you launched `altairsim` from. There is no second rule for paths you type: one
+disk has one name.
 
 A **built-in** machine has no directory of its own, so its base is the directory you launched
 from — the only anchor it has.

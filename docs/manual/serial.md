@@ -75,7 +75,7 @@ Then, from another terminal on your machine:
 
 ```
 $ telnet localhost 2323
-Connected to AltairSim 1.0.0 (sio0:b) on port 2323
+Connected to AltairSim X.Y.Z (sio0:b) on port 2323
 ```
 
 The guest is now talking to that window. Your first terminal still has the monitor and

@@ -240,9 +240,7 @@ configure_file("${CMAKE_SOURCE_DIR}/cmake/version.h.in"
 #
 # The win32 half is FIELD-PROVEN, not merely written: serial against two real FTDI
 # ports, socket against the real TCP stack, terminal against a real console, each a
-# leg of `ctest -L hw` (docs/porting-notes.md has the counts). This comment used to
-# say it was written-but-unbuilt and cite that same file as agreeing; the file has
-# said the opposite since 2026-07-15.
+# leg of `ctest -L hw`. docs/porting-notes.md records the traps that turned up.
 #
 # MSVC is the ONLY supported Windows toolchain -- it is what CI builds and what is shipped.
 # Nothing here is knowingly MSVC-only (no _MSC_VER anywhere in src/, lowercase Windows headers,

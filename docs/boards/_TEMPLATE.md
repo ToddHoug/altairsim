@@ -11,7 +11,7 @@
   exactly the question a simulator author most wants to avoid.
 -->
 
-**Status:** <not implemented | milestone N | done>
+**Status:** <not implemented | partial, and say what is inert | done>
 
 ## The real hardware
 

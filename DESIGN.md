@@ -2,8 +2,8 @@
 
 **Status:** implemented and running. A backplane of S-100 board types, a validated 8080, and
 period software that boots — CP/M 2.2 off an 8″ floppy, a 5¼″ minidisk and an 8 MB disk; 4K
-and 8K BASIC and MITS Programming System II off cassette. What is *not* built is named where it is described,
-and the roadmap has the rest.
+and 8K BASIC and MITS Programming System II off cassette. What is *not* built is named where it
+is described.
 **Started:** 2026-07-11; a living document, revised with the code.
 
 ---
@@ -22,7 +22,7 @@ When two sources disagree, say so in the board's `.md` and say which one won and
 
 Consequences already baked into this design:
 - **AltairZ80's port-0xFE "SIMH pseudo device" is not implemented**, and *its* `R.COM`/`W.COM` will not run here. See §12. *(This aged well: as of 2026-07-13 port 0xFE is the **88-VI/RTC's real control register** — 376 octal, straight out of the MITS manual. AltairZ80 put its pseudo-device on top of a port that belongs to an actual MITS card, and we would have had to evict it.)* **We ship our own `R.COM` and `W.COM`** against our own Host Bridge card at 0xB0 (§12.1) — same names, because the muscle memory is worth keeping; different code, different card, different protocol, nothing derived.
-- Boards with no manual in the tree (88-HDSK, 88-PIO/4PIO) are **blocked on documentation**, not on code. See §17. None of them block milestone 1. (The **88-ACR** and the **88-VI/RTC** were on this list; both manuals are now in the tree and both cards are built.)
+- A board with no manual in the tree is **blocked on documentation**, not on code — and nothing is, today. The 88-ACR, the 88-VI/RTC, the 88-HDSK and the 88-PIO/4PIO were all on that list; every manual is now in `reference/`, and every one of those cards is built.
 
 ### 0.2 Doc discipline
 
@@ -120,11 +120,11 @@ It is a **hardware development bench** that happens to run period software. The 
 
 **Hard architectural rule, enforced by CI.** SIMH is riddled with conditional compilation and the result is code you cannot read without mentally executing the preprocessor. We are not doing that.
 
-> **`src/platform/` EXISTS as of 2026-07-12** — `serial.h` + `socket.h` + `terminal.h` (pure declarations, zero conditionals, **no OS type in any signature**: no `int fd`, no `HANDLE`, no `termios`), with `posix/` built and proved against two FTDI cables, a null modem and a pty, and `win32/` **built and field-proven** — serial over two FTDI ports on a null modem, socket against the real Winsock stack, terminal on a real console (`docs/porting-notes.md` records each, check by check; Windows has been a required CI leg since #44). CMake picks the directory; that `if(WIN32)` in `CMakeLists.txt` is the only place in the project that asks what OS it is on.
+> **`src/platform/` is `serial.h` + `socket.h` + `terminal.h`** — pure declarations, zero conditionals, **no OS type in any signature**: no `int fd`, no `HANDLE`, no `termios`. `posix/` is proved against two FTDI cables, a null modem and a pty; `win32/` against two real FTDI ports on a null modem, the real Winsock stack and a real console — each a leg of `ctest -L hw`, and `docs/porting-notes.md` records the traps that turned up. Windows is a required CI leg. CMake picks the directory; that `if(WIN32)` in `CMakeLists.txt` is the only place in the project that asks what OS it is on.
 >
 > **The rule earned its keep immediately.** The POSIX socket file wanted `MSG_NOSIGNAL` (Linux) / `SO_NOSIGPIPE` (macOS) to stop a hung-up client from killing the process with SIGPIPE — a genuine macOS/Linux divergence, which by this section's own rules would need its own *file*. `signal(SIGPIPE, SIG_IGN)` is plain POSIX, works on both, and needs no branch at all. **The right answer to a platform conditional is usually to stop needing it.**
 >
-> **THE LINT IS ON, as of 2026-07-12** (`cmake/lint_platform.cmake`, a build dependency of `altair_core` — not a test, because this section says *fails the build*). The terminal was the last thing in the tree with an OS underneath it; it is now `src/platform/terminal.h`, and `lineedit.cpp`'s `#if defined(_WIN32)` — the only conditional compilation in the project — is gone with it.
+> **THE LINT IS ON** (`cmake/lint_platform.cmake`, a build dependency of `altair_core` — not a test, because this section says *fails the build*). The terminal was the last thing in the tree with an OS underneath it; it is now `src/platform/terminal.h`, and `lineedit.cpp`'s `#if defined(_WIN32)` — the only conditional compilation in the project — is gone with it.
 >
 > **The lint greps for OS *headers*, not just OS *macros*, and that is the half that mattered.** Moving the terminal turned up two offenders and only one had a conditional: `src/host/console.cpp` simply `#include`d `<termios.h>` in the open, no `#ifdef` anywhere near it. A macro-only lint — the one this section originally specified — would have called that file **clean**, and it would have compiled here forever and failed on Windows the day someone tried. The `#ifdef` is the symptom. **Reaching for the OS outside the platform layer is the disease**, and the lint is aimed at the disease.
 
@@ -200,7 +200,7 @@ truth about a processor card, not a gap in the table. It still has a *unit*
 
 A card's cores are **units** (§3.0.1) — a plain 88-CPU has exactly one, and a dual-processor card has two with one active. Swapping the *card* is `BOARDS REMOVE` / `BOARDS ADD`, exactly as you'd swap the physical thing.
 
-**The clock is the CPU board's property**, not the machine's: `SET cpu0 clock_hz=2000000`. It belongs to the card because that is where the crystal is, and because a backplane with no CPU card in it — which is what milestone 1a runs — has no clock rate to speak of.
+**The clock is the CPU board's property**, not the machine's: `SET cpu0 clock_hz=2000000`. It belongs to the card because that is where the crystal is, and because a backplane with no CPU card in it — which the machine was for its first week, and which `BOARDS REMOVE cpu0` still gets you — has no clock rate to speak of.
 
 ### 3.0.1 A card may carry more than one processor, and they are units
 
@@ -213,7 +213,7 @@ altairsim> SHOW cpu0
     8085   cpu    (idle)
 ```
 
-**This needs no new bus concept whatsoever.** The card decodes the `OUT`, sets its own latch, and reports a different active core. That is structurally identical to bank switching on a memory card (§4.3) and to the Tarbell releasing PHANTOM\* on A5 (§4.2): *the board keeps its own state, and the bus arbitrates nothing.* `Machine` asks the backplane which board is the bus master and which core is live; two cards claiming it is contention and we say so; **no CPU card at all is a real machine you can build**, and it is the one milestone 1a runs.
+**This needs no new bus concept whatsoever.** The card decodes the `OUT`, sets its own latch, and reports a different active core. That is structurally identical to bank switching on a memory card (§4.3) and to the Tarbell releasing PHANTOM\* on A5 (§4.2): *the board keeps its own state, and the bus arbitrates nothing.* `Machine` asks the backplane which board is the bus master and which core is live; two cards claiming it is contention and we say so; **no CPU card at all is a real machine you can build**, and it is the machine the bus was first tested in.
 
 ### 3.0.2 The disassembler belongs to the instruction set — not to the CPU, and certainly not to the card
 
@@ -229,7 +229,7 @@ So "CPU" is three things wearing one name, and they are separated:
 
 Two 8080 cards that differ only in an onboard serial port share the instruction set and the core **completely**, and differ only in the card — which is the only place they differ in reality. The thing they have in common is not the chip and not the board: it is *the way bytes decode*, and that is why it needs a name of its own to be shared by.
 
-**A stateless disassembler runs with no CPU in the machine.** `DISASM FF00 CPU=8080` works *today*, in milestone 1a, against the DBL ROM — the same argument that made the bus testable before the CPU existed (§15), and it means the 8080 decode tables get exercised long before anything executes them.
+**A stateless disassembler runs with no CPU in the machine.** `DISASM FF00 CPU=8080` works against the DBL ROM in a machine with no processor in it — the same argument that made the bus testable before the CPU existed (§15), and it means the 8080 decode tables get exercised long before anything executes them.
 
 **But naming the CPU is not the normal case, and must not be** (Patrick). The active core reports which instruction set it speaks, and `DISASM` asks the machine:
 
@@ -512,11 +512,22 @@ The first two are called **several times per cycle** — once to resolve PHANTOM
 - The release must be **combinational**, because the bootstrap's own first fetch out of the PROM *is* the read with A5 high. If the release waited a cycle, that fetch would happen while memory was still shadowed, read `0xFF` off the floating bus, and no Tarbell would ever have booted.
 - The release must also **latch**, or a later data read below `0x20` would re-shadow the PROM over the sector just loaded there.
 
-> **⛔ AND THE TARBELL IS NOT BUILT (Patrick, 2026-07-12).** It is **deferred**, and `docs/boards/tarbell-sd.md` says why: the real card is a **pre-IEEE-696, July 1977** design that has **no PHANTOM\* at all** — it asserts **STATUS DISABLE\*** and drives the S-100 status lines itself. Modelling that honestly would mean building status lines *in order to have something to disable*.
+> **AND THE REAL CARD HAS NO PHANTOM\*.** The Tarbell is a **pre-IEEE-696, July 1977** design: what
+> it actually asserts is **STATUS DISABLE\*** (pin 18), and it drives the S-100 status lines itself.
+> Modelling that honestly would mean building status lines *in order to have something to disable*,
+> so `tarbell` and `tarbelldd` model the shadow as PHANTOM\* with `honors_phantom = "read"` instead.
+> That is a deliberate abstraction and `docs/boards/tarbell-sd.md` makes the whole case for it —
+> what it buys, what it costs, and the one behaviour it cannot reproduce.
 >
-> So `snoop()`, `wantsSnoop()` and `decodeIsPageUniform()` have **no shipping board that overrides them** — only `TarbellBoot`, a fixture in `tests/test_phantom.cpp`. That is stated here rather than left to be discovered, and `board.h` argues the case for keeping them: they are **specified, sourced and executed**, which is not the same as speculative. The rule this project applies elsewhere (`disk.h`: *"a virtual left in place for a possibility the owner has **ruled out** is a hook that will never be pulled"*) killed the IMD/TD0 virtuals because IMD was ruled **out**. The Tarbell is ruled **later**. If that ever changes, delete both hooks and `test_phantom.cpp` with them — and not before, because they are the only executable description we have of a card that shadows low memory, and the combinational-release trap above cost a day to find the first time.
+> `snoop()`, `wantsSnoop()` and `decodeIsPageUniform()` are the hooks that shadow needs, and
+> `TarbellBoardBase` (`src/boards/tarbell.h:65-67`) is the shipping board that overrides all three —
+> `decodeIsPageUniform()` returns false because the decode is A5-gated *inside* page 0, which is
+> exactly the case a page-granular cache cannot express. `tests/test_phantom.cpp` keeps its own
+> `TarbellBoot` fixture beside it, because the combinational-release trap above cost a day to find
+> the first time and a fixture that isolates it is cheaper to read than a whole floppy controller.
 >
-> **PHANTOM\* itself is unaffected and stays.** It is not Tarbell-only: the memory board asserts it for an ordinary ROM-shadows-RAM card, and `tests/test_memory.cpp` covers all three straps.
+> **PHANTOM\* itself is not Tarbell-only.** The memory board asserts it for an ordinary
+> ROM-shadows-RAM card, and `tests/test_memory.cpp` covers all three straps.
 
 The bus does not know any of this happened. It is one flip-flop, on one card, and that is the point: a real backplane has no "notify" mechanism, so neither does this one — `snoop()` is not a callback, it is a card looking at wires that were in front of it the whole time.
 
@@ -700,7 +711,7 @@ Consequences, all of which must be stated in the doc:
 - `SET <id> <k>=<v>` and `SHOW <id>` are **fully generic**. `SHOW` prints every property with value, units and legal range.
 - **MCP tool schemas are generated from `properties()`** — Claude gets typed, constrained, self-documenting board config instead of guessing at free text.
 - **The TOML loader and `CONFIG SAVE` are the same code path.** A board's config keys *are* its properties, so round-tripping is automatic and cannot drift.
-- **Tab completion would be generated from `properties()`** too — designed, **not built**; there is no Tab handling in the line editor (§10.4).
+- **Tab completion is generated from `properties()`** too — the line editor hands the partial line to a completer the monitor supplies (`src/cli/lineedit.cpp`), so a board's property names complete without anything being written down twice. A Tab that makes no progress arms the next one to list the candidates (§10.4).
 - **A LIST of things is a sub-unit, and it round-trips the same way** — regions on a memory card, drives on a controller. `subUnitTables()` + `addSubUnit()` read them; **`subUnits()` writes them back** (built 2026-07-12). The board renders its own text, because only the board knows that an address is hex and zero-padded (`at = 0x0400`) while a size is decimal with a suffix (`size = "48K"`) — `Value::text(16)` produces neither, and a writer that guessed would be a second, worse copy of what the board already knows. The claim "`subUnits()` is `addSubUnit()`'s inverse" is therefore one a test can simply *execute*: render, feed it straight back in, compare.
 
   **This closed the last board-specific line in the config layer.** `CONFIG SAVE` used to reach for a `dynamic_cast<MemoryBoard*>` to write `[[board.region]]`, which meant any *other* board with a sub-unit table — a disk controller with four `[[board.drive]]` entries — would **load and silently not save**. You would configure the machine, save it, and get a controller with no drives. `src/config/toml.cpp` now includes no board header at all, and it should never include one again.
@@ -1174,7 +1185,7 @@ A chip knows nothing about S-100. It has a clock, some pins, and (if it moves by
 
 - A board declares typed **units**, and **a unit is a NAME, not an index** (Patrick, 2026-07-11). A disk unit accepts `MOUNT id:unit <hostfile>` (`UNMOUNT` to release); a serial unit accepts `CONNECT id:unit <endpoint>` (`DISCONNECT`).
 
-  **ONE CARD IS NOT ONE KIND OF THING.** A card may carry drives *and* ROM sockets *and* a serial port — the Tarbell carries a boot PROM and a floppy controller on one board (it is **not built**, see §4.2.1, but it is a real card and the constraint is real), and a controller with its own PROM, scratch RAM and a serial port was a completely ordinary 1977 product. Nothing in the bus model ever assumed otherwise: `decodes()` is asked about every cycle and `BusCycle::type` distinguishes memory from I/O, so one card answers both. `tests/test_units.cpp` builds exactly such a card and proves it.
+  **ONE CARD IS NOT ONE KIND OF THING.** A card may carry drives *and* ROM sockets *and* a serial port — the Tarbell carries a boot PROM and a floppy controller on one board (§4.2.1), and the 16FDC carries a console UART as well, and a controller with its own PROM, scratch RAM and a serial port was a completely ordinary 1977 product. Nothing in the bus model ever assumed otherwise: `decodes()` is asked about every cycle and `BusCycle::type` distinguishes memory from I/O, so one card answers both. `tests/test_units.cpp` builds exactly such a card and proves it.
 
   So units are named and typed — `MOUNT dj:drive0`, `MOUNT dj:rom0`, `CONNECT dj:tty` — and **the kind is checked**: mounting a disk image onto a serial port is an error with a sentence explaining it. The integer scheme could not be made safe, which is why it is gone: with a flat namespace, `MOUNT dj:4` on a serial unit can only *fail*, never *explain*, because the board has nothing left to distinguish 4-the-drive from 4-the-port. `SHOW <id>` lists the units, and it reads `Board::units()` — the same list MOUNT reads, so they cannot disagree.
 - Endpoints: `console` | `socket:PORT` (listening) | `socket:HOST:PORT` (outbound) | `serial:/dev/tty.usbserial-X` or `serial:COM3` | `in:path` (reader) | `out:path` (punch) | `null`. **All of them are built** — `console`, `null`, `loopback`, `scripted`, `socket:`, `serial:` and `in:`/`out:`. (This line read "Built so far: `console`, `null`, `loopback`" long after that stopped being true, which is why the monitor's help text for CONNECT is now *generated* from the resolver's own `endpointHelp()` rather than written out here or in `commands.cpp`.) The resolver **names the legal forms when you ask for one it does not know**, rather than failing as though you had mistyped it.
@@ -1356,7 +1367,7 @@ DEBUG
 
 ### 10.0.0 The command line, and the built-in machines
 
-**Settled 2026-07-11 by Patrick.** This closes open finding **F4** (the command-line grammar was undefined).
+**Settled 2026-07-11 by Patrick**, the command-line grammar having been undefined until then.
 
 ```
 altairsim [options] [<machine>]
@@ -1389,18 +1400,19 @@ Two things follow, and both are requirements rather than conveniences:
 
 **The one filesystem probe is the EMPTY command line, and it does not weaken that.** With no machine argument at all, altairsim looks for `./altairsim.toml` and boots it, falling back to `default`. There is no spelling to honor in that case — nothing was named — so the invariant above is untouched: it governs how a name you *typed* is resolved, and `altairsim basic4k` means `basic4k` in every directory on earth. What the probe buys is a project directory that boots its own machine when you type nothing, which is worth one well-known filename. It is the only file the simulator *finds* rather than is *given*.
 
-The built-ins, as of milestone 1a — both are honest about having **no CPU card**, because there is no 8080 yet:
+The first two built-ins were honest about having **no CPU card**, because there was no 8080 yet.
+`SHOW MACHINES` lists what is compiled in now; the two that carry the argument are:
 
 | | |
 |---|---|
 | `default` | 56K RAM at `0000-DFFF`, **and the real DBL 4.1 boot PROM at `FF00`**. What you get with no arguments. |
-| `4k` | 4K RAM, no ROM. The Altair as MITS shipped it; the machine 4K BASIC was written for. |
+| `original` | 256 bytes of RAM and no ROM at all — the Altair as it actually left Albuquerque. |
 
-**`default` carries the boot PROM, and `original` carries the period accuracy.** A bare Altair 8800 had no ROM at all — you toggled the bootstrap in from the front panel, and the DBL PROM only existed if you had bought the disk system. That machine is `original` (256 bytes, as it left Albuquerque), and having it frees `default` to be a different thing: *the machine you actually want when you type `altairsim` and nothing else.* On a real disk Altair the PROM was there, and a default with an empty `FF00` is a machine you must repair before it is any use — which is the opposite of what a default is for. So `altairsim` followed by `D FF00` shows you the boot loader, as it should.
+**`default` carries the boot PROM, and `original` carries the period accuracy.** A bare Altair 8800 had no ROM at all — you toggled the bootstrap in from the front panel, and the DBL PROM only existed if you had bought the disk system. Having `original` frees `default` to be a different thing: *the machine you actually want when you type `altairsim` and nothing else.* On a real disk Altair the PROM was there, and a default with an empty `FF00` is a machine you must repair before it is any use — which is the opposite of what a default is for. So `altairsim` followed by `D FF00` shows you the boot loader, as it should.
 
 ### 10.0.1 The number base: on the wire → hex, never on the wire → decimal
 
-**Settled 2026-07-11 by Patrick.** This closes open finding **F3**.
+**Settled 2026-07-11 by Patrick.**
 
 > **The base is a property of the OPERAND, not of the command line.**
 
@@ -1798,20 +1810,25 @@ See `docs/porting-notes.md` for the full list. The ones that will bite:
 
 ---
 
-## 17. Blocked on documentation
+## 17. Open hardware questions
 
-**None of these block milestone 1.** Per §0.1, each is blocked on a *manual*, not on code. **Ask Patrick and he will source it** — do not reconstruct, guess, or read another simulator.
+Per §0.1, a fact we do not have is **blocked on a manual, not on code**. **Ask Patrick and he will
+source it** — do not reconstruct it, guess it, or read another simulator. Two questions are open;
+every other card named here over the project's life was answered from a period manual in
+`reference/`, and `docs/sources.md` records which document settled what.
 
-| Board | What's missing | Needed by |
-|---|---|---|
-| ~~**88-ACR**~~ | ~~Cassette-specific control bits (motor control, if any).~~ **DISCHARGED 2026-07-12 — the card is BUILT.** The manual is in the tree, and the answer to the open question was **there is no motor control at all**: no transport register, nothing the guest can write that reaches the recorder, and an operator who pressed the buttons with their finger. The row had also guessed wrong about *what* was unknown — the ports and the bit sense were never the interesting part. See `docs/boards/mits-88acr.md`. | ~~Milestone 5~~ |
-| **88-PIO / 88-4PIO** | Bit layouts and handshake (CA1/CB2) semantics. Only port numbers are known: PIO 0x04/0x05; 4PIO 0x20–0x23. | Milestone 7 |
-| ~~**88-VI / RTC**~~ | ~~Register layout, priority scheme, RST vector generation. Nothing at all in the tree.~~ **DISCHARGED 2026-07-13 — the card is BUILT.** The manual is in the tree (`reference/88-VI-RTC.pdf`) and answered all three: one write-only control port at **376Q (0xFE)**, **VI0 highest / VI7 lowest**, level *n* → `RST n`. It also **contradicted itself**, and the tie was broken by disassembling the only real client we have — the PS2 monitor's own service routine — which proved bits 0–2 are the *ones-complement* of the level and that bit 3 gates the compare. **When the document and the artifact disagree, disassemble the artifact.** See `docs/boards/mits-88virtc.md`. | ~~Milestone 6~~ |
-| **88-HDSK** | Ports, command protocol, geometry, image format. Nothing at all in the tree. | Milestone 7 |
-| **PMMI** (deferred) | The **E1–E7 pad → VI0–VI7 correspondence** — the manual says only to consult your CPU/VI card manual. Everything else is recovered. | If/when PMMI is built |
-| **88-TURNKEY / PROM** | **How power-on jump works.** A turnkey board forces the CPU to the PROM address after reset; the mechanism is undocumented in the tree. Nothing is blocked — `startup = ["GO FF00"]` covers it honestly (§10.0) — but modeling POJ as a real board property is the correct long-run answer, and it would test whether a `Board` can claim an instruction-fetch cycle the way the 88-VI claims an `IntAck` — which would mean **adding one**, since `Cycle` today is `{MemRead, MemWrite, IoRead, IoWrite, IntAck}` and an opcode fetch is just a `MemRead` (§4). | Nice-to-have; blocks nothing |
+| Board | What's missing |
+|---|---|
+| **PMMI MM-103** | The **E1–E7 pad → VI0–VI7 correspondence**; the manual says only to consult your CPU/VI card manual. Everything else about the card is recovered and built, and this is precisely why its interrupt enable and mask staging are shadowed but inert (`docs/boards/pmmi-mm103.md`). |
+| **88-TURNKEY / PROM** | **How power-on jump works.** A turnkey board forces the CPU to the PROM address after reset; the mechanism is undocumented in the tree. Nothing is blocked — `startup = ["RUN FF00"]` covers it honestly (§10.0) — but modeling POJ as a real board property is the correct long-run answer, and it would test whether a `Board` can claim an instruction-fetch cycle the way the 88-VI claims an `IntAck` — which would mean **adding one**, since `Cycle` today is `{MemRead, MemWrite, IoRead, IoWrite, IntAck}` and an opcode fetch is just a `MemRead` (§4). |
 
-**Available and sufficient:** the 88-2SIO, the 88-SIO, the 88-ACR, the 88-DCDD and the Tarbell — every one of them from a **period manual**, all now in `reference/` and listed in `docs/sources.md`.
+**Two questions that were on this list were answered by an artifact, not a document**, and both are
+worth remembering. The 88-ACR's manual said nothing about motor control because **there is none** —
+no transport register, nothing the guest can write that reaches the recorder, an operator who pressed
+the buttons with a finger; the row had guessed wrong about *what* was unknown. The 88-VI/RTC's manual
+**contradicted itself**, and the tie was broken by disassembling the only real client we have, the PS2
+monitor's own service routine, which proved bits 0–2 are the *ones-complement* of the level and that
+bit 3 gates the compare. **When the document and the artifact disagree, disassemble the artifact.**
 
 > **🔴 THIS SECTION USED TO NAME `mits_dsk.c` AS AUTHORITATIVE FOR THE 88-DCDD, AND IT WAS FLATLY WRONG.**
 > `mits_dsk.c` is **SIMH**, and §0.1 — the first rule in this document — says we do not learn hardware
@@ -1821,9 +1838,3 @@ See `docs/porting-notes.md` for the full list. The ones that will bite:
 > and its recommended arbiter are struck.** The `I`/`Z` status bits were settled from the 88-DCDD
 > manual and the in-tree `BOOT.ASM`/`BIOS.ASM`, and `docs/boards/mits-dcdd.md` records which source won
 > and why.
-
----
-
-## 18. Roadmap
-
-See `docs/roadmap.md`. Milestone 1 is **CLI + MCP + 8080 + bus (incl. interrupts) + RAM + 88-2SIO**, and nothing else.
