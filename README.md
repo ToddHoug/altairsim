@@ -256,6 +256,9 @@ The disk-image tests run on a fresh clone: the 88-MDS and 8″ 88-DCDD images th
 | Document | What it covers |
 |---|---|
 | [`docs/manual/`](docs/manual/) | **The User Manual** — boot CP/M, drive the monitor, debug a guest, mount disks and tapes, move files. Written for someone holding a release package and nothing else, so it cites no source file and no repository path. Builds to `altairsim-manual.pdf`, which is what ships. |
+| [`docs/monitor/`](docs/monitor/) | **The Monitor** — the `altairsim>` prompt: every command, how they rank and abbreviate, and the full command reference. Ships as `altairsim-monitor.pdf`. |
+| [`docs/debugger/`](docs/debugger/) | **The Debugger** — breakpoints, tracepoints, single-stepping, `HISTORY`, and symbolic debugging off a `.PRN`/`.SYM`. Ships as `altairsim-debugger.pdf`. |
+| [`docs/changelog/`](docs/changelog/) | **The Changelog** — what each release let you do that the one before it did not. Ships as `altairsim-changelog.pdf`. |
 | [`docs/devguide/`](docs/devguide/) | **The Developer Guide** — Theory of Operation, and a worked example that adds a new board at port `FFH`. Needs the source, so it does not ship. |
 | [`DESIGN.md`](DESIGN.md) | The design, and the reasoning. Read this first. |
 | [`DISTRIBUTION.md`](DISTRIBUTION.md) | How a release is built and where it goes — the four packages, the machine each is built on, and the checks that must pass before one ships. Written to be followed step by step on a build machine that has never seen this repository. |
@@ -264,8 +267,10 @@ The disk-image tests run on a fresh clone: the 88-MDS and 8″ 88-DCDD images th
 | [`docs/boards/`](docs/boards/) | One file per board: the real hardware, the register map, how it is simulated, and the quirks it reproduces. |
 | [`docs/DRIVING-WITH-AI.md`](docs/DRIVING-WITH-AI.md) | Driving a running guest with an AI assistant over the built-in MCP server. |
 | [`docs/sources.md`](docs/sources.md) | Where every hardware fact came from. |
-| [`docs/roadmap.md`](docs/roadmap.md) | Milestones and acceptance criteria. |
-| [`docs/porting-notes.md`](docs/porting-notes.md) | Hard-won lessons from the prior Python prototype. |
+| [`docs/roms.md`](docs/roms.md) | Every ROM compiled into the binary, and where its image came from. |
+| [`docs/migrating.md`](docs/migrating.md) | Moving here from AltairZ80 (SIMH) or z80pack — what carries over, what is named differently, and what you would give up. |
+| [`docs/printing.md`](docs/printing.md) | The `printer:` endpoint and the design behind it: job boundaries, buffering, and the CUPS backend. |
+| [`docs/porting-notes.md`](docs/porting-notes.md) | The platform layer's traps, and what the prior Python prototype taught us. |
 | [`docs/building-linux.md`](docs/building-linux.md), [`docs/building-windows.md`](docs/building-windows.md) | Building and running per platform — prerequisites, the serial-build memory trap, and what was verified. |
 
 **Sourcing rule: period manuals and datasheets, never another emulator's source.** Reading past a source to preserve an argument is the same failure as fabricating one.

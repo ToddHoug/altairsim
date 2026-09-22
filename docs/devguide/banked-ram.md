@@ -125,55 +125,8 @@ design decisions taken:
   S-100 banked-RAM card; folding it into `bankmem` (a RAM board) would reintroduce the very
   "ROM on a banked card is unsourced" tension the design refuses. Closed as: stays separate.
 
-The grep-verified footprint the fix touched (kept here as the record of what moved):
-
-| Location | What is there |
-|---|---|
-| `src/boards/s100-memory.h:52` | `enum class BankType { None, Eram, Vram, Cram, Hram, B810 }` |
-| `src/boards/s100-memory.cpp:22–29` | `kBanks[]` table (the wrong encodings) |
-| `src/boards/s100-memory.cpp:33` | `parseBankType` loops `for (i = 0; i < 6; ++i)` |
-| `src/boards/s100-memory.cpp:479,481` | `bank_type` property help + `choices` |
-| `tests/test_memory.cpp:201,242,252–253,292,300` | banking tests: `hram`/`b810` binary/16 loop; `vram`+`b810` port-0x40 contention test |
-| `docs/boards/s100-memory.md:213–249,277,302,344,420` | the "five real cards" table, the OASIS quirk, the `bank_type` enum, the contention example |
-| `docs/manual/boards.md:87,291` and `docs/manual/ref/boards.md:173` | manual prose + the **generated** ref (regenerate via `cmake --build build --target docs-reference`, never hand-edit) |
-| `DESIGN.md:515,523,525,529` | the `b810` row and the "three ports / two encodings / seven banks / three of the five" argument |
-| `docs/roadmap.md:40,55,243` | the same "five real cards / five schemes" framing |
-
-⚠ Note the "**two encodings**" claim in `DESIGN.md`/`s100-memory.md` is itself wrong: the real
-cards use at least *four* distinct mechanisms (static address-strap, PROM page-select, one-hot
-select-one, bit-mask, on/off-plus-one-hot-toggle) — the "two encodings" count only holds inside
-the SIMH generalization.
-
-## Open design questions — now settled
-
-*(Both were settled with Patrick before the fix; the resolutions are folded into "The fix that
-landed" above and repeated inline here.)*
-
-1. **Should the `v2z80rom` banked ROM fold into the banked-memory mechanism?** *Resolved: no — it
-   stays its own board.* The V2 Z80 CPU
-   board's onboard 8 KB EEPROM is mapped as **two 4 KB pages** switched by `OUT D3H` bit 1
-   (`reference/v2-z80-cpu-board.md`, `src/boards/v2z80rom.{h,cpp}`) — a genuine banked ROM, today
-   implemented as its own custom board. Its full memory-manager banking (ports D2H/D3H) is
-   deliberately *not* modeled (the Dual SD target is flat-64K CP/M 3). The question: is this the
-   *same kind of thing* as `memory`-board bank switching, such that a corrected banked-memory
-   facility should absorb it — or is a CPU board's onboard paged EEPROM legitimately its own
-   board? Bears on whether "banking" is a memory-board feature or a reusable mechanism.
-
-2. **New board type, or more knobs on `memory`?** *Resolved: a new board type, `bankmem`, with a
-   `card=` variant strap.* Banked RAM is materially more complex than the
-   plain RAM/ROM the `memory` board otherwise models, and — now that we know the real cards —
-   they do not share one parameterization: a static address-strap (ExpandoRAM I), a PROM
-   page-select (ExpandoRAM II), a one-hot select (Vector), a bit-mask (Cromemco), and an
-   on/off-plus-one-hot toggle (North Star) are five different decoders. The options are (a) keep
-   piling per-card knobs onto `memory`, which is how we got the one-size-fits-none SIMH table, or
-   (b) split banked cards into their own board type(s) that own their decode — which is exactly
-   what `DESIGN.md` argues boards should do. This is the load-bearing decision for the follow-on
-   and should be made deliberately, not by extending `kBanks[]`.
-
 ## See also
 
-- `docs/boards/s100-memory.md` — the board's design doc (currently states the SIMH model as fact;
-  corrected in the follow-on).
-- `DESIGN.md` §10.2 — why there is no `BANK=` in the monitor (the conclusion survives; the
-  "two encodings" supporting argument does not).
+- `docs/boards/s100-memory.md` — the board's design doc, now describing plain RAM/ROM only.
+- `DESIGN.md` §10.2 — why there is no `BANK=` in the monitor.
 - `docs/sources.md` — the sourcing rule this page documents breaking.

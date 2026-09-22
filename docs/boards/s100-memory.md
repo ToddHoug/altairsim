@@ -1,6 +1,6 @@
 # `memory` — Static memory card (RAM and/or ROM)
 
-**Status:** milestone 1a. **The first board, and for a while the only one.**
+**Status:** done. **The first board, and for a while the only one.**
 
 ## The real hardware
 
@@ -264,7 +264,7 @@ most confusing thing this board can do to you: the write does not fail, it simpl
 
 ## Multiple cards
 
-Several `memory` boards coexist, each with its own regions and maps — which is what a real backplane looks like, and it exercises multi-board decode and contention (§4.6) from the first milestone:
+Several `memory` boards coexist, each with its own regions and maps — which is what a real backplane looks like, and it exercises multi-board decode and contention (§4.6):
 
 ```toml
 # A plain 16K RAM card at the bottom of memory.
@@ -325,9 +325,9 @@ And the trap in the other direction: *"my program vanished when I hit reset"* re
 - **POC\*'s 200 ns minimum pulse width is not modeled.** It is an analog property of the reset circuit (and on real machines, an RC network that drifts — many owners fit a dedicated supervisor IC to get a clean edge). We assume a clean POC\*. Nothing in the digital model depends on the width.
 - **No parity, no error detection, no wait states.** Period cards had none worth modeling.
 
-## Verification (milestone 1a acceptance)
+## Verification
 
-No CPU exists in milestone 1a, so **the monitor is the bus master** — `DEPOSIT` and `DUMP` originate real bus cycles with nothing else in the machine, exactly as the Altair front panel did. That is not a workaround; it is a free early test of the `BusMaster` abstraction (§3).
+These run in a machine with no CPU card in it, where **the monitor is the bus master** — `DEPOSIT` and `DUMP` originate real bus cycles with nothing else in the machine, exactly as the Altair front panel did. That is not a workaround; it is a free early test of the `BusMaster` abstraction (§3).
 
 **RAM and the floating bus**
 

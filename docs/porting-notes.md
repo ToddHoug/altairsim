@@ -1,26 +1,52 @@
-# Porting notes — what the prior work taught us
+# Porting notes — the traps, and what the prior work taught us
 
-> ## ✓ `src/platform/win32/` IS FIELD-PROVEN — SERIAL, SOCKET AND TERMINAL
->
-> **Written 2026-07-12 on macOS, where no compiler had looked at it.** `serial_win32.cpp` (`SetCommState` / `GetCommModemStatus` / `EscapeCommFunction`), `socket_win32.cpp` (Winsock) and `terminal_win32.cpp` (`SetConsoleMode`) existed so that a Windows build **links** and so the porting work was a debugging job rather than a design job. As of **2026-07-15 all three are proved on native Windows (MSVC)** — not merely built, but driven against the real world: a real cable, the real kernel TCP stack, a real console. Each is a leg of `ctest -L hw`.
->
-> **`serial_win32.cpp` — real hardware.** Two USB FTDI ports, `COM4 <-> COM10`, null modem between them: `tests/serialtest.cpp`, `ctest -L hw` — **25 checks**, both the platform-layer section and the in-machine 6850 (real `/CTS` flow control and a latched `/DCD` carrier-drop interrupt), stable across repeat runs. The spots once flagged as most-likely-wrong — `MAXDWORD/0/0` and `EscapeCommFunction` vs `RTS_CONTROL_ENABLE` — both turned out **right** and are unchanged.
->
-> **`socket_win32.cpp` — the real TCP stack.** `tests/test_lines.cpp` drives the loopback happy path in the `unit` aggregate, and `tests/sockettest.cpp` (`ctest -L hw`, **11 checks**) drives the non-blocking connect: success out of loopback, bytes both ways, hangup, and — the one that was flagged — a **REFUSED** connect, which on Winsock surfaces in `select()`'s *except* set that POSIX ignores. `poll()` watches that third set on purpose; a refusal ends `closed()` and never once `established()`. Right as written.
->
-> **`terminal_win32.cpp` — a real console.** The pipe path runs in CI every build (`acceptance-basic4k/8k` feed a live guest keystrokes on a redirected stdin: `readInput`'s `PeekNamedPipe` branch, its never-waiting contract, and its broken-pipe EOF, which stops the run with `InputEnded`). The console path — which a piped test cannot reach — is `src/platform/win32/terminaltest_win32.cpp` (`ctest -L hw`, **15 checks**): it takes a real console and drives `enterTermMode()` through **both** modes — Guest clears line input, echo and `PROCESSED_INPUT` (Ctrl-C is a byte, not a signal); LineEdit leaves `PROCESSED_INPUT` **as it found it** (Ctrl-C still signals a way out of the prompt) — confirms `ENABLE_VIRTUAL_TERMINAL_INPUT` is set, and that `restoreTerm()` gives the mode back exactly and idempotently. That test lives in `src/platform/win32/` and not `tests/` because reading `SetConsoleMode`/`GetConsoleMode` is itself a Win32 call — §2.1 keeps OS code in the platform layer, and a test of OS-specific code is OS-specific code. The POSIX terminal has its own mirror of it, `src/platform/posix/terminaltest_posix.cpp` (**11 checks**), which opens a pty and asserts the half a piped test can never reach: on a tty an empty read is *quiet*, not *ended* — and on a closed pipe it is still *ended*. That distinction was proved by hand until issue #25 showed what by hand is worth.
->
-> The one console thing NOT in CI is `readInput`'s peek-and-discard loop over the input queue: proving it means manufacturing keystrokes with `WriteConsoleInput` and reading them back, and that round trip is **racy** against a console input buffer shared with the parent shell — a flaky hardware test is a lying one, which is the whole reason the suite has an `-L hw` leg in the first place. It was verified by hand (feed a key-up + a resize, `readInput` returns 0 without blocking; then a real key comes through), and a broken peek loop hangs the monitor the instant you type, so it does not hide.
+Two kinds of thing are collected here. First, the traps in `src/platform/` — each one a place where
+the three operating systems disagree and the disagreement is easy to get wrong. Then the lessons
+from the Python prototype (`../AltairClaude/cpm_sim`), its `SIMULATOR.md` and `CLAUDE.md`, and
+`mits_dsk.c`. **Read the second half before writing the CPU or the disk controller.**
 
-### The §2.1 lint is ON (2026-07-12)
+## The platform layer's traps
 
-The terminal was the **last** thing in the tree with an OS underneath it, and it has moved into `src/platform/terminal.h`. `src/cli/lineedit.cpp`'s `#if defined(_WIN32)` is gone — Windows now gets the *same* line editor from the *same* code, degrading to `std::getline` if the console cannot be put in raw mode.
+`src/platform/win32/` was written on macOS, where no compiler had looked at it, so that a Windows
+build would **link** and the porting work would be a debugging job rather than a design job. Each of
+the three files is now driven against the real world by a leg of `ctest -L hw` — a real cable, the
+real kernel TCP stack, a real console. Three things were flagged as most likely to be wrong. Two
+were not, and the third is the one to remember.
 
-So `cmake/lint_platform.cmake` now runs **as a build dependency of `altair_core`** — not a test, because §2.1 says *fails the build*, and a rule you can merge and fix later is a rule you have already lost.
+- **A refused non-blocking connect was the single most likely thing to be wrong on Winsock, and it
+  is the trap.** Winsock reports the failure by landing in `select()`'s **third** `fd_set` — the
+  *except* set, which POSIX ignores. `poll()` watches that set on purpose: a refusal must end in
+  `closed()` and never once in `established()`. Read that set wrong and a port scanner sees every
+  dead port as a live one. `tests/sockettest.cpp` drives it.
+- **`readInput` must never wait**, on any platform. On Windows that means the `PeekNamedPipe`
+  branch for a redirected stdin, and a peek-and-discard loop over the console input queue for
+  everything that is not a keystroke (a key-up, a resize). That loop is the one console behaviour
+  **not** in CI: manufacturing keystrokes with `WriteConsoleInput` and reading them back races the
+  input buffer the parent shell shares, and a flaky hardware test is a lying one. A broken peek
+  loop hangs the monitor the instant you type, so it does not hide.
+- **An empty read is two different answers, and the platform decides which.** On a tty it is
+  *quiet*; on a closed pipe it is *ended*, and a run that reads it as quiet never stops.
+  `terminaltest_posix.cpp` opens a pty to assert the half a piped test can never reach. That
+  distinction was checked by hand until issue #25 showed what by hand is worth.
+- **`MAXDWORD/0/0` for the serial timeouts, and `EscapeCommFunction` rather than
+  `RTS_CONTROL_ENABLE`**, were both flagged and both turned out **right**. They are unchanged, and
+  they are recorded here so nobody re-opens them.
 
-It greps for OS **headers** as well as OS **macros**, and that half is not gold-plating: when the terminal moved there were two offenders, and only one had a conditional. `src/host/console.cpp` simply `#include`d `<termios.h>` in the open, with no `#ifdef` at all — a macro-only lint would have called it **clean**. It would have compiled on macOS and Linux forever and failed on Windows the day someone tried. **The `#ifdef` is the symptom; reaching for the OS outside the platform layer is the disease.**
+The terminal test lives in `src/platform/win32/`, not `tests/`, because reading
+`SetConsoleMode`/`GetConsoleMode` is itself a Win32 call: §2.1 keeps OS code in the platform layer,
+and a test of OS-specific code is OS-specific code.
 
-Lessons from the Python prototype (`../AltairClaude/cpm_sim`), its `SIMULATOR.md` and `CLAUDE.md`, and `mits_dsk.c`. **Read this before writing the CPU or the disk controller.**
+## The §2.1 lint fails the build
+
+`cmake/lint_platform.cmake` runs **as a build dependency of `altair_core`** — not a test, because
+§2.1 says *fails the build*, and a rule you can merge and fix later is a rule you have already lost.
+
+It greps for OS **headers** as well as OS **macros**, and that half is not gold-plating: when the
+terminal moved into `src/platform/terminal.h` there were two offenders, and only one had a
+conditional. `src/host/console.cpp` simply `#include`d `<termios.h>` in the open, with no `#ifdef`
+at all — a macro-only lint would have called it **clean**. It would have compiled on macOS and
+Linux forever and failed on Windows the day someone tried. **The `#ifdef` is the symptom; reaching
+for the OS outside the platform layer is the disease.**
 
 ## What to steal
 
@@ -51,7 +77,7 @@ The prototype sniffs the output stream for a Device Status Report query and inje
 
 Its `s100_bus_addio(port, count, handler, name)` / `s100_bus_remio(...)` shape is the right instinct, and its `DEBTAB` debug masks (`IN_MSG`, `OUT_MSG`, `READ_MSG`, `WRITE_MSG`, `SECTOR_STUCK_MSG`, `TRACK_STUCK_MSG`) are the model for the `Log`/`Trace` category masks.
 
-> **Note:** `s100_bus.h` **does not exist anywhere in the tree.** That API was aspirational. Defining it properly is the core of this project.
+> **Note:** `s100_bus.h` **does not exist anywhere in SIMH's tree.** That API was aspirational there; `src/core/bus.h` is this project's answer to it.
 
 ---
 
@@ -69,15 +95,14 @@ The bug was not the shadowing. The bug was **using a sentinel return value** (`0
 
 The prototype's own notes say `DAA` is "complex, not fully tested" and that **TST8080 / 8080PRE / 8080EXM / CPUTEST were never run** — with the comment "These MUST be run before trusting the emulator."
 
-**Validation is a hard CI gate (milestone 2), not a to-do.**
-
-> **Settled 2026-07-11.** All four suites run and pass against the C++ core — 8080EXM included, all 25 CRC groups, `<daa,cma,stc,cmc>` among them. See `tests/cputest.cpp`.
+**Validation is a hard CI gate here, not a to-do.** All four suites run and pass against the C++
+core — 8080EXM included, every CRC group, `<daa,cma,stc,cmc>` among them. See `tests/cputest.cpp`.
 
 ### 3. No interrupts at all
 
 `EI`/`DI` set `self.interrupts_enabled`, and **nothing ever reads it.** There is no `interrupt()` method, no INT pin, no vector injection. This is what happens when a simulator is built polled and interrupts are "added later."
 
-**This is why the full `pINT` / `IntAck` / floating-bus-RST-7 path is in milestone 1**, driven by a board (the 88-2SIO) that genuinely needs it.
+**This is why the full `pINT` / `IntAck` / floating-bus-RST-7 path was built at the outset**, driven by a board (the 88-2SIO) that genuinely needs it.
 
 ### 4. Linear-scan dispatch
 

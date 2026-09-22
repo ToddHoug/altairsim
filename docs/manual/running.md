@@ -4,15 +4,17 @@
 
 ```
 $ ./altairsim
-AltairSim 1.0.0 -- 8080, full speed.
+AltairSim X.Y.Z -- 8080, full speed.
 machine: default.  HELP for commands.
 altairsim>
 ```
 
-The part in parentheses is **the commit this binary was built from**, and yours will differ. Between
-releases the version number alone names every build alike, so it is the commit that says which
-source produced the program in front of you — quote it in a bug report. `SHOW VERSION` prints it
-on its own, and says whether the tree had uncommitted edits in it at the time.
+`X.Y.Z` is the release you are holding. A binary built from a **later** commit than a release says
+so, appending the commit it was built from — `AltairSim X.Y.Z-37-gcc64cca` — because between
+releases the version number alone names every build alike, and it is the commit that says which
+source produced the program in front of you. Quote whichever you see in a bug report.
+`SHOW VERSION` prints it on its own, and says whether the tree had uncommitted edits in it at the
+time.
 
 That prompt is **the monitor**. The machine exists — it has memory, a processor, a console
 board and a floppy controller in it — but it is not running. Nothing has been started. This
