@@ -119,7 +119,7 @@ The other direction is `R`'s job. A host name that comes back off a wildcard mat
 | `hostdir` | `""` | The sandbox root. **Empty means the directory you ran `altairsim` from.** |
 | `readonly` | `off` | Refuse `OPEN_WRITE` and `DELETE` — a one-way street, out of the host only |
 
-`hostdir = ""` is not a special case: it is exactly what `Board::resolvePath()` already does with an empty `configDir_` — *a path typed is relative to the shell*. Aim it somewhere else with the existing `-x`:
+`hostdir = ""` is the directory you launched from, even for a machine file loaded from somewhere else — so `R FOO.ASM` finds the file in the shell you are standing in. A relative `hostdir` you *write* is a path like any other, and resolves against the machine's directory (`docs/config.md`). Aim it somewhere else with the existing `-x`:
 
 ```
 altairsim -x 'SET hb0 HOSTDIR=/tmp/xfer' -i

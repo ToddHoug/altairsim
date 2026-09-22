@@ -27,8 +27,11 @@ name = "myproject"
 base = "default"
 
 [[board]]
-id    = "dsk0"          # the default's floppy controller...
-mount = "disks/cpm.dsk" # ...with this project's disk in it
+id = "dsk0"             # the default's floppy controller (no type: modify it in place)...
+
+  [[board.drive]]
+  unit  = 0
+  mount = "disks/cpm.dsk" # ...with this project's disk in drive 0
 ```
 
 ## Where a relative path is relative to
@@ -94,22 +97,17 @@ In TOML these appear as the `mount` and `connect` keys; at the monitor they are 
 
 ## Endpoints (for `connect`)
 
-| Endpoint | Meaning | |
-|---|---|---|
-| `console` | The host keyboard and screen. Exactly one unit may hold it — connecting a second **steals** it, and says who from. | **built** |
-| `null` | Discard. What an unconnected unit is bound to, which is why an unconnected line is not an error. | **built** |
-| `loopback` | A jumper between TX and RX. The guest hears itself. | **built** |
-| `socket:2323` | Listening TCP socket — a terminal emulator connects *in*. | **built** |
-| `socket:host:port` | Outbound TCP connection. | **built** |
-| `serial:/dev/cu.usbserial-X` | Real host serial port (POSIX). | **built** |
-| `serial:COM3` | Real host serial port (Windows). | **built** |
-| `file:path` | A file, for paper tape. | **built** |
+**Not listed here.** The endpoints are specified once, in the User Manual's serial chapter
+(`docs/manual/serial.md`), and `HELP CONNECT` prints the grammar from the same function the
+resolver uses. A copy here would be a second list, and the one that used to be here had
+already drifted: it named a `file:` endpoint that never existed and left out `telnet:`,
+`in:`/`out:`, `terminal`, `printer:` and the taps. The *why* for the ones that need arguing is
+in `docs/cli-commands.md` (*The endpoints*).
 
-Asking for one that is not built yet **says so by name**, rather than failing as though you had mistyped it.
+## Example — an annotated machine
 
-## Example — the machine that exists today
-
-This is `machines/altmon.toml`, and it runs: `altairsim altmon`.
+This is `machines/altmon.toml` with the keys spelled out, and an 88-SIO added to show its
+straps. It loads and boots ALTMON.
 
 ```toml
 [machine]
@@ -165,7 +163,8 @@ baud      = 9600           # DECIMAL. A jumper: software cannot change it.
 data_bits = 8              # the NDB1/NDB2 pads. Soldered, not programmable --
 stop_bits = 1              #   the NSB pad                 there is no control
 parity    = "none"         #   the NPB/POE pads            register on this card.
-connect   = "console"
+connect   = "null"         # NOT "console": sio0:a has it, and a file that cables two
+                           #   units to the one keyboard is refused.
 
   # TWO straps, not one. The manual is explicit that the input device and the
   # output device may be jumpered to DIFFERENT VI priorities; the card's "BH"
@@ -232,8 +231,9 @@ At the monitor that is `SET CONSOLE UPPER=ON`, and `SHOW CONSOLE` prints it. **I
 
 ```toml
 [console]
-attn = 05                  # HEX. The key that drops from CONSOLE back to the monitor.
+stop = 05                  # HEX. The STOP key (^E): it takes a RUN back to the monitor.
                            #   The guest NEVER SEES this byte, so it cannot disable it.
+                           #   `attn` is the old spelling, and still accepted.
 history = 100              # command lines kept in .altairsim_history (per launch dir).
                            #   Default 50; 0 turns the file off.
 ```
@@ -249,7 +249,7 @@ id   = "sio1"
 port = 14
 ```
 
-## Example — a CP/M machine (milestone 3+)
+## Example — a CP/M machine
 
 ```toml
 [machine]
@@ -352,9 +352,9 @@ hostdir = "./hostfiles"    # THE SANDBOX ROOT. Guest names cannot escape it: no 
                            # both `/` and `\` work on every host.
                            #
                            # EMPTY (the default) MEANS THE DIRECTORY YOU RAN altairsim
-                           # FROM -- which is the same rule every typed path follows,
-                           # and which is what makes `R FOO.ASM` work on the file you
-                           # are looking at with nothing configured.
+                           # FROM -- which is what makes `R FOO.ASM` work on the file
+                           # you are looking at with nothing configured. (A relative
+                           # hostdir you write still follows the path rule above.)
 readonly = false           # ON makes it a one-way street: out of the host only.
 ```
 
