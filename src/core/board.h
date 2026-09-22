@@ -166,7 +166,8 @@ inline IrqJumper irqJumperFromText(const std::string& s) {
 
 class Board {
 public:
-    virtual ~Board() = default;
+    // Runs after the derived destructor, which may still have cancelled through clock_.
+    virtual ~Board() { if (clock_) clock_->unwatch(&clock_); }
 
     virtual std::string type() const = 0;
     std::string id;
@@ -649,7 +650,9 @@ public:
     // 7.5). A card with nothing time-dependent on it never looks at this, and
     // most don't. A UART absolutely does: TDRE is a deadline, not a flag.
     void attachClock(Clock* c) {
+        if (clock_) clock_->unwatch(&clock_);
         clock_ = c;
+        if (clock_) clock_->watch(&clock_);
         clockAttached();
     }
 
