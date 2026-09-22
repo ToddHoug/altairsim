@@ -13,8 +13,10 @@
 // the display-control registers.
 //
 // SOURCES (docs/sources.md). Modeled from the Hitachi datasheet (reference/Hitachi
-// HD63484 ACRTC.md) and the Hitachi HD63484 User's Manual -- every register field, every
-// status rule and every opcode below cites one of them. MAME's hd63484.cpp (BSD-3-Clause,
+// HD63484 ACRTC.md, register LAYOUT) and the Hitachi HD63484 User's Manual
+// (reference/Hitachi HD63484 ACRTC User's Manual.md, register and command SEMANTICS --
+// #U75, Nov 1984) -- every register field, every status rule and every opcode below cites
+// one of them. MAME's hd63484.cpp (BSD-3-Clause,
 // (c) Angelo Salese, Sandro Ronco; LICENSE-MAME-HD63484) was read as the STRUCTURAL
 // basis -- the shape of the register file, the FIFO, the command dispatch and the
 // scan-out -- and where it and the datasheet disagree the datasheet won (the FIFO is 8
