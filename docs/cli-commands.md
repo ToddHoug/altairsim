@@ -30,7 +30,11 @@ The eight that own their prefix, in Patrick's ranking (2026-07-11): **DUMP, STEP
 
 > **GO is gone (Patrick, 2026-07-12).** `RUN` is the switch on the front panel, and there was never a second thing for GO to be — see [RUN](#run-is-the-switch-on-the-panel) below.
 >
-> **`R` RUNS (Patrick, 2026-07-13).** It used to reset. That is the same call as `D` dumping: the shortest key on the keyboard goes to the command that cannot destroy anything, and the one that throws the machine's state away costs you letters. RUN is what you type every session, and a `RUN` you did not mean costs nothing — a bare `R` that reset the machine is a machine you have to set up again. RESET pays `RES`, and the rest of the cluster falls out of the table order below with nobody deciding it: `RE` REGS, `REC` RECORD, `REP` REPLAY, `RES` RESET, `REST` RESTORE, `REGI` REGION.
+> **`R` RUNS (Patrick, 2026-07-13).** It used to reset. That is the same call as `D` dumping: the shortest key on the keyboard goes to the command that cannot destroy anything, and the one that throws the machine's state away costs you letters. RUN is what you type every session, and a `RUN` you did not mean costs nothing — a bare `R` that reset the machine is a machine you have to set up again. RESET pays `RES`, and the rest of the cluster falls out of the table order below with nobody deciding it: `RE` REGS, `RES` RESET, `REST` RESTORE, `REGI` REGION.
+
+The table below is in the master table's priority order, which is what the abbreviations are
+derived from. It is here for the notes; the list itself is `HELP`'s, which prints from the source
+(`docs/monitor/ref/commands.md` is the same thing, generated).
 
 | Type | Command | Notes |
 |---|---|---|
@@ -43,6 +47,8 @@ The eight that own their prefix, in Patrick's ranking (2026-07-11): **DUMP, STEP
 | `B` | BREAK | |
 | `E` | EDIT | interactive DEPOSIT — a byte at a time, or a mnemonic assembled in place |
 | `C` | CONFIG | |
+| `DO` | DO | runs a file of monitor commands. Two letters is the whole word |
+| `MA` | MACHINE | `M` is MOUNT |
 | `SE` | SET | beats SEARCH — you type it far more often |
 | `SH` | SHOW | |
 | `DE` | DEPOSIT | the front panel keeps its word; it costs one letter |
@@ -60,18 +66,18 @@ The eight that own their prefix, in Patrick's ranking (2026-07-11): **DUMP, STEP
 | `RE` | REGS | the first RE- word in the table, so it takes `RE` outright |
 | `REGI` | REGION | `REG` is REGS |
 | `DI` | DISASM | |
+| `SY` | SYMBOLS | |
+| `STA` | STARTUP | `ST` is still STEP, which is higher in the table |
 | `U` | UNMOUNT | not DISMOUNT — see above |
 | `DISC` | DISCONNECT | |
 | `CONS` | CONSOLE | **configures** the console. It does not start the machine — RUN does |
-| `CONN` | CONNECT | `console | null | loopback | scripted | socket:PORT | socket:HOST:PORT | serial:DEVICE | file:PATH` |
+| `CONN` | CONNECT | any endpoint — `HELP CONNECT` lists them |
 | `RES` | RESET | it sits with POWER, and it pays three letters — see above |
 | `P` | POWER | |
 | `T` | TRACE | logs every bus cycle — to the console or a file |
-| `STO` | STOP | *waiting on a monitor that runs alongside the machine — ATTN leaves a RUN today* |
+| `TY` | TYPE | |
 | `SN` | SNAPSHOT | writes the machine's state to a file |
 | `REST` | RESTORE | reads a snapshot back into a machine of the same shape |
-| `REC` | RECORD | *waiting on RECORD/REPLAY — it builds on SNAPSHOT* |
-| `REP` | REPLAY | *waiting on RECORD/REPLAY — it builds on SNAPSHOT* |
 | `NO` | NOBREAK | `N` is NEXT — the step you type mid-debug wins the letter |
 | `HE` | HELP | or `?` |
 | `Q` | QUIT | the only way out — there is no EXIT |
@@ -91,18 +97,18 @@ altairsim> HELP
 
   BO[ARDS]          B[REAK]           COM[PARE]         C[ONFIG]
   CONN[ECT]         CONS[OLE]         DE[POSIT]         DI[SASM]
-  DISC[ONNECT]      D[UMP]            E[DIT]*           EX[AMINE]
-  F[ILL]            HE[LP]            H[ISTORY]         I[N]
-  L[OAD]            M[OUNT]           MOV[E]            N[EXT]
-  NO[BREAK]         O[UT]             P[OWER]           Q[UIT]
-  REC[ORD]*         REGI[ON]          RE[GS]            REP[LAY]*
-  RES[ET]           REST[ORE]*        R[UN]             SA[VE]
+  DISC[ONNECT]      DO                D[UMP]            E[DIT]
+  EX[AMINE]         F[ILL]            HE[LP]            H[ISTORY]
+  I[N]              L[OAD]            MA[CHINE]         M[OUNT]
+  MOV[E]            N[EXT]            NO[BREAK]         O[UT]
+  P[OWER]           Q[UIT]            REGI[ON]          RE[GS]
+  RES[ET]           REST[ORE]         R[UN]             SA[VE]
   ...
 ```
 
 The list is **alphabetical**, not ranked — you are hunting for a name, and the ranking is not something you can look a name up by. The brackets are where the ranking shows through: `R[UN]` and `RES[ET]` sit two rows apart and tell you the whole story without a word of explanation.
 
-When you type HELP you are almost always hunting for a name you half-remember, and a wall of usage lines is the worst possible shape for that: it doesn't fit on a screen, so the thing you were looking for scrolls off the top. `*` marks a command that resolves but isn't built yet.
+When you type HELP you are almost always hunting for a name you half-remember, and a wall of usage lines is the worst possible shape for that: it doesn't fit on a screen, so the thing you were looking for scrolls off the top.
 
 **`HELP <command>`** is where the usage and the examples live:
 
@@ -255,16 +261,16 @@ Both are reported by name under `WARNINGS`, along with a pin 73 that is asserted
 
 | the backplane | what RUN does |
 |---|---|
-| a unit holds the console | the guest gets the keyboard — every key, including ^C — and the machine runs at the CPU card's real clock |
+| a unit holds the console | the guest gets the keyboard — every key, including ^C — and the machine runs at the CPU board's `clock_hz` (flat out unless you set one) |
 | nothing holds the console | there is nothing to hand over, so it just runs, flat out |
 
-Both stop on a breakpoint, on a HLT nothing can wake, and on ATTN, and both say which. That is why GO had nothing left to be.
+Both stop on a breakpoint, on a HLT nothing can wake, and on STOP, and both say which. That is why GO had nothing left to be.
 
-### ATTN is the stop key. ^C is not.
+### STOP (^E) is the stop key. ^C is not.
 
-**Ctrl-C belongs to the guest** — CP/M reads it, and a stop key the guest also wants is one that either breaks the guest or gets eaten by it. So the way out is **ATTN (^E)**, and it is the same key whatever is in the backplane: with a console, with no console, on a terminal, always.
+**Ctrl-C belongs to the guest** — CP/M reads it, and a stop key the guest also wants is one that either breaks the guest or gets eaten by it. So the way out is **STOP (^E)** — the front panel's STOP switch — and it is the same key whatever is in the backplane: with a console, with no console, on a terminal, always.
 
-The host intercepts it before the guest is ever offered the byte, so **the guest cannot disable it** — it is a key on the *front panel*, not on the terminal. And **ATTN stops the machine without disturbing it**: nothing executes while this prompt is up, but nothing is lost either — the monitor tells you the address it is sitting at, and a bare `RUN` resumes from exactly where you were.
+The host intercepts it before the guest is ever offered the byte, so **the guest cannot disable it** — it is a key on the *front panel*, not on the terminal. And **STOP halts the machine without disturbing it**: nothing executes while this prompt is up, but nothing is lost either — the monitor tells you the address it is sitting at, and a bare `RUN` resumes from exactly where you were.
 
 ```
 altairsim> RUN F800
@@ -273,10 +279,10 @@ altairsim> RUN F800
 ALTMON 1.3
 *
                                     ← you press ^E
-[monitor -- the machine is still at F83C. RUN resumes]
+STOP -- the machine is still at F83C. RUN resumes.
 ```
 
-**ATTN is tracked on console input and nowhere else.** A unit on a socket, a serial port or a loopback is *not* the console, and its data passes through untouched — `05` down a socket is a byte of somebody's protocol, and scanning a modem line for a key that only exists on the operator's terminal would be corrupting the data, not a feature.
+**STOP is watched for on console input and nowhere else.** A unit on a socket, a serial port or a loopback is *not* the console, and its data passes through untouched — `05` down a socket is a byte of somebody's protocol, and scanning a modem line for a key that only exists on the operator's terminal would be corrupting the data, not a feature.
 
 ## CONSOLE configures the console — it does not run the machine
 
@@ -285,26 +291,28 @@ altairsim> CONSOLE
 console  (the host keyboard and screen -- not a tty)
 
   property         value            legal
-  attn             0x5              0x1..0x1F
+  stop             0x5              0x1..0x1F
   base             hex              hex|octal
+  history          50               0..10000
+  log
   upper            false            true|false
   strip7in         false            true|false
   strip7out        false            true|false
   crlf             false            true|false
   echo             false            true|false
   bell             true             true|false
-  bsdel            off              off|bs|del
+  bsdel            bs               off|bs|del
 
   held by  sio0:a
 
-altairsim> CONSOLE attn=1D          ← make it ^]
+altairsim> CONSOLE stop=1D          ← make it ^]
 ```
 
 `CONSOLE k=v` sets, bare `CONSOLE` shows. (`SET CONSOLE` and `SHOW CONSOLE` are the same thing said the long way.) It used to *enter* console mode, and that was wrong twice over: a command that starts the CPU because you asked to look at a setting is a trap, and "start the machine" already has a name.
 
 ### Every property is settable
 
-There is no "runtime vs config-time" column, and no property that `SET` will refuse. **You can only type at the prompt when the machine is stopped** — by ATTN, by a breakpoint, by a HLT, which is the panel's STOP switch — so there is no moment at which a `SET` could race a running CPU. And on real hardware the rule would be a fiction anyway: a board being worked on is often sitting on an extender card, getting changed with the power on (Patrick, 2026-07-12).
+There is no "runtime vs config-time" column, and no property that `SET` will refuse. **You can only type at the prompt when the machine is stopped** — by STOP, by a breakpoint, by a HLT, which is the panel's STOP switch — so there is no moment at which a `SET` could race a running CPU. And on real hardware the rule would be a fiction anyway: a board being worked on is often sitting on an extender card, getting changed with the power on (Patrick, 2026-07-12).
 
 There *was* such a gate. It never once fired, because nothing in the simulator ever set the flag it was conditioned on. A rule the code only pretends to enforce is worse than no rule at all.
 
@@ -312,14 +320,24 @@ There *was* such a gate. It never once fired, because nothing in the simulator e
 
 `CONNECT <id>:<unit> <endpoint>`. The **monitor** knows this grammar and no board is permitted to, which is why `CONNECT sio0:a serial:/dev/tty.usbserial-AL009KFH` needed **not one line of code in the 2SIO**.
 
-| Endpoint | What it is |
-|---|---|
-| `console` | The host keyboard and screen. Exactly one unit may hold it. |
-| `null` | A DB-25 with nothing behind it. Writes vanish; reads are quiet. Not an error — an unconnected 6850 works fine and talks to nobody. |
-| `loopback` | TX jumpered to RX — **and RTS→CTS, DTR→DCD/DSR**, exactly like the loopback plug in the drawer. The one endpoint that can test modem control with no hardware. |
-| `socket:2323` | **Listen.** One client at a time; the listener survives a disconnect, so the next telnet is the phone ringing again. **A client connecting *is* carrier appearing.** |
-| `socket:host:port` | **Call out.** Non-blocking: a session still being established is a phone still ringing, and the card correctly sees no carrier yet. |
-| `serial:/dev/tty…` | A **real serial port**, and the one place where the pins are the pins. The card programs its baud and frame; `SET sio0:a cts=wired` and the far end can genuinely stop your transmitter. |
+**The list of endpoints is not copied here.** It is the User Manual's (the serial chapter) and
+`HELP CONNECT`'s, and `HELP` prints it from `endpointHelp()` — the same function the resolver
+answers to. What belongs here is why a few of them are shaped the way they are:
+
+- **`null` is a DB-25 with nothing behind it**, not an error. An unconnected 6850 works fine and
+  talks to nobody.
+- **`loopback` jumpers TX to RX — and RTS→CTS, DTR→DCD/DSR**, exactly like the loopback plug in
+  the drawer. It is the one endpoint that can test modem control with no hardware.
+- **A client connecting to a listening `socket:` or `telnet:` *is* carrier appearing.** One
+  client at a time; the listener survives a disconnect, so the next caller is the phone ringing
+  again. A call out is non-blocking, and a session still being established is a phone still
+  ringing: the card correctly sees no carrier yet.
+- **`socket:` is raw and `telnet:` negotiates**, and they are two endpoints rather than an option
+  because they are for different far ends. A program, or another machine, wants the guest's
+  bytes and nothing else. A person with a `telnet` client needs the echo and line-mode
+  handshake, or every key appears twice.
+- **`serial:` is the one place where the pins are the pins.** The card programs its baud and
+  frame, and with `SET sio0:a cts=wired` the far end can genuinely stop your transmitter.
 
 A device that is not there does **not** silently become a `NullStream` — it is an error, and `serial:` lists the ports that *are* on the host, because a cable that enumerated under a different name is ten minutes of a person doubting the simulator.
 
@@ -339,7 +357,7 @@ console: taken from sio0:a
 
 ### The keyboard is buffered by the host
 
-Keys land in a buffer belonging to the *host*, and a card takes characters from it. That is what lets ATTN be watched whether or not anybody is reading — while the guest is busy computing, and even when there is no serial card in the machine at all. It is also what lets anything *type for you*: an injected byte and a human's are indistinguishable to the board, because at the level the board sees, there is no difference. MCP's `send`/`expect` will be built on exactly that.
+Keys land in a buffer belonging to the *host*, and a card takes characters from it. That is what lets the STOP key be watched whether or not anybody is reading — while the guest is busy computing, and even when there is no serial card in the machine at all. It is also what lets anything *type for you*: an injected byte and a human's are indistinguishable to the board, because at the level the board sees, there is no difference. MCP's `run` tool, which types `input` and waits `until` a string appears, is built on exactly that.
 
 It does not make the UART any less real: the 6850 still holds **one** character, still sets RDRF when it does, and still takes the next only when the guest has cleared the last. The buffer is the *line*, and a line is buffered and flow-controlled. It is a real keyboard buffer, so it is finite — type past the end and the keys are dropped, and the drop is counted rather than silently swallowed.
 
@@ -370,19 +388,21 @@ does not match — a board missing, a type changed — is refused with the reaso
 machine is left untouched. A corrupt or truncated file is caught by its checksum and refused the
 same way.
 
-`RECORD` and `REPLAY` — a recorded session you can play back exactly — build on this and are not
-implemented yet; see below.
+`RECORD` and `REPLAY` — a recorded session you could play back exactly — would build on this.
+They are not planned; see below.
 
-## Commands that do not exist yet still resolve
+## A command that is not built yet can hold its letters
 
-RECORD, REPLAY, STOP and the rest are in the table, and typing `REC` today prints:
+The command table can list a command before it exists (`CommandDef::built` is false). It
+resolves, and says what it is waiting for, instead of being an unknown word. **That is the
+point, not an oversight.** If only the built commands were listed, `S` would have meant SHOW
+until the CPU landed and then silently started meaning STEP — and someone's fingers would keep
+typing `S` and get something else. Abbreviations are a contract with muscle memory, so a
+command that is coming takes its prefix before anyone has muscle memory to break.
 
-```
-altairsim> REC
-RECORD: not implemented yet -- waiting on RECORD/REPLAY (it builds on SNAPSHOT, now done).
-```
-
-**This is the point, not an oversight.** If only the built commands were listed, `S` would mean SHOW today and silently start meaning STEP the day the CPU lands — and someone's fingers would keep typing `S` and get something else. Abbreviations are a contract with muscle memory, so the contract is fixed now, before anyone has any muscle memory to break.
+**No command is reserved today.** RECORD, REPLAY and STOP were, and on 2026-07-25 they were
+dropped rather than deferred, so `REC`, `REP` and `STO` are free again (`tests/test_cli.cpp`
+checks that they no longer resolve). STOP the *key* is ^E; there is no STOP command.
 
 ## DUMP: a page at a time, and the columns never move
 
@@ -419,7 +439,7 @@ altairsim> O 10 41
 port 10 <- 41   (nobody decodes this port -- the byte is gone)
 ```
 
-These are the same `ioRead`/`ioWrite` the CPU will run once it exists, through the same decode — so **they have real side effects**. An `IN` from a UART's data port *consumes* the byte, and the guest will never see it. That is not a wart to be papered over; poking a live port is the oldest way there is to find out whether a card is alive.
+These are the same `ioRead`/`ioWrite` the CPU runs, through the same decode — so **they have real side effects**. An `IN` from a UART's data port *consumes* the byte, and the guest will never see it. That is not a wart to be papered over; poking a live port is the oldest way there is to find out whether a card is alive.
 
 If you want to look without touching, that is what **`WHO IO <port>`** is for — it reports who *would* answer without running a cycle.
 
