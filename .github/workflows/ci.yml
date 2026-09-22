@@ -49,9 +49,14 @@ jobs:
           #   including an Intel Mac), and universal is mutually exclusive with a Homebrew
           #   SDL3, which is arm64-only and will not link into a fat binary. Native buys the
           #   video path a compiler; the x86_64 slice is covered natively off-CI instead.
+          #   windows-2025-vs2026, not windows-latest: the Windows release box builds with
+          #   Visual Studio 2026 (tools/windows/setup-windows-worker.ps1), and this is the image
+          #   with that same MSVC. Named outright so a moved -latest label cannot quietly put CI
+          #   and the release on different compilers again -- the 2022/2026 split let a warning
+          #   through that only the release compiler reported.
           linux='{"name":"linux-x86_64","os":"ubuntu-latest","artifact":"altairsim-linux-x86_64","binary":"build/altairsim"}'
           macos='{"name":"macos-arm64","os":"macos-14","artifact":"altairsim-macos-arm64","binary":"build/altairsim"}'
-          windows='{"name":"windows-x86_64","os":"windows-latest","artifact":"altairsim-windows-x86_64","binary":"build/altairsim.exe"}'
+          windows='{"name":"windows-x86_64","os":"windows-2025-vs2026","artifact":"altairsim-windows-x86_64","binary":"build/altairsim.exe"}'
           full="{\"include\":[$linux,$macos,$windows]}"
           docsonly="{\"include\":[$linux]}"
 

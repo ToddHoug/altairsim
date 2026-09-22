@@ -97,7 +97,7 @@ Windows   tools\build-sdl3-static.bat   -- %USERPROFILE%\opt\sdl3-static
 
 **Both scripts pin the same SDL3 version**, build it static, install to a fixed prefix, and are a no-op on a second run. That pin is the only thing making four independently-maintained machines agree — change it deliberately, and rerun the script everywhere when you do.
 
-**The `.bat` is verified** (Windows 10 / MSVC 2022, from scratch: exit 0, ~3.5 min, valid `SDL3-static.lib`; see §8 and `docs/building-windows.md` §6). **It is a `.bat` and not a `.ps1` on purpose:** PowerShell's execution policy blocks unsigned scripts by default, so a freshly-cloned `.ps1` will not run until the user changes a machine setting. `curl.exe` and `tar.exe` have shipped in Windows since 10 1803, so it needs nothing installed but CMake.
+**The `.bat` is verified** (Windows 10 / MSVC 2022, from scratch: exit 0, ~3.5 min, valid `SDL3-static.lib`; re-verified from scratch with Visual Studio 2026 on 2026-09-21; see §8 and `docs/building-windows.md` §6). **It is a `.bat` and not a `.ps1` on purpose:** PowerShell's execution policy blocks unsigned scripts by default, so a freshly-cloned `.ps1` will not run until the user changes a machine setting. `curl.exe` and `tar.exe` have shipped in Windows since 10 1803, so it needs nothing installed but CMake.
 
 **THE WINDOWS TRAP IS THE C RUNTIME, and it has no Unix equivalent.** MSVC links the CRT dynamically by default (`/MD`), so the `.exe` then needs the VC++ redistributable — present on most Windows 10 machines, absent on a clean one, and a package that requires an install first is a broken package. Building with the **static** CRT (`/MT`, i.e. `-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded`) removes that requirement — **but SDL3 and `altairsim` must agree.** Mixing the two gives duplicate-symbol link errors at best, and two separate C runtime heaps at worst. Set it on both builds, or neither.
 
@@ -181,7 +181,7 @@ the COORDINATOR   git authenticated for push, and gh authenticated -- it does AL
 
 **On Windows, add Git Bash** — `build-package.sh` is `/bin/sh` and is not being duplicated in PowerShell, because two parsers of `docs/package.map` would drift. Git for Windows supplies it, and the box needs Git to clone this anyway.
 
-**A new Windows worker is set up by one script:** `tools\windows\RUN-ME-setup-windows-worker.bat` (double-click it; not the `.ps1` beside it). It installs or checks everything a Windows worker needs — MSVC 2022 Build Tools with CMake and Ninja, Git and Git Bash, OpenSSH Server so the coordinator can drive it, and the static SDL3 (§3.1) — and ends by proving altairsim configures with video enabled (the §4.2 step 2 check). It is idempotent and reports what it changed; details in `docs/building-windows.md` §1.1. **It is the worker's setup only, not a release step:** it holds no GitHub credentials and creates no delivery key (§4.5).
+**A new Windows worker is set up by one script:** `tools\windows\RUN-ME-setup-windows-worker.bat` (double-click it; not the `.ps1` beside it). It installs or checks everything a Windows worker needs — Visual Studio 2026 Build Tools (the MSVC CI builds with) with CMake and Ninja, Git and Git Bash, OpenSSH Server so the coordinator can drive it, and the static SDL3 (§3.1) — and ends by proving altairsim configures with video enabled (the §4.2 step 2 check). It is idempotent and reports what it changed; details in `docs/building-windows.md` §1.1. **It is the worker's setup only, not a release step:** it holds no GitHub credentials and creates no delivery key (§4.5).
 
 ### 4.2 The eight steps, on every machine
 
@@ -208,6 +208,8 @@ git checkout -f vX.Y.Z
 cmake -B build -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_PREFIX_PATH=<static SDL3 prefix> \
       -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0        # macOS only
+#    Windows adds  -G "Visual Studio 18 2026"  and the static CRT flag -- the exact
+#    command is in §4.5, Box 3.
 #    CHECK the configure output contains:
 #        -- SDL3 found -- video boards enabled (windowed)
 #    STOP if it instead says:
@@ -274,6 +276,8 @@ and not another.
 
 **MSVC is the only supported Windows toolchain** — it is what the Windows CI leg builds on every push, and what `src/platform/win32/` is field-proven against: serial against two real FTDI ports, sockets against the real TCP stack, the terminal against a real console.
 
+**And it is Visual Studio 2026's MSVC (since 2026-09-21)** — the one on CI's `windows-2025-vs2026` image, so the release is built by the compiler every PR is checked with. Until then the release box built with 2022 while CI had moved to 2026, and a warning only 2022 reports got through. Name the generator (`-G "Visual Studio 18 2026"`): without it CMake picks the newest Visual Studio *it* knows, so an old CMake first on `PATH` builds with 2022 without a word.
+
 #### No Developer shell is needed, and this matters for an assistant
 
 **With the Visual Studio generator — CMake's default on Windows — nothing has to be set up
@@ -291,7 +295,7 @@ build" is not a strategy — the second command starts with a clean environment.
 
 | generator | setup needed | how to do it in one shot |
 |---|---|---|
-| **Visual Studio** (CMake's default) | **none** | `cmake -B build` then `cmake --build build --config Release` |
+| **Visual Studio** (CMake's default) | **none** | `cmake -B build -G "Visual Studio 18 2026"` then `cmake --build build --config Release` |
 | Ninja | `vcvars` every time | `cmd /c "call vcvars64.bat && cmake --build build"` |
 
 **Use the Visual Studio generator for the shipped build.** It requires no environment
@@ -444,7 +448,7 @@ reaches the coordinator over the LAN.
 ```powershell
 # --- PowerShell ---   (first time only:  git clone https://github.com/deltecent/altairsim.git)
 git fetch --tags --force; git checkout -f vX.Y.Z
-cmake -B build -DCMAKE_BUILD_TYPE=Release `
+cmake -B build -G "Visual Studio 18 2026" -DCMAKE_BUILD_TYPE=Release `
       -DCMAKE_PREFIX_PATH="$env:USERPROFILE\opt\sdl3-static" `
       -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
 cmake --build build --config Release          # single-threaded: RAM-starved VM, no --parallel (§4.2)
@@ -660,7 +664,7 @@ Stated plainly, because a design document that describes a process nobody has au
 - ~~**Nothing produces `SHA256SUMS`.**~~ **`tools/build-checksums.sh` does** (2026-07-22). A coordinator-only step (§5 step 6): it auto-detects the version from the archives in `dist/`, refuses unless all four of one version are present — a partial checksum file is worse than none, because the three it lists verify OK and the fourth ships unchecked — writes `dist/SHA256SUMS` in the standard bare-name format, and verifies that file against its own archives before returning. It does not upload; the coordinator uploads it beside the four (§6). Still by hand, like everything else here — no workflow runs it.
 - **Nothing assembles the package and runs the manual's own commands against it.** `docs/package.map`'s own header says so, and names a `tests/acceptance/manual.cmake` that has never existed — a claimed test being worse than a missing one.
 - ~~**Nothing has ever run a shipped `.exe` on a clean Windows box.**~~ **The shipped v0.3.0 `.exe` is proven self-contained (2026-07-22, on the Windows box).** `altairsim-0.3.0-windows-x86_64.zip` was extracted to a fresh directory and run: `--version` → `AltairSim 0.3.0`, `SHOW VERSION` → `video SDL3 -- windowed`. The archive bundles no `SDL3.dll` and no `VCRUNTIME140`, and `dumpbin /dependents` on the `.exe` lists only base Windows 10 system DLLs (KERNEL32, USER32, GDI32, WINMM, IMM32, ole32, OLEAUT32, VERSION, ADVAPI32, SETUPAPI, SHELL32, WS2_32). **One caveat keeps this from being *fully* closed:** the check ran on the **build** box, which has the toolchain — a run on a genuinely pristine machine (no Visual Studio, no VC++ redistributable) is still nominally unproven. But self-containedness — static SDL3, static `/MT` CRT, zero non-system imports — is exactly what a clean-box run tests, and it holds.
-- **Setting up a Windows worker is scripted; the other two workers are not.** `tools\windows\RUN-ME-setup-windows-worker.bat` (2026-09-21, PR #511) takes a Windows 10 machine to a working worker — MSVC 2022 Build Tools, Git, OpenSSH Server, static SDL3 — idempotently, and its output says what each run changed. It is run from the repo checkout it lives in and leaves that checkout alone. It was run from scratch and then as a no-op on one machine. **Still unproven:** its `-Build` mode (full build plus `ctest`), a pristine machine with no Visual Studio, the OpenSSH and Git *install* paths, its `-RepoDir` clone path (a copy of the script taken out of the repo), and a second computer actually connecting in over ssh. The delivery key and the `Host dist.altairsim.com` entry (§4.5) are not created by it. The macOS and Linux workers are still set up by hand.
+- **Setting up a Windows worker is scripted; the other two workers are not.** `tools\windows\RUN-ME-setup-windows-worker.bat` (2026-09-21, PR #511) takes a Windows 10 machine to a working worker — Visual Studio 2026 Build Tools, Git, OpenSSH Server, static SDL3 — idempotently, and its output says what each run changed. It is run from the repo checkout it lives in and leaves that checkout alone. It was run from scratch and then as a no-op on one machine (with 2022, before the move to 2026). With 2026 it was run on a second machine that already had Community 2026 beside Build Tools 2022, then as a no-op, then with `-Build` (full build, `ctest -LE slow` 100%); and on a machine with only Build Tools 2022, where it installed Build Tools 2026 itself. **Still unproven:** a pristine machine with no Visual Studio, the OpenSSH and Git *install* paths, its `-RepoDir` clone path (a copy of the script taken out of the repo), and a second computer actually connecting in over ssh. The delivery key and the `Host dist.altairsim.com` entry (§4.5) are not created by it. The macOS and Linux workers are still set up by hand.
 - **The workers deliver by `scp`.** By design (2026-07-21) only the coordinator holds GitHub credentials; the workers clone the public repo over anonymous `https://` and `scp` their archive into the coordinator's repo `dist/` (`dist.altairsim.com`), which then uploads all four. Nothing automates the scp, the collection, or the four-at-once upload — that is the manual part of §4.5. The scp path — anonymous https, `dist.altairsim.com` resolution, a passphrase-less delivery key, and `dist/` existing at checkout — is now **proven on all four boxes** (2026-07-21), Windows included: the full build→package→deliver→collect dry run landed four conformant archives in the coordinator's `dist/` with no sibling wiped. See §4.5.
 - ~~**`tools\build-sdl3-static.bat` has never been run.**~~ **Run and verified end-to-end.** This bullet contradicted `docs/building-windows.md` §6, which recorded a first successful run on 2026-07-20; that run is confirmed and repeated. A fresh-from-scratch run on 2026-07-22 completed **exit 0 in ~3.5 min** — fetch SDL3 3.4.12, MSVC static build, install into a throwaway prefix — producing `SDL3-static.lib` (13 MB), the SDL3 headers, `cmake/SDL3Config.cmake`, and the version marker; the idempotent path (reads the `.altairsim-sdl3-version` marker, reports 3.4.12 already installed) works too. The `.bat`'s own `*** UNVERIFIED … never run on Windows` banner is corrected, and §6's "written, never run" leftover with it.
 
