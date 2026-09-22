@@ -74,8 +74,8 @@ Driving a worker over ssh — these have all bitten:
 - **Never `ssh host 'bash -s' < script`.** Commands in the script inherit the script as stdin
   and desync bash's parser: the build passes, then a phantom syntax error, non-zero exit, no
   delivery. `scp` the script over and run it as a file: `ssh host 'bash /tmp/worker.sh'`.
-- **Non-login shells skip the profile.** On an Intel Mac `cmake` is in `/usr/local/bin`,
-  which is then not on `PATH`. Prefix with `export PATH="<TARGET>_PATH:$PATH"`.
+- **Non-login shells skip the profile.** A `cmake` that the profile puts on `PATH` (a tarball
+  install on a Mac, for one) is then not found. Prefix with `export PATH="<TARGET>_PATH:$PATH"`.
 - **Windows, PowerShell steps:** `ssh host 'powershell -NoProfile -ExecutionPolicy Bypass
   -File build-win.ps1'`. The default policy blocks a `.ps1`.
 - **Windows, Git Bash steps:** bash is not on the ssh `PATH`. Use the space-free short path so
