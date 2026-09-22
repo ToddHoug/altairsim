@@ -8,6 +8,14 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+### The SciTronics RTC-100 clock board
+
+A new board, `rtc100`: the SciTronics RTC-100, an S-100 battery-backed calendar clock from
+1980. It reads your host's date and time, a guest can set it and the setting survives a RESET,
+and it can interrupt once a second with an `RST` of your choosing. Four ports from a base that
+must be a multiple of 4, and the clock chip is the OKI MSM5832 the System Support 1 already
+carried.
+
 ## 1.1.0
 
 **1.1.0 is the release that makes a running machine reachable.** Where 1.0.0 filled out the

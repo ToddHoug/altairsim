@@ -94,6 +94,7 @@ Grouped by what they do — the same order as the sections below.
 |---|---|
 | `virtc` | MITS 88-VI/RTC — vectored interrupts and a clock |
 | `ss1` | CompuPro System Support 1 — a multifunction board: real-time clock, serial channel, interval timer, and dual interrupt controllers |
+| `rtc100` | SciTronics RTC-100 — a battery-backed real-time clock, with an optional once-a-second interrupt |
 
 **The whole machine**
 
@@ -1176,6 +1177,31 @@ interrupt priority encoder, do not also fit an `88vi` — the two would fight ov
 `compupro` is the machine that fits one: a stock Altair with the System Support 1 added, its
 console still on the 2SIO. The clock lives at `5A` (command) / `5B` (data); the digit map, the
 read/set sequences and the register layouts are in the board's reference.
+
+---
+
+## `rtc100` — SciTronics RTC-100
+
+A **battery-backed calendar clock**, and nothing else. SciTronics sold it in 1980 for a machine
+that had no idea what day it was: an OKI MSM5832 clock chip — the same chip the System Support 1
+carries — behind a 6821 parallel interface, on four consecutive ports.
+
+It comes up reading **your host's own date and time**, so a guest gets the real wall clock for
+free, and a guest that sets it keeps that setting across a RESET and a power cycle, the way the
+card's lithium cell kept it. `SHOW rtc100` prints a live `time` line with what the clock is
+showing and how far it has been set from host time.
+
+The base address is the card's PORT switch, and it **must be a multiple of 4** — the switch
+decodes only the upper six address bits, and the bottom two pick which of the four ports you are
+talking to. The default here is `F0`. A guest reads the clock one BCD digit at a time: write the
+digit's number to the first port, read the digit back **in the top half of the byte**, which is
+why period drivers for this card all end by masking and rotating.
+
+It can also **interrupt once a second**, which is how the card was meant to drive a background
+clock display. Set `interrupt` to `int` and it pulls the machine's interrupt line; `restart`
+picks which `RST` it feeds the processor (0–7, the card's own INT switch — the manual warns that
+0 and 7 are commonly spoken for). With `interrupt` at `none` it never interrupts, and it still
+keeps perfect time.
 
 ---
 
