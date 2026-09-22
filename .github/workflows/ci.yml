@@ -75,14 +75,22 @@ jobs:
             exit 0
           fi
 
-          # Documentation = anything under docs/ or reference/, a top-level *.md, or LICENSE.
-          # Everything else is code -- src, tests, cmake, the data dirs the tests read
-          # (roms, tapes, machines, disks, cpm, examples), tools, and this workflow itself.
+          # Documentation = anything under docs/, reference/ or .claude/, a top-level *.md,
+          # or LICENSE. Everything else is code -- src, tests, cmake, the data dirs the tests
+          # read (roms, tapes, machines, disks, cpm, examples), tools, and this workflow itself.
+          #
+          # .claude/ IS DOCUMENTATION even though it is prose in a nested directory. The skills
+          # there are instructions for an agent; nothing in them is compiled, and no test's
+          # result depends on the platform it is read on. One of them (.claude/skills/altairsim)
+          # does ship inside the release package, and build-package.sh checks it -- but that
+          # check is platform-independent like docs-manual, so the Linux leg covers it. Without
+          # this case a skill edit falls through to the */*.md rule below and builds three
+          # operating systems to prove a Markdown file did not change the binary.
           code=false
           while IFS= read -r f; do
             [ -z "$f" ] && continue
             case "$f" in
-              docs/*|reference/*|LICENSE) ;;   # documentation
+              docs/*|reference/*|.claude/*|LICENSE) ;;  # documentation
               */*.md) code=true ;;             # a .md deeper in the tree (e.g. tests/) is code
               *.md) ;;                          # a top-level .md (README, DESIGN) is documentation
               *) code=true ;;                   # anything else
