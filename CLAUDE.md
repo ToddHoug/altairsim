@@ -3,6 +3,29 @@
 A C++20 simulator of the MITS Altair 8800 and the S-100 bus. No dependencies beyond a C++20
 compiler and CMake; SDL3 is optional and detected, never required.
 
+## How work is done here
+
+**Every task follows two skills: `work-task` (plan → build → review) and `ship-change`
+(commit → PR → merge → issues).** Load the one that fits before acting. The rules hold
+whether or not a skill is loaded:
+
+1. **No work without a plan made in plan mode** and approved. No edits before approval.
+   A feature plan first shows the feature is needed — not already documented, not a docs gap.
+2. **Tests never work around a bug.** A test that exposes a bug gets the code fixed. Never
+   loosen an assertion, skip the test, dodge the input, or add a retry.
+3. **A bug related to the task is fixed in the same change. An unrelated bug gets a GitHub
+   issue** at once (signed `--AltairSim Claude`) and is left alone.
+4. **Docs are updated before the commit**, as part of the change under review.
+5. **No commit until the maintainer has reviewed and approved it.** Stop and report the diff.
+6. **No PR until the maintainer approves opening one.** More commits may come first.
+7. **No merge until CI is green** on all three platforms. Then merge without asking again.
+8. **After the merge, comment on the related issues.** Never close them.
+
+The three gates are **plan approved**, **commit approved** and **PR approved**. Each
+approval covers that one step only; it never carries over to the next. **A PR from anyone but
+`deltecent` goes through the `review-pr` skill: its merge needs green CI *and* the
+maintainer's approval.**
+
 ## If you are here to build or ship a release
 
 **Use the release skills; they are the procedure.** Each is written to be executed step by
@@ -52,7 +75,7 @@ needs no environment at all.
 
 ## Rules that bite
 
-- **Every change goes on a branch off `master` and is merged when done.**
+- **Every change goes on a branch off `master`** — and through the gates above.
 - **`TODO.md` is untracked** — a local, fast-moving working doc, not in the tree. Its edits
   never go through git, so they need no branch and no PR. Anything in it meant for the public
   becomes a GitHub issue instead.

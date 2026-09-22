@@ -115,8 +115,9 @@ DIR  hostbridge          <=  cpm/hostbridge
 # should say `skills/`, not `skills/altairsim/references/driving-with-ai.md`.
 #
 # ONE SKILL, NAMED, NOT THE WHOLE FOLDER. .claude/skills/ also holds the release skills
-# (release-worker, release-coordinator, release-verify), which are for whoever BUILDS this
-# package and mean nothing to someone holding it. The map has no exclude, so a DIR of the whole
+# (release-worker, release-coordinator, release-verify) and the workflow skills (work-task,
+# ship-change, review-pr), which are for whoever BUILDS or CHANGES this package and mean
+# nothing to someone holding it. The map has no exclude, so a DIR of the whole
 # folder would ship every skill added there. Name each shipped skill on its own line instead.
 DIR  skills/altairsim    <=  .claude/skills/altairsim
 

@@ -32,7 +32,8 @@ to GitHub** — those are outward-facing and hard to undo.
   group it into themes, and drop anything already released: `git merge-base --is-ancestor
   <sha> <prevtag>` true means it shipped. Do not trust `git log --grep` for this. Then leave a
   fresh, empty `## Unreleased`.
-- Branch, PR, merge on green CI, as every change here.
+- It goes through the `work-task` and `ship-change` skills, as every change here: review, then
+  commit approval, then PR approval, then merge on green CI.
 
 ## 2. Wait for CI's PDFs, and tag THAT commit
 
