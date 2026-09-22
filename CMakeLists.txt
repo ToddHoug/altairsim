@@ -464,6 +464,7 @@ add_library(altair_core STATIC
   # SerialBoardBase -- the reusable 88-SIO B serial engine (UART, inverted status word, VI
   # straps, interrupt enables, decode, connector, snapshot). Not a registered board; the
   # 88-SIO is it plus a name, the cassette engine extends it. See serial-board-base.h.
+  src/boards/scitronics-rtc100.cpp
   src/boards/serial-board-base.cpp
   # SD Systems SBC-100/200 -- the 8251 serial console (Phase 1). Structural twin of
   # the 88-SIO, embedding one Intel8251. See src/boards/sd-sbc.h.
@@ -790,6 +791,7 @@ add_executable(altair_tests
   tests/test_turnkey.cpp
   tests/test_lamp.cpp
   tests/test_virtc.cpp
+  tests/test_rtc100.cpp
   tests/test_ss1.cpp
   tests/test_hostdir.cpp
   tests/test_hostbridge.cpp
