@@ -421,13 +421,13 @@ the serial half sit on a four-port block that must start on a four-boundary (def
 ### You strap it, or you name a personality
 
 The IO-4 was a heavily jumpered card, and every jumper is a property here. Which data-bus bit carries
-"a byte is waiting" (`dav`), which carries "the transmitter is ready" (`tbmt`), and four more status
-signals; whether the whole status byte is inverted (`invert_status`); and whether the status and data
-ports are swapped (`port_reversal`). You rarely set those one at a time. A **`profile`** presets them
-to imitate a known host: **`altair-rev1`** — the default, the MITS SIO Rev-0 console the SSM 8080
-monitor expects — plus `altair-rev0`, `i8251`, `proctech`, `imsai`, and `custom` (every strap left
-free to roll your own). Pick a profile, then override any individual strap afterward, exactly as you
-would move a jumper.
+"a byte is waiting" (`stat_dav`), which carries "the transmitter is ready" (`stat_tbmt`), and four
+more status signals (`stat_teoc`, `stat_ror`, `stat_rpe`, `stat_rfe`); whether the whole status byte
+is inverted (`invert_status`); and whether the status and data ports are swapped (`port_reversal`).
+You rarely set those one at a time. A **`profile`** presets them to imitate a known host:
+**`altair-rev1`** — the default, the MITS SIO Rev-0 console the SSM 8080 monitor expects — plus
+`altair-rev0`, `i8251`, `proctech`, `imsai`, and `custom` (every strap left free to roll your own).
+Pick a profile, then override any individual strap afterward, exactly as you would move a jumper.
 
 The three UART **error flags** — parity, framing and overrun — are strappable to the status byte, but
 they always read inactive: the serial line here carries exact bytes and models no line noise, so
