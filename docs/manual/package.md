@@ -14,6 +14,7 @@ cheatsheet.md            the same reference as plain text, for the AI to read.
 LICENSE                  the MIT licence this is published under.
 LICENSE-SDL3             the licence of SDL3, which is built into the program.
 examples/                machines that boot, media included.
+recipes/                 build a machine yourself, one typed line at a time.
 hostbridge/              the file-transfer utilities: source, HEX, COM.
 skills/                  the same AI briefing, packaged for a client that reads skills.
 ```
@@ -31,6 +32,13 @@ arriving from another Altair simulator, `migrating.pdf` is the map: what carries
 not, and the same for the versions before it. It is a separate document from this manual on
 purpose: the manual describes the program as it is *now*, and a record of what changed reads
 better on its own than as a chapter that would have to grow one section per release.
+
+**`recipes/` is where to go if you would rather be shown than told.** Each recipe is a short
+document of its own, and each one walks the same road: start with an empty chassis, fit the
+boards by hand, watch the machine answer every line, save what you built to a file, quit, and
+load it back. One builds a CP/M Altair, one builds a Cromemco Dazzler machine with a Z80 in it,
+and one starts from a machine that already works and changes it. Open whichever names the thing
+you want to do.
 
 `altairsim-monitor.pdf` and `altairsim-debugger.pdf` are two more documents beside this one.
 They are about driving the program itself — the `altairsim>` prompt where you start and stop

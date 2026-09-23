@@ -122,6 +122,13 @@ DIR  hostbridge          <=  cpm/hostbridge
 # folder would ship every skill added there. Name each shipped skill on its own line instead.
 DIR  skills/altairsim    <=  .claude/skills/altairsim
 
+# ALSO NOT AN EXAMPLE, and not a chapter either. docs/recipes/ is the set of typed-along
+# walkthroughs -- build a machine from an empty backplane, save it, load it back -- and each one
+# is its own document rather than a chapter of the manual, because the reader this is for will
+# not find a section inside a book. The folder ships as `recipes/`, HOLDING ONLY THE PDFs: the
+# .md sources and ORDER are stripped below, the same way every example's README.md is, since the
+# Markdown is written for someone standing in the tree and a file manager cannot render it.
+DIR  recipes             <=  docs/recipes
 
 # ---------------------------------------------------------------------------
 # FILES -- <package path>  <=  <path in this repo>
