@@ -27,7 +27,6 @@ package**. Common misfilings:
 | It is really about | Where it belongs |
 |---|---|
 | altairsim.com, the downloads page, the website | **Discussions** (they are enabled) |
-| the example machines collection | the `altairsim-machines` repository |
 | CP/M, MBASIC, DDT, M80 — software running *inside* the guest | upstream; not ours |
 | "how do I…", with no defect and no request | Discussions, or answer it and label `question` |
 

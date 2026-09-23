@@ -457,7 +457,6 @@ void test_dcdd() {
         // the guest at wrDone forever: it boots, DIRs and STATs perfectly, then wedges the first
         // time anything writes. Burcon and Lifeboat CP/M both do this; Mike Douglas's does not,
         // which is why the boot suite stayed green while every write was broken.
-        // (Reported in the altairsim-machines repo, BUGS.md #1.)
         Clock     c;
         DcddBoard b;
         b.attachClock(&c);
