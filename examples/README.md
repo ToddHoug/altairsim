@@ -7,7 +7,7 @@ against the directory you launched from.
 
 ## In the release
 
-These eight are what the distribution zip carries — the machines `docs/manual/quick-start.md`
+These are what the distribution zip carries — the machines `docs/manual/quick-start.md`
 names. Each is a `DIR` line in `docs/package.map`, `tools/build-package.sh` assembles them, and
 `acceptance-examples` boots every one out of a scratch directory with no repository in sight —
 because "does it work here" and "does it work where we hand it to people" turned out to be
@@ -35,11 +35,8 @@ altairsim examples/debugger/debugger.toml      # a bench for learning the symbol
 | [`debugger/`](debugger/) | A 46-byte program with its **symbols** and a guided walk through the monitor's debugger: `SYMBOLS LOAD`, symbolic `DISASM`, single-step, break on a label, run. |
 | [`ai-mcp/`](ai-mcp/) | A working directory for an **AI assistant driving altairsim over MCP**: a CP/M machine and a tiny `HELLO.ASM` with one deliberate bug the assistant assembles, runs, single-steps to find, and fixes — all through the simulator's MCP tools. See `DRIVING-WITH-AI.md`. |
 
-## More machines — the `altairsim-machines` companion
+## Other machines
 
-There are more folders under `examples/` than the nine above: Cromemco boards, the SD Systems
-and Tarbell and iCOM disk systems, a Sol-20, the dual-card storage boards, and others. They are
-real, tested machines — each keeps its acceptance test — that simply do not travel in the core
-zip. They are published on their own through **`altairsim-machines`**, a companion distribution
-that mirrors them out of this tree. Browse the folders here to see what is available; each
+The other folders under `examples/` are not in the release package: Cromemco boards, the SD
+Systems, Tarbell and iCOM disk systems, a Sol-20, the dual-card storage boards, and others. Each
 carries its own README saying what it is and what to type.

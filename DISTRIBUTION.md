@@ -79,8 +79,6 @@ Only `skills/altairsim/` ships from `.claude/skills/`. The release skills are fo
 the package, and the map names each shipped skill on its own line for that reason.
 
 The Developer Guide is not in the package. It is about the source, which is not in there either.
-The example machines that are not shipped are published through the separate
-`altairsim-machines` companion distribution.
 
 ---
 
