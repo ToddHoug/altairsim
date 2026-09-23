@@ -96,6 +96,9 @@ Also check the tests against `work-task`'s rules. None of these is allowed:
 - **"Board", not "card".**
 - **A bug is fixed, not documented.** A new "be careful to…" warning is a finding.
 - **Code reads like the code around it** — naming, comment density, idiom.
+- **No closing keyword on someone else's issue.** `Fixes/Closes/Resolves #N` closes the issue
+  on merge. It is fine for an issue opened by `deltecent` or by the PR's own author; for anyone
+  else's, it must be `Refs #N`.
 
 **An unrelated bug found along the way gets its own issue**, as in `work-task` — not a
 request to the contributor.
@@ -164,6 +167,6 @@ Poll `gh pr checks <N>` every 20 seconds until all three platforms have finished
 ## 10. After the merge
 
 - **Comment on each linked issue:** `Fixed by #<N> (merged <sha>)`, signed
-  `--AltairSim Claude`. **Never close an issue** — the person who opened it does.
+  `--AltairSim Claude`. **Never close someone else's issue** — the person who opened it does.
 - Clean up: `git worktree remove .claude/worktrees/pr-<N>`, then `git branch -D pr-<N>`.
 - Sync: `git switch master && git pull --ff-only`.
