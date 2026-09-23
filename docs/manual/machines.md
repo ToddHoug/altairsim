@@ -139,6 +139,58 @@ No boards. No memory. No processor. `-n` is a bare chassis, and every `BOARDS AD
 is yours. It is the honest starting point when you are building a machine up board by board,
 and it is the one way to be certain nothing is in there that you did not put there.
 
+### From an empty chassis to a machine file
+
+This is the whole arc, in one place, because it is one thing you do rather than three: build the
+machine at the prompt, write it down, and load it back.
+
+```
+$ altairsim -n
+altairsim> BOARDS ADD 8080 cpu0
+cpu0: 8080 added
+altairsim> BOARDS ADD 2sio sio0 port=10
+sio0: 2sio added
+altairsim> SET sio0:a connect=console
+sio0:a: connect=console
+altairsim> BOARDS ADD memory mem0 fill=random
+mem0: memory added
+altairsim> REGION ADD mem0 type=ram at=0 size=56K
+mem0:0: ram  0000-DFFF  56K
+altairsim> REGION ADD mem0 type=rom at=FF00 mount=builtin:dbl
+mem0:1: rom  FF00-FFFF  builtin:dbl
+altairsim> CONFIG SAVE mine.toml
+saved mine.toml
+altairsim> QUIT
+```
+
+Then start with nothing again and hand it the file:
+
+```
+$ altairsim -n
+altairsim> CONFIG LOAD mine.toml
+loaded mine.toml: 3 board(s)
+```
+
+and that is the machine back. `$ altairsim mine.toml` does the same thing in one step, which is
+all that naming a machine file on the command line has ever meant.
+
+Four things in that sequence are worth keeping:
+
+- **A board's settings can ride on the `BOARDS ADD` line** (`port=10`), or be set afterwards with
+  `SET`. It is the same setting.
+- **`SET` takes one property per command**, and the board has to exist first.
+- **A memory board holds no memory until you add regions to it.** `REGION ADD` is how, and the
+  ROM region is the one people leave out and then wonder what to `RUN`.
+- **`STARTUP ADD RUN FF00`** records the keystroke that starts the machine, and `MOUNT` puts a
+  disk in a drive. Both are saved with the rest.
+- **`SET MACHINE name=<name>`** names it. A machine built from `-n` is called `none` until you
+  say otherwise, and the name is what `CONFIG SAVE` writes and what another file's `base =`
+  refers to.
+
+**`recipes/` in the package is this walked through slowly**, three times, with a machine at the
+end of each: a CP/M Altair, a Dazzler machine with a Z80 in it, and one built by changing a
+machine that already works.
+
 ## The path rule: one base directory
 
 This is the rule that lets an example directory be copied anywhere and still boot. It is one

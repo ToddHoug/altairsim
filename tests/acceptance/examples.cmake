@@ -412,8 +412,10 @@ foreach(want
         "loaded 127 bytes"   # kscope.toml's startup LOADed KSCOPE.HEX from beside itself
         "daz0"               # the Dazzler is in the machine...
         "Dazzler"            # ...and mapped at its ports (SHOW BUS IO)
-        "OUT 0E"             # the running program turns the card on...
-        "OUT 0F")            # ...and sets its format -- so KSCOPE really drives the Dazzler
+        "OUT (0E)"           # the running program turns the card on...
+        "OUT (0F)")          # ...and sets its format -- so KSCOPE really drives the Dazzler
+                             # The parentheses are Z80 syntax: the machine has a `z80` board in
+                             # it now, and DISASM speaks the mnemonics of the CPU that is fitted.
   string(FIND "${out}" "${want}" hit)
   if(hit LESS 0)
     message(FATAL_ERROR "examples: the Dazzler example did not behave as the README says.\n"

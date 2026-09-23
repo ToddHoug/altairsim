@@ -191,12 +191,15 @@ examples/**
 # by CI) so a file manager with no Markdown viewer can read it, and so it travels in the
 # package. One glob covers all of them, at any depth.
 !examples/**/README.pdf
+# The Dazzler example is KSCOPE and nothing else: the program, its listing, and the Intel HEX
+# the machine file LOADs. The disks that used to live here -- a CP/M system disk and two disks
+# of period Dazzler software, plus a CDOS disk and its scanned game manuals -- were removed
+# with the machine files that mounted them, so their allowlist lines went too. An entry for a
+# file that is not there is worse than no entry: it reads as a promise that something is
+# tracked.
 !examples/dazzler/KSCOPE.ASM
 !examples/dazzler/KSCOPE.PRN
 !examples/dazzler/KSCOPE.HEX
-!examples/dazzler/cpm22b23-56k.dsk
-!examples/dazzler/dazzler_graphics_altair.dsk
-!examples/dazzler/dazzler_stuff_altair.dsk
 !examples/printing/PRINT.ASM
 !examples/printing/PRINT.HEX
 !examples/pmmi/PMMITERM.ASM

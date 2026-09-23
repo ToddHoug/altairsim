@@ -422,6 +422,32 @@ while IFS='|' read -r dest src; do
   rm -f "$pkg/$dest"/README.md "$pkg/$dest"/-ReadMe.pdf \
         "$pkg/$dest"/*.ENT "$pkg/$dest"/make-*.sh 2>/dev/null || true
 
+  # ...and the droppings. cp -R copies a directory as it FINDS it, so whatever the last person
+  # to open that folder left behind rides along: a Finder .DS_Store, an .altairsim_history from
+  # running the example. They are gitignored, which is exactly why nobody notices them until
+  # they are in a published zip.
+  rm -f "$pkg/$dest"/.DS_Store "$pkg/$dest"/.altairsim_history 2>/dev/null || true
+
+  # THE RECIPES SHIP AS PDFs AND NOTHING ELSE. docs/recipes/ is Markdown plus an ORDER list plus
+  # the rendered PDF of each recipe; the reader wants the PDF. This is the same rule as the
+  # README.md above -- the .md is the source, written for someone standing in the tree -- and
+  # ORDER is a build input, which is not a document at all.
+  if [ "$dest" = recipes ]; then
+    rm -f "$pkg/$dest"/*.md "$pkg/$dest"/ORDER 2>/dev/null || true
+
+    # ...and having stripped the sources, CHECK SOMETHING IS LEFT. A recipe's PDF is a committed
+    # CI artifact like the manual's, so a tree where docs.yml has not run yet holds the Markdown
+    # and no PDF -- and the strip above would then leave an EMPTY recipes/ folder in the zip,
+    # silently. The examples get this check (the "NO MEDIA" refusal below); this is the same
+    # refusal for the one shipped DIR that is documentation rather than a machine.
+    if ! ls "$pkg/$dest"/*.pdf 2>/dev/null | head -1 | grep -q .; then
+      echo "build-package: docs/recipes/ has no PDFs -- CI (docs.yml) builds them." >&2
+      echo "  They are committed at the tag, so a checkout of vX.Y.Z has them. Are you on the" >&2
+      echo "  tag, or packaging before docs.yml has run on master? See DISTRIBUTION.md 5 step 2." >&2
+      exit 1
+    fi
+  fi
+
   # The assembler files are the CONDITIONAL half, and the condition is what the example's
   # product IS. Beside a disk or a tape, a .ASM and its .PRN listing are how that image was
   # made -- provenance, exactly like the .ENT and the make-*.sh above, and they stay in the

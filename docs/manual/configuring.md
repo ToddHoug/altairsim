@@ -580,6 +580,10 @@ Which makes it the fastest way to write a machine file. Build the machine at the
 `BOARDS ADD` and `SET` until it is what you want, then save it, then edit the file down to the
 parts you care about — or give it a `base` and delete the rest.
 
+**The machines chapter walks that from end to end** — empty chassis, boards, save, quit, load —
+under "From an empty chassis to a machine file". And `recipes/` in the package is the same road
+taken slowly, with a working machine at the end of each one.
+
 The one part of the file that is not a board is the **`startup` list** — the commands the machine
 runs on load, `MOUNT` the disk, `LOAD` the loader, `RUN`. You can build that at the prompt too,
 with `STARTUP`:
