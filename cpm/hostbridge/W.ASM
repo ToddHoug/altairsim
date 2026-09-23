@@ -478,6 +478,7 @@ FCB2HN: LXI     H,FCB+1
         CALL    FLD
 
         LDA     FCB+9
+        ANI     7FH             ; an attribute bit, not a letter -- see FLD
         CPI     ' '
         JZ      F2Z             ; no extension: no dot either
         MVI     A,'.'
@@ -492,7 +493,14 @@ F2Z:    XRA     A
         RET
 
 ; Copy up to B characters from (HL) to (DE), stopping at the first blank.
+;
+; STRIP THE ATTRIBUTE BITS HERE TOO. STASH cleaned the name it put in the
+; FCB, but this runs AFTER the OPEN -- and CP/M 3's OPEN writes the file's
+; R/O, SYSTEM and ARCHIVE bits back into the high bit of the FCB's name
+; characters. A read-only HELP.COM came back as HELP.0C3H'OM', which is
+; no name a host will create.
 FLD:    MOV     A,M
+        ANI     7FH
         CPI     ' '
         RZ
         STAX    D
@@ -843,6 +851,7 @@ PF1:    LXI     H,FCB+1
         MVI     B,8
         CALL    PFLD
         LDA     FCB+9
+        ANI     7FH             ; an attribute bit, not a letter -- see FLD
         CPI     ' '
         RZ                      ; no extension: nothing to print
         MVI     A,'.'
@@ -850,6 +859,7 @@ PF1:    LXI     H,FCB+1
         LXI     H,FCB+9
         MVI     B,3
 PFLD:   MOV     A,M             ; print B characters at HL, skipping the
+        ANI     7FH             ; (no attribute bits -- see FLD)
         CPI     ' '             ; blanks an FCB pads with
         JZ      PFL2
         PUSH    B
@@ -962,7 +972,7 @@ MNOHB:  DB      CR,LF,'W: no host bridge at B0H.',CR,LF
         DB      'This machine has no `hostbridge` card in it, or it is at'
         DB      ' another port.',CR,LF,'$'
 
-MUSAGE: DB      CR,LF,'W -- copy a file from CP/M out to the host.  (1.0)',CR,LF,CR,LF
+MUSAGE: DB      CR,LF,'W -- copy a file from CP/M out to the host.  (1.1)',CR,LF,CR,LF
         DB      '   W <cpmfile> [hostfile] [B|T]',CR,LF
         DB      '   W <pattern>',CR,LF,CR,LF
         DB      'Examples',CR,LF
