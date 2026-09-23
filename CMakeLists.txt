@@ -1066,6 +1066,17 @@ add_test(NAME acceptance-hostbridge
 # error. A test with a generous timeout is a test that can waste an hour of your evening.
 set_tests_properties(acceptance-hostbridge PROPERTIES LABELS acceptance TIMEOUT 60)
 
+# W ON CP/M 3, WHERE OPEN HANDS A FILE'S R/O/SYS/ARCHIVE BITS BACK IN THE FCB. Runs the committed
+# W.COM on the banked SD Systems CP/M 3 master against a file with an attribute set, and checks
+# the host file is named plainly. ~4s.
+add_test(NAME acceptance-hostbridge-attrs
+         COMMAND ${CMAKE_COMMAND}
+                 -DSIM=$<TARGET_FILE:altairsim>
+                 -DSRC=${CMAKE_CURRENT_SOURCE_DIR}
+                 -DBIN=${CMAKE_CURRENT_BINARY_DIR}
+                 -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/acceptance/hostbridge-attrs.cmake)
+set_tests_properties(acceptance-hostbridge-attrs PROPERTIES LABELS acceptance TIMEOUT 120)
+
 # THE `build` MODE IS NOT REGISTERED, and that is deliberate (2026-07-19).
 #
 # It needs the 8 MB image, which is an 8.6 MB download and is not in git -- so as a test it
