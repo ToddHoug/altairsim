@@ -257,12 +257,13 @@ the `Reference` folder, boot the machine, and tell you where you left off. The n
 what makes a session resumable; without it the assistant reconstructs the state from scratch each
 time, and reconstructs it wrong.
 
-**Don't rename the project folder mid-project.** The assistant builds its memory of the project
-around that folder's name and path. A rename breaks that link.
+**Don't rename the project folder mid-project.** Claude Code files its memory of the project under
+the folder's full path, outside the folder itself, so after a rename the folder looks like a new
+project to it. The registration from the section above ties to that same path by default, too:
+`claude mcp list` in the renamed folder no longer shows `altairsim`, and the assistant can't reach
+the machine until you run `claude mcp add` again. `--scope project` avoids this, since then the
+registration lives in a `.mcp.json` that travels with the folder.
 
-Recovery is possible, but it costs time. You must remember the folder's old name. Tell the
-assistant the old name and the new name, then ask it to rebuild its memory from that information.
-Ask it directly what it cannot recover — some information will not come back, even after you push
-for more.
-
-Settle on the folder's name before you start the project, not after.
+If it happens anyway, register the server again, tell the assistant the old and new folder names,
+and have it start from the note in the folder — the one "Make starting and stopping a ritual,"
+above, tells you to keep.
