@@ -125,8 +125,10 @@ definitions it will not use.
 
 Fixes: the first byte to arrive on an idle 6850 line takes a character time to shift in, as the
 real chip does, instead of appearing instantly; the Host Bridge's `R.COM` upper-cases the CP/M
-name it creates, so the file it writes is the one CP/M can open; and a board that outlives its
-clock is no longer left holding a dead pointer.
+name it creates, so the file it writes is the one CP/M can open; a board that outlives its
+clock is no longer left holding a dead pointer; and under `--mcp`, a machine file's `#>` notes
+go to stderr instead of landing on stdout ahead of the first MCP reply, where a strict client
+could not parse them.
 
 ### The Altair 680b moves to its own simulator
 
