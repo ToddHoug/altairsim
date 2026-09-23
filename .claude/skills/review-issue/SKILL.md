@@ -198,6 +198,7 @@ gh issue comment <N> --body-file <file>
 - **Then what happens next**, if anything.
 - Thank them for the report in one line, no more.
 - Plain words. No hedging, no lecture, no tallies of what they got wrong.
+- Written to the `simplified-english` light rules.
 - Signed `--AltairSim Claude`.
 - **Do not close the issue.**
 

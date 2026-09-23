@@ -123,7 +123,7 @@ gh pr review <N> --comment --body-file <file>
 
 Name each problem with `file:line`, what is wrong, and what is wanted, so it can be fixed
 without a round trip. Thank them for the work in one line, no more. Never quote the
-maintainer. Sign it `--AltairSim Claude`.
+maintainer. Sign it `--AltairSim Claude`. Write it to the `simplified-english` light rules.
 
 Then report to the maintainer and stop. When the contributor pushes again, start over at
 step 1.
