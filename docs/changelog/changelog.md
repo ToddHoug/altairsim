@@ -16,6 +16,25 @@ and it can interrupt once a second with an `RST` of your choosing. Four ports fr
 must be a multiple of 4, and the clock chip is the OKI MSM5832 the System Support 1 already
 carried.
 
+### Recipes: build a machine yourself, one typed line at a time
+
+A new kind of document ships in the package: **`recipes/`**, a folder of short walkthroughs, each
+its own PDF. Every one walks the same road — start with an empty chassis (`altairsim -n`), fit the
+boards by hand, watch the machine answer each line, save what you built with `CONFIG SAVE`, quit,
+and load it back into a fresh chassis. One builds a CP/M Altair, one builds a Cromemco Dazzler
+machine with a Z80 in it, and one starts from a machine that already works and changes it.
+
+Getting from an empty backplane to a machine file you can load back used to be documented in two
+halves, in two chapters, and neither half was a walkthrough. The machine chapter of the manual now
+carries that whole arc in one place as well.
+
+### Color graphics in the package
+
+The **Dazzler example ships**, which it never did before: `examples/dazzler/` boots Li-Chen Wang's
+Kaleidoscope on a Cromemco Dazzler, so a package holder gets the S-100's first color graphics card
+by unzipping the archive instead of cloning the repository. Its machine now runs a `z80` board at
+4 MHz, the speed a Cromemco Z-1 ran.
+
 ### Name a machine at the prompt
 
 `SET MACHINE name=<name>` renames the machine you are running, so a machine built at the prompt

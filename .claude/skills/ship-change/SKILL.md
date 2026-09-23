@@ -11,6 +11,14 @@ ask.
 
 ## 1. Commit — after the maintainer approves the review
 
+**Before you stage: does this change what a package holder gets?** If the diff touches
+`docs/manual/`, `docs/recipes/`, `docs/monitor/`, `docs/debugger/`, `examples/` or
+`docs/package.map`, then `docs/changelog/changelog.md` `## Unreleased` must already say what
+someone can do now that they could not do in the last release. **A new document in the archive
+and an example that now ships both count** — "it is only documentation" is how this gets missed,
+and it has been. CI refuses the PR otherwise (the `Changelog entry` job); the way past it is a
+real entry, or a `no changelog` label when a human decides one is not wanted.
+
 - Stage exactly the files that were reviewed, by name. Never `git add -A` or `git add .`.
 - The message follows the repo's style: `type(scope): summary`, then a body that says why.
 - **No `Co-Authored-By`, no AI attribution, no quote of the maintainer.**
