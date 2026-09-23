@@ -22,6 +22,10 @@ real entry, or a `no changelog` label when a human decides one is not wanted.
 - Stage exactly the files that were reviewed, by name. Never `git add -A` or `git add .`.
 - The message follows the repo's style: `type(scope): summary`, then a body that says why.
 - **No `Co-Authored-By`, no AI attribution, no quote of the maintainer.**
+- **An issue it fixes: check who opened it first** (`gh issue view <N> --json author`).
+  Opened by `deltecent` → `Fixes #N`, and the merge closes it. Opened by anyone else →
+  `Refs #N`: `Fixes`, `Closes` and `Resolves` all close the issue on merge, and it is not ours
+  to close.
 - If more changes are wanted, go back to `work-task` step 3. Every new change is reviewed
   before it is committed.
 
@@ -37,8 +41,9 @@ git push -u origin <branch>
 gh pr create --base master --title "<type(scope): summary>" --body-file <file>
 ```
 
-The body gives a summary, the verification done (pass lines), and `Fixes #N` or `Refs #N`
-for each related issue. No attribution. Any comment you post on it ends with
+The body gives a summary, the verification done (pass lines), and for each related issue
+`Fixes #N` if `deltecent` opened it or `Refs #N` if anyone else did — the same check as the
+commit message. No attribution. Any comment you post on it ends with
 `--AltairSim Claude`.
 
 ## 4. Poll CI every 20 seconds
@@ -69,7 +74,9 @@ tested by hand, a window check a person has not done.
 ## 6. After the merge
 
 - **Comment on each related issue:** `Fixed by #<PR> (merged <sha>)`, or what is still left,
-  signed `--AltairSim Claude`. **Never close an issue** — the person who opened it does.
+  signed `--AltairSim Claude` — on every related issue, whether or not the merge closed it.
+  **Never close someone else's issue** — the person who opened it does. Only a `deltecent`
+  issue closes, and only through `Fixes #N`.
 - Sync: `git switch master && git pull --ff-only`.
 - If `TODO.md` tracks the item, update it. It is untracked, so it needs no branch or PR.
 

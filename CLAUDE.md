@@ -19,7 +19,9 @@ whether or not a skill is loaded:
 5. **No commit until the maintainer has reviewed and approved it.** Stop and report the diff.
 6. **No PR until the maintainer approves opening one.** More commits may come first.
 7. **No merge until CI is green** on all three platforms. Then merge without asking again.
-8. **After the merge, comment on the related issues.** Never close them.
+8. **After the merge, comment on the related issues.** Who closes one depends on who opened
+   it: an issue opened by `deltecent` is closed by `Fixes #N` in the PR. Anyone else's is never
+   closed by us — `Refs #N`, no closing keyword — and the person who opened it closes it.
 
 The three gates are **plan approved**, **commit approved** and **PR approved**. Each
 approval covers that one step only; it never carries over to the next. **A PR from anyone but
