@@ -1,6 +1,6 @@
 ---
 name: review-issue
-description: How an incoming issue is reviewed — check it belongs on this tracker, read it with its comments, find the need behind the solution it proposes (and ask when that is unclear), check whether altairsim already serves it, reproduce a bug over --mcp, then post a verdict comment and a label. Use when asked to review, triage, look at or answer issue #N, or to go through the open issues. Ends at the comment; it never builds anything.
+description: How an incoming issue is reviewed — check it belongs on this tracker, read it with its comments, find the need behind the solution it proposes (and ask when that is unclear), check whether altairsim already serves it, reproduce a bug over --mcp, then post a verdict comment and a label — or, when the whole issue is only a question, have the maintainer convert it to a Discussion and post the answer there. Use when asked to review, triage, look at or answer issue #N, or to go through the open issues. Ends at the comment; it never builds anything.
 ---
 
 # Review an incoming issue
@@ -8,7 +8,8 @@ description: How an incoming issue is reviewed — check it belongs on this trac
 `review-pr` reviews a contributor's pull request. **This skill reviews an issue** — a bug
 report or a feature request, usually from someone who is not the maintainer.
 
-It ends at **a comment, a label and a report.** It never branches, never edits the tree,
+It ends at **a comment, a label and a report** — or, for a question, at an answer in
+Discussions (§5a). It never branches, never edits the tree,
 never plans the change. If a verdict says something should be built, that is a fresh
 `work-task`, started by the maintainer.
 
@@ -18,6 +19,8 @@ The rules, set by the maintainer:
 - **I never close the issue.** The person who opened it does. No `Closes #N`.
 - **I never quote the maintainer.**
 - **An unclear need is a question, not a verdict.** I ask; I do not decide for them.
+- **A question is answered in Discussions, not on the issue.** The maintainer converts the
+  issue; then I post the answer on the discussion (§5a).
 
 ## 0. Does it belong on this tracker?
 
@@ -26,9 +29,9 @@ package**. Common misfilings:
 
 | It is really about | Where it belongs |
 |---|---|
-| altairsim.com, the downloads page, the website | **Discussions** (they are enabled) |
+| altairsim.com, the downloads page, the website | **Discussions** — converted, §5a |
 | CP/M, MBASIC, DDT, M80 — software running *inside* the guest | upstream; not ours |
-| "how do I…", with no defect and no request | Discussions, or answer it and label `question` |
+| "how do I…", with no defect and no request | **Discussions** — converted, §5a |
 
 **Say so kindly and once.** A misfiled issue is still someone taking the trouble to write;
 the comment points at the better place, it does not scold.
@@ -117,18 +120,23 @@ Drive the guest with `altairsim <machine> --mcp`. **Never hand-roll an expect sc
 
 **One verdict, and it opens the comment.** From this set only:
 
-| Verdict | Label |
-|---|---|
-| already works, and it is documented | `question` |
-| already served in another form | `question` |
-| documentation gap | `documentation` |
-| confirmed bug | `bug` |
-| needed, not yet built | `enhancement` |
-| declined before — with the issue or `DESIGN.md` section | `wontfix` |
-| not this tracker | `invalid` |
-| cannot reproduce | `question` |
-| duplicate of #N | `duplicate` |
-| need unclear — asked | `question` |
+| Verdict | Label | Answered |
+|---|---|---|
+| already works, and it is documented | — | **Discussions**, §5a |
+| already served in another form | `question` | on the issue |
+| documentation gap | `documentation` | on the issue |
+| confirmed bug | `bug` | on the issue |
+| needed, not yet built | `enhancement` | on the issue |
+| declined before — with the issue or `DESIGN.md` section | `wontfix` | on the issue |
+| not this tracker — a how-do-I, or the website | — | **Discussions**, §5a |
+| not this tracker — upstream software | `invalid` | on the issue |
+| cannot reproduce | `question` | on the issue |
+| duplicate of #N | `duplicate` | on the issue |
+| need unclear — asked | `question` | on the issue |
+
+*Already served in another form* stays on the issue because the reporter may still argue for
+the new form; *cannot reproduce* may still be a bug; *need unclear* may still become a
+request. Each of those can turn into work, and work is tracked in issues.
 
 Use the labels that exist; never invent one. Apply it with:
 
@@ -140,6 +148,43 @@ gh issue edit <N> --add-label <label>
 half belongs elsewhere, and — when the two are genuinely separate pieces of work — file the
 in-scope half as its own issue, as in `work-task` §3, and link it. Never let an out-of-scope
 half swallow a real request.
+
+## 5a. A question moves to Discussions
+
+When the **whole** issue is a question — a Discussions row above — it is answered in
+Discussions, where the next person with the same question will find it. A mixed issue stays
+an issue; the mixed-issue rule above holds.
+
+**Only the maintainer can move it.** GitHub has no API to convert an issue to a discussion;
+it is the **Convert to discussion** button on the issue page. That button keeps the reporter
+as the author, carries every comment across, and closes the issue with a pointer — so it is
+not us closing their issue.
+
+1. Steps 0–4 as usual. Then **no label and no comment on the issue.** Write the answer, in
+   §6 form, into the report instead.
+2. **Report and stop.** The last line: *"#N is a question — please Convert to discussion
+   (category Q&A); I'll post the answer there."*
+3. When the maintainer says it is converted, find it. **The discussion gets a new number**
+   (#562 became discussion #564), so look for the issue's title among the newest:
+
+   ```sh
+   gh api graphql -f query='{repository(owner:"deltecent",name:"altairsim"){
+     discussions(first:10,orderBy:{field:CREATED_AT,direction:DESC}){nodes{id number url title}}}}'
+   ```
+
+4. Post the answer, signed `--AltairSim Claude`:
+
+   ```sh
+   gh api graphql -f query='mutation($id:ID!,$body:String!){
+     addDiscussionComment(input:{discussionId:$id,body:$body}){comment{url}}}' \
+     -f id=<discussion id> -F body=@<file>
+   ```
+
+   If the answer was already posted on the issue before it was converted, it came across
+   with the other comments — do not post it twice.
+
+5. **Do not mark it as the answer.** The person who asked does that, just as they close
+   their own issue.
 
 ## 6. Comment
 
@@ -158,7 +203,8 @@ gh issue comment <N> --body-file <file>
 
 ## 7. Report and stop
 
-To the maintainer: the issue, the verdict, the label applied, the comment posted, and — for a
+To the maintainer: the issue, the verdict, the label applied, the comment posted (for a
+question moved to Discussions, the discussion comment's URL), and — for a
 "needed" or a "documentation gap" — one line on the shape of the work, so they can decide
 whether to start a `work-task`. **Do not start it.**
 
@@ -166,7 +212,9 @@ whether to start a `work-task`. **Do not start it.**
 
 Reviewing several at once: **oldest first**, one comment and one label per issue, each
 through steps 0–6 on its own. No batching of comments, no summary comment on a single issue
-standing in for the rest. The report at the end is one table: issue, verdict, label.
+standing in for the rest. The report at the end is one table: issue, verdict, label. A
+question goes in it as *convert → Discussions*, with its drafted answer below the table, so
+the maintainer can convert them all in one sitting and then say so.
 
 Stop and ask the maintainer if the same verdict is coming up over and over — that usually
 means the docs have a hole, not that a dozen people are wrong.
