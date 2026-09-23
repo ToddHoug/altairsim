@@ -8,6 +8,13 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+### SHOW BOARDS fits on a screen
+
+`SHOW BOARDS` now lists each board type on one line, with a short summary. The full description,
+which used to wrap under every board and run the list to several screens, is now shown only by
+`SHOW BOARD <type>`, above that board's settings. The MCP `board_types` tool reports the short
+summary too, beside the full description.
+
 ### The Generic SIO's Rev 0 profile is really Rev 0 now
 
 The `gsio` and `propio` profile called `sior0` was wired the way a **Rev 1** MITS 88-SIO is —
