@@ -76,7 +76,7 @@ tested by hand, a window check a person has not done.
 - **Comment on each related issue:** `Fixed by #<PR> (merged <sha>)`, or what is still left,
   signed `--AltairSim Claude` — on every related issue, whether or not the merge closed it.
   **Never close someone else's issue** — the person who opened it does. Only a `deltecent`
-  issue closes, and only through `Fixes #N`.
+  issue closes, and only through `Fixes #N`. Write it to the `simplified-english` light rules.
 - Sync: `git switch master && git pull --ff-only`.
 - If `TODO.md` tracks the item, update it. It is untracked, so it needs no branch or PR.
 
