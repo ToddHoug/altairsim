@@ -41,38 +41,47 @@ int CadzillaBoard::modeCount() { return (int)(sizeof kModes / sizeof kModes[0]);
 
 void CadzillaBoard::setDisplay(Display* d) { g_display = d; }
 
-// 2048 KB -- 1 M words, the whole ACRTC address space -- is the default `vram` strap; the
-// member initializer below must agree with it (a member is not yet constructed when the
-// base-initializer list runs).
-CadzillaBoard::CadzillaBoard() : acrtc_((size_t)2048 * 512) {}
+// 2 MB (1 M sixteen-bit words) fixed -- the reference design's SRAM fit, not a strap.
+CadzillaBoard::CadzillaBoard() : acrtc_(kVramWords) {}
 
 // ---------------------------------------------------------------------------
-// Bus: one 8-port block from BASE, no memory. BASE+2 is not decoded; BASE+3 (MODE) is
-// write-only -- both exactly like the Dazzler's format port floats on a read.
+// Bus: one 8-port block from BASE, no memory. BASE+3 is not decoded; BASE+1 (MODE) is
+// write-only -- both exactly like the Dazzler's format port floats on a read. The ACRTC's
+// own RS=0/RS=1 are NOT adjacent: RS=0 is BASE+0, RS=1 is BASE+2, with MODE between them
+// (see the header comment for the decode this reflects). Every ACRTC access ends by
+// calling intChanged(), since acrtc_.irq() -- SR against CCR's enables -- can move on any
+// register write, any FIFO push, or any FIFO pop.
 // ---------------------------------------------------------------------------
 bool CadzillaBoard::decodes(const BusCycle& c) const {
     if (!enabled_) return false;
     if (c.type != Cycle::IoRead && c.type != Cycle::IoWrite) return false;
     uint8_t off = (uint8_t)(c.port() - port_);
     if (off > 7) return false;
-    if (off == 2) return false;                                // undecoded gap
-    if (off == 3) return c.type == Cycle::IoWrite;              // MODE: write-only
-    return true;                                                // 0,1: ACRTC; 4-7: Bt453
+    if (off == 3) return false;                                 // undecoded gap
+    if (off == 1) return c.type == Cycle::IoWrite;               // MODE: write-only
+    return true;                                                 // 0,2: ACRTC; 4-7: Bt453
 }
 
 uint8_t CadzillaBoard::read(const BusCycle& c) {
     uint8_t off = (uint8_t)(c.port() - port_);
-    if (off <= 1) return acrtc_.read(off & 1);      // RS = A0
-    return dac_.read(off & 3);                      // C1C0 = A1A0 (off is 4..7 here)
+    uint8_t v;
+    if (off == 0 || off == 2) {
+        v = acrtc_.read(off == 2);      // RS: BASE+0 = 0 (status), BASE+2 = 1 (data/FIFO)
+        intChanged();
+    } else {
+        v = dac_.read(off & 3);         // C1C0 = A1A0 (off is 4..7 here)
+    }
+    return v;
 }
 
 void CadzillaBoard::write(const BusCycle& c) {
     uint8_t off = (uint8_t)(c.port() - port_);
-    if (off <= 1) {
-        acrtc_.write(off & 1, c.data);
+    if (off == 0 || off == 2) {
+        acrtc_.write(off == 2, c.data);
+        intChanged();
         return;
     }
-    if (off == 3) {
+    if (off == 1) {
         if (c.data != modeReg_) dirty_ = true;      // AMODE moves the picture; the rest is status
         modeReg_ = c.data;
         return;
@@ -95,6 +104,7 @@ void CadzillaBoard::reset(Reset r) {
         if (modeReg_ != 0) dirty_ = true;
         modeReg_ = 0;
         dirty_   = true;
+        intChanged();   // RESET* clears CCR's enables (acrtc_.reset()) -- IRQ* stands down
     }
 }
 
@@ -103,6 +113,7 @@ void CadzillaBoard::power() {
     dac_.reset();
     modeReg_ = 0;
     dirty_   = true;   // the monitor shows its (black) frame from power-on, signal or not
+    intChanged();       // a fresh chip asserts nothing
 }
 
 // ---------------------------------------------------------------------------
@@ -121,6 +132,7 @@ void CadzillaBoard::deserialize(StateReader& r) {
     dac_.deserialize(r);
     modeReg_ = r.u8();
     dirty_   = true;  // the restored picture owes the host a full redraw
+    intChanged();      // the restored SR/CCR may be mid-interrupt
 }
 
 // ---------------------------------------------------------------------------
@@ -251,8 +263,9 @@ std::vector<Property> CadzillaBoard::properties() {
     {
         Property x;
         x.name  = "port";
-        x.help  = "I/O base -- one 8-port block: BASE/BASE+1 the ACRTC (address/status, data), "
-                  "BASE+3 the MODE register, BASE+4..+7 the Bt453. A multiple of 8; default 70";
+        x.help  = "I/O base -- one 8-port block: BASE the ACRTC address/status, BASE+1 the "
+                  "MODE register, BASE+2 the ACRTC data/FIFO port, BASE+4..+7 the Bt453. A "
+                  "multiple of 8; default 70";
         x.kind  = Kind::Int;
         x.radix = 16;
         x.min   = 0;
@@ -289,32 +302,15 @@ std::vector<Property> CadzillaBoard::properties() {
         };
         p.push_back(std::move(x));
     }
-    {
-        Property x;
-        x.name  = "vram";
-        x.help  = "Frame memory fitted, in kilobytes: a power of two from 8 to 2048 (the ACRTC "
-                  "addresses 1 M words = 2 MB; 1024x768 at 8 bpp needs 768). Changing it clears "
-                  "the picture. Default 2048";
-        x.kind  = Kind::Int;
-        x.min   = 8;
-        x.max   = 2048;
-        x.get   = [this] { return Value::ofInt(vramKB_); };
-        x.set   = [this](const Value& v, std::string& err) {
-            long long k = v.i();
-            if (k < 8 || k > 2048 || (k & (k - 1)) != 0) {
-                err = "vram must be a power of two from 8 to 2048 kilobytes";
-                return false;
-            }
-            if ((int)k != vramKB_) {
-                vramKB_ = (int)k;
-                acrtc_   = Hd63484((size_t)vramKB_ * 512);   // 512 sixteen-bit words per KB
-                dirty_   = true;
-            }
-            return true;
-        };
-        p.push_back(std::move(x));
-    }
     p.push_back(Display::widthProperty(videoWidth_));
+    // The interrupt strap (SW1-8: On connects IRQ* to the named line, Off -- the default,
+    // `none` -- disconnects it). The same ten-choice vocabulary every interrupting board
+    // uses; docs/devguide/adding-a-board.md.
+    p.push_back(irqJumperProperty(
+        "interrupt",
+        "SW1-8: where the ACRTC's IRQ* lands -- none (default, disconnected) or the S-100 "
+        "line (int = pin 73, or vi0..vi7) to raise while an enabled status flag is pending",
+        irq_));
 
     // ---- LIVE STATUS (read-only: no setter, so SHOW says so and CONFIG SAVE skips it) ----
     {
@@ -351,7 +347,7 @@ std::vector<Property> CadzillaBoard::properties() {
         x.get  = [this] { return Value::ofStr(wiring()); };
         p.push_back(std::move(x));
     }
-    // ---- MODE register (BASE+3), write-only on the wire: these are the board's own shadow
+    // ---- MODE register (BASE+1), write-only on the wire: these are the board's own shadow
     // of what the guest last wrote there, reported the same way the Dazzler decodes its
     // write-only control/format bytes into readable status. ----
     {
@@ -400,17 +396,26 @@ std::vector<Property> CadzillaBoard::properties() {
         x.get   = [this] { return Value::ofInt(acrtc_.status()); };
         p.push_back(std::move(x));
     }
+    {
+        Property x;
+        x.name = "irq";
+        x.help = "LIVE: whether IRQ* is asserted right now -- an enabled status flag pending "
+                 "AND the interrupt strap not 'none'. Read-only";
+        x.kind = Kind::Bool;
+        x.get  = [this] { return Value::ofBool(irq_ != IrqJumper::None && acrtc_.irq()); };
+        p.push_back(std::move(x));
+    }
     return p;
 }
 
 std::vector<MapEntry> CadzillaBoard::ioMap() const {
     return {
         {(uint32_t)port_, (uint32_t)port_, "read/write",
-         "ACRTC -- status (CER ARD CED LPD RFF RFR WFR WFE) / address register"},
-        {(uint32_t)(port_ + 1), (uint32_t)(port_ + 1), "read/write",
-         "ACRTC -- the register the address names, or the command FIFOs at AR=0"},
-        {(uint32_t)(port_ + 3), (uint32_t)(port_ + 3), "write",
+         "ACRTC RS=0 -- status (CER ARD CED LPD RFF RFR WFR WFE) / address register"},
+        {(uint32_t)(port_ + 1), (uint32_t)(port_ + 1), "write",
          "MODE -- board glue: HSPOL(0) VSPOL(1) AMODE(2) OLEN(3)"},
+        {(uint32_t)(port_ + 2), (uint32_t)(port_ + 2), "read/write",
+         "ACRTC RS=1 -- the register the address names, or the command FIFOs at AR=0"},
         {(uint32_t)(port_ + 4), (uint32_t)(port_ + 7), "read/write",
          "Bt453 RAMDAC -- address, palette RAM (R,G,B), address, overlay"},
     };

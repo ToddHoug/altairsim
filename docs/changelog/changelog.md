@@ -16,16 +16,19 @@ I/O ports and no memory. The CPU draws by command through the ACRTC's FIFO (line
 polylines, filled rectangles, dots, block clears and word transfers, in every operation, color and
 area mode), the picture scans out at 8 bits per pixel through the Bt453's table onto a **fixed VESA
 monitor** the board carries (`mode`: 640x400, 640x480, 800x600 or 1024x768), in single or
-interleaved access, out of 2 MB of its own frame memory, and the window is the same host display the Dazzler and VDM-1 draw into. Both chips are models in their own right
+interleaved access, out of a fixed 2 MB of its own frame memory, and the window is the same host display the Dazzler and VDM-1 draw into. Both chips are models in their own right
 (`src/chips/`), built from the Hitachi and Brooktree data sheets, so the next board that carries one
 gets it for free. Circles, arcs, paint, patterns and copies are recognized but not drawn yet.
 
-The board is one 8-port I/O block: the ACRTC at `port`/`port+1`, a write-only **MODE register**
-at `port+3` (the board's own glue, not a chip register -- `HSPOL`/`VSPOL` sync polarity, `AMODE`
-the access mode the board's *own* fetch logic runs, `OLEN` reserved), and the Bt453 fixed at
-`port+4`..`port+7` -- there is no separate `dac` strap any more, the RAMDAC moves with the
-ACRTC. `SHOW <id>` decodes MODE into read-only `hspol`/`vspol`/`amode`/`olen`, and `wiring` now
-also flags a driver that programmed OMR ACM and MODE AMODE in disagreement.
+The board is one 8-port I/O block: the ACRTC at `port`/`port+2`, a write-only **MODE register**
+at `port+1` between the ACRTC's own two ports (the board's own glue, not a chip register --
+`HSPOL`/`VSPOL` sync polarity, `AMODE` the access mode the board's *own* fetch logic runs, `OLEN`
+reserved), and the Bt453 fixed at `port+4`..`port+7` -- there is no separate `dac` strap any
+more, the RAMDAC moves with the ACRTC. `SHOW <id>` decodes MODE into read-only
+`hspol`/`vspol`/`amode`/`olen`, and `wiring` now also flags a driver that programmed OMR ACM and
+MODE AMODE in disagreement. Interrupts are wired: `interrupt` (`none` by default, or
+`int`/`vi0`..`vi7`) matches the real card's SW1-8, and `SHOW <id>` reports whether IRQ\* is
+asserted right now as `irq`.
 
 Alongside it, a video board's frame can now leave the simulator: a test asserts on the **whole
 picture** as a text grid and, when it disagrees, writes what the board actually drew as a `.ppm`
