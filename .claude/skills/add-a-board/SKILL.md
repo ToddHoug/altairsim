@@ -50,7 +50,8 @@ reads to decide a `HLT` has finished, so an idle card must let the machine stand
 ## The wiring — every one of these, or it does not ship
 
 1. **`CMakeLists.txt`** — the `.cpp` into `altair_core`, and the test `.cpp` into `altair_tests`.
-2. **`src/boards/registry.cpp`** — the include, the `{"type", "one-paragraph description"}` row,
+2. **`src/boards/registry.cpp`** — the include, the `{"type", "one-line summary", "one-paragraph description"}` row
+   (the summary must fit the `SHOW BOARDS` column — `test_cli` checks 78 columns),
    and the factory line.
 3. **`tools/gen-reference.cpp` → `boardCategory()`** — **an uncategorized board is a hard error**
    that reds all three CI legs, and the failure names a doc target, not your board.
