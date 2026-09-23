@@ -1804,8 +1804,8 @@ void test_cli() {
 
         // The refusals, each on its own monitor because failed() is sticky.
         auto refused = [](const char* cmdline, const char* expect) {
-            Machine            rm;
-            Monitor            rmon(rm);
+            Machine            fresh;
+            Monitor            rmon(fresh);
             std::ostringstream o;
             rmon.exec(cmdline, o);
             return rmon.failed() && o.str().find(expect) != std::string::npos;
