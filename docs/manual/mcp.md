@@ -268,3 +268,14 @@ learned, and save where you are in a note in the folder. At the start, have it r
 the `Reference` folder, boot the machine, and tell you where you left off. The note in the folder is
 what makes a session resumable; without it the assistant reconstructs the state from scratch each
 time, and reconstructs it wrong.
+
+**Don't rename the project folder mid-project.** Claude Code files its memory of the project under
+the folder's full path, outside the folder itself, so after a rename the folder looks like a new
+project to it. The registration from the section above ties to that same path by default, too:
+`claude mcp list` in the renamed folder no longer shows `altairsim`, and the assistant can't reach
+the machine until you run `claude mcp add` again. `--scope project` avoids this, since then the
+registration lives in a `.mcp.json` that travels with the folder.
+
+If it happens anyway, register the server again, tell the assistant the old and new folder names,
+and have it start from the note in the folder — the one "Make starting and stopping a ritual,"
+above, tells you to keep.
