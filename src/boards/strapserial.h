@@ -19,7 +19,7 @@
 // The strapped shape -- "read a status bit, then read/write a data byte" -- is nearly
 // every polled UART ever put on the S-100 bus, so the built-in PROFILES are named
 // bundles of those straps that make a channel come up as a specific card. Adding one is
-// one struct in serialBuiltins(). The default profile is `sior0`, the MITS SIO Rev 0 that
+// one struct in serialBuiltins(). The default profile is `sior1`, the MITS SIO Rev 1 that
 // the SSM 8080 System Monitor expects on its console.
 //
 // ---------------------------------------------------------------------------
@@ -82,7 +82,7 @@ const std::vector<SerialBuiltin>& serialBuiltins();
 // counter. The engine holds a vector of these -- one for propio, two for gsio.
 struct StrapSerialChannel {
     std::string                 name;              // "serial" | "a" | "b"
-    std::string                 profile = "sior0"; // the selected built-in, or "custom"
+    std::string                 profile = "sior1"; // the selected built-in, or "custom"
     SerialStraps                straps;            // the live status/data/bit/polarity straps
     long long                   baud    = 9600;    // programmed onto a real serial port only
     std::unique_ptr<ByteStream> stream;            // never null -- a NullStream when unplugged

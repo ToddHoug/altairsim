@@ -8,6 +8,16 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+### The Generic SIO's Rev 0 profile is really Rev 0 now
+
+The `gsio` and `propio` profile called `sior0` was wired the way a **Rev 1** MITS 88-SIO is —
+"byte waiting" on bit 0 and "ready to send" on bit 7, both inverted. It is now named **`sior1`**,
+and it is still the default, so a machine that never named a profile behaves exactly as before. The
+name **`sior0`** now means a real Rev 0 board: "byte waiting" on bit 5 and "ready to send" on bit
+1, not inverted. A machine file that says `profile = "sior0"` by hand and wants the old wiring
+should say `sior1`. A file written by `CONFIG SAVE` is not affected: it records every strap as well
+as the profile.
+
 ### The SciTronics RTC-100 clock board
 
 A new board, `rtc100`: the SciTronics RTC-100, an S-100 battery-backed calendar clock from

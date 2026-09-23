@@ -503,7 +503,7 @@ void test_io4() {
 
     SECTION("IO-4 -- boots the SSM 8080 System Monitor on channel A");
     {
-        // THE ACCEPTANCE. The SSM 8080 monitor's console is a MITS-SIO-Rev-0 port at 0/1 --
+        // THE ACCEPTANCE. The SSM 8080 monitor's console is a MITS-SIO-Rev-1 port at 0/1 --
         // exactly the IO-4's default channel A -- so a real 8080 machine with this card boots
         // to the "MONITOR V1.0" banner. The memory map mirrors the real one: 60K of RAM and
         // the monitor as a ROM at F000 (a built-in, docs/roms.md). That the top of RAM is EFFF

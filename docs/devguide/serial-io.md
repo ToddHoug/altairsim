@@ -296,9 +296,9 @@ status bit is `dav` (data available) and which is `tbmt` (transmit buffer empty)
 **inverter gate** is engaged — one knob, because both status bits pass through the same inverting
 buffer and so always share a polarity. Control-port writes are accepted and ignored — there is no
 chip to program. To make common cards turnkey it ships **built-in profiles** in one table
-(`serialBuiltins()` — `sior0`, `tuart`, `imsai-sio2`, `compupro-if2`, `compupro-ss1`), each just a
+(`serialBuiltins()` — `sior1`, `sior0`, `tuart`, `imsai-sio2`, `compupro-if2`, `compupro-ss1`), each just a
 bundle of those straps and trivial to extend: add one struct and its name becomes a `profile`
-choice and appears in the generated docs. The default profile is **`sior0`** (MITS SIO Rev 0), what
+choice and appears in the generated docs. The default profile is **`sior1`** (MITS SIO Rev 1), what
 the SSM 8080 monitor expects on its console. These cards are **polled, with no interrupts** — a
 deliberate first phase, because without a working control/interrupt-enable register a strapped
 TX-empty interrupt would storm (TBMT is asserted at idle). This is the right shape when the goal is
