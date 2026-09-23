@@ -988,7 +988,7 @@ void test_cli() {
         // The enum's choices, including every built-in profile name.
         // The enum header plus each built-in name -- the list can word-wrap across lines,
         // so assert the members individually rather than one contiguous string.
-        CHECK(s.find("values: custom | sior0 | tuart | imsai-sio2") != std::string::npos,
+        CHECK(s.find("values: custom | sior1 | sior0 | tuart") != std::string::npos,
               "the profile enum lists custom plus each built-in as its legal values");
         CHECK(s.find("compupro-if2") != std::string::npos, "compupro-if2 is a listed profile");
         CHECK(s.find("compupro-ss1") != std::string::npos, "compupro-ss1 is a listed profile");

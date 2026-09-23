@@ -395,9 +395,10 @@ It carries **two independent serial channels**, units **`a`** and **`b`**, each 
 `baud` and `connect` endpoint, configured under its own `[board.unit.a]` / `[board.unit.b]` table in
 a machine file. By default `a` answers ports `0`/`1` and `b` answers `2`/`3`.
 
-You rarely set the straps by hand. A **profile** presets them to imitate a known card: **`sior0`**
-(MITS SIO Rev 0 — the default, what the SSM 8080 monitor expects), `tuart` (Cromemco TU-ART),
-`imsai-sio2`, `compupro-if2` (CompuPro Interfacer II), `compupro-ss1` (CompuPro System Support 1).
+You rarely set the straps by hand. A **profile** presets them to imitate a known card: **`sior1`**
+(MITS SIO Rev 1 — the default, what the SSM 8080 monitor expects), `sior0` (MITS SIO Rev 0),
+`tuart` (Cromemco TU-ART), `imsai-sio2`, `compupro-if2` (CompuPro Interfacer II), `compupro-ss1`
+(CompuPro System Support 1).
 Pick a profile per channel, then override any individual strap afterward — a jumpered board, and so
 is this one. The board is polled, with no interrupts, and does **basic transmit and receive only**:
 it does not emulate programmable word length, parity or stop bits. A specific card that needs those
@@ -425,7 +426,7 @@ The IO-4 was a heavily jumpered card, and every jumper is a property here. Which
 more status signals (`stat_teoc`, `stat_ror`, `stat_rpe`, `stat_rfe`); whether the whole status byte
 is inverted (`invert_status`); and whether the status and data ports are swapped (`port_reversal`).
 You rarely set those one at a time. A **`profile`** presets them to imitate a known host:
-**`altair-rev1`** — the default, the MITS SIO Rev-0 console the SSM 8080 monitor expects — plus
+**`altair-rev1`** — the default, the MITS SIO Rev-1 console the SSM 8080 monitor expects — plus
 `altair-rev0`, `i8251`, `proctech`, `imsai`, and `custom` (every strap left free to roll your own).
 Pick a profile, then override any individual strap afterward, exactly as you would move a jumper.
 
