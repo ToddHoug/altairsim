@@ -120,13 +120,15 @@ the pass line** (`100% tests passed out of N`); never paraphrase it.
 
 Report, then wait:
 
-- the branch
 - `git status --short` and `git diff --stat`
 - what changed and why, file by file
 - the tests run, with their pass lines
 - the docs touched
 - the issues filed, by number
 - anything not verified, and why
+- **last**, one line saying what is ready and where: *"Ready for your review on branch
+  `<branch>`. Nothing is committed or pushed."* The maintainer reads to the bottom, so the
+  line that says the next move is theirs goes there, not above the detail.
 
 **Do not `git commit`. Do not push.** Changes the maintainer asks for go back to step 3, and
 come back here for review again.

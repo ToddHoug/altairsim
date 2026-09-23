@@ -27,6 +27,10 @@ approval covers that one step only; it never carries over to the next. **A PR fr
 maintainer's approval.** **An incoming issue goes through the `review-issue` skill**, which
 reaches a verdict and stops there — it never builds anything.
 
+**A report that hands the next move to the maintainer ends with it.** The summary comes first;
+the last line says what is ready and what it is waiting on (*"Ready for your review on branch
+`fix/x`. Nothing is committed or pushed."*). That holds at every gate, in every skill.
+
 ## If you are here to build or ship a release
 
 **Use the release skills; they are the procedure.** Each is written to be executed step by
