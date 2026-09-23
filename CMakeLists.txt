@@ -1762,6 +1762,9 @@ if(EXPECT_EXECUTABLE)
   set_tests_properties(acceptance-diskbasic PROPERTIES LABELS acceptance TIMEOUT 180)
 
 else()
-  message(STATUS "expect not found -- SKIPPING the interactive CLI test (acceptance-cli). "
-                 "The tty paths (prompt echo, ATTN, clock pacing) will not be covered.")
+  message(STATUS "expect not found -- SKIPPING every interactive (pty-driven) acceptance "
+                 "test, not just acceptance-cli: none of the tests that type at a guest are "
+                 "registered without expect (as on Windows). The tty and mid-run paths "
+                 "(prompt echo, ATTN, clock pacing, typed guest commands, interrupt-driven "
+                 "console input) go uncovered here.")
 endif()
