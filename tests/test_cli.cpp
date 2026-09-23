@@ -1827,9 +1827,9 @@ void test_cli() {
     SECTION("CONFIG SAVE -- a value with a '\"' in it saves and loads back (#538)");
     {
         auto roundTrips = [](const std::string& want) {
-            Machine m;
-            m.name           = want;
-            std::string text = saveTomlText(m);
+            Machine qm;
+            qm.name          = want;
+            std::string text = saveTomlText(qm);
             Machine     back;
             std::string err;
             return loadTomlText(text, "quote (saved)", back, err) && back.name == want;
