@@ -1,6 +1,6 @@
 // PropIo -- the S100Computers Console IO Board (src/boards/propio.h,
 // reference/Console IO Board.md). propio is a SUBTYPE of the strap-serial engine (tested in
-// test_io4.cpp); this suite does not re-test the engine mechanics -- it asserts the two
+// test_gsio.cpp); this suite does not re-test the engine mechanics -- it asserts the two
 // things that make propio propio: it IS a strap-serial channel underneath (the engine's data
 // path works through it) and it comes up preset to the Console IO Board's documented
 // convention (ports 00/01, RX-ready = status bit 1, TX-ready = status bit 2, both active
@@ -19,7 +19,7 @@ using namespace altair;
 
 namespace {
 
-// A propio on the bench with a scripted line, driven exactly as test_io4's Rig -- the same
+// A propio on the bench with a scripted line, driven exactly as test_gsio's Rig -- the same
 // real connect path (resolveEndpoint installed in tests/main.cpp).
 struct Rig {
     PropIoBoard     b;

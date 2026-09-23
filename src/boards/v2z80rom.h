@@ -1,7 +1,7 @@
 #pragma once
 //
 // S100Computers V2 Z80 CPU board -- ONLY its onboard paged monitor EEPROM
-// (reference/v2-z80-cpu-board.md).
+// (docs/boards/s100computers-v2z80rom.md, reference/v2-z80-cpu-board.md).
 //
 // The board id is `v2z80rom`, not `v2z80`, deliberately: this class is NOT a full V2 Z80 CPU
 // board, only the paged monitor-EEPROM feature of that card. The real card has no onboard RAM
