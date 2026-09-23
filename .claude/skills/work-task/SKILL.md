@@ -100,8 +100,12 @@ The docs are part of the change under review, not a follow-up. Update whichever 
 - the manual in `docs/manual/` — and `docs/manual/ORDER` for a new chapter
 - `docs/manual/ref/` is generated: edit the emitter and run
   `cmake --build build --target docs-reference`
-- `docs/changelog/changelog.md` `## Unreleased`, for a user-visible change only. A fix for a
-  bug nobody reported gets no entry.
+- `docs/changelog/changelog.md` `## Unreleased` — **whenever what a package holder gets
+  changes**. Not only code: a new document in the archive, an example that now ships, a chapter
+  that answers something it did not, all count. The trap is filing a change as "only
+  documentation" when the document IS the thing that shipped. A fix for a bug nobody reported
+  still gets no entry. CI enforces this (the `Changelog entry` job in `ci.yml`), so a missing
+  entry reds the PR rather than reaching a release unannounced.
 
 Never commit a locally built PDF; CI builds them.
 
