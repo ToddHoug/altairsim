@@ -86,7 +86,7 @@ mem0:1: rom  FF00-FFFF  builtin:dbl
 ```
 
 56K of RAM from `0000`, and the Altair disk boot loader in ROM at `FF00`. `builtin:dbl` is
-compiled into the program — there is no file to find.
+compiled into altairsim — there is no file to find.
 
 **Leave that second line out and the machine has nothing to boot from.** It is the most common
 way to end up with a machine that looks complete and does nothing.
@@ -111,8 +111,11 @@ CP/M's line editor wants BS. It is a property of your terminal, not of the machi
 beside the machine in this folder.
 
 `STARTUP ADD` records a command to run when this machine loads. There is no BOOT command in
-altairsim; on the real machine the operator raised RUN with `FF00` in the address switches, so
-that is what the machine file remembers.
+altairsim, because there was no BOOT switch on the Altair: to start the disk loader the operator
+set `FF00` in the address switches, pressed EXAMINE to load it into the program counter, and then
+RUN. **`RUN <addr>` is those last two in one** — it examines the address and starts the processor
+there. A bare `RUN` with no address does not touch the program counter; it starts the processor
+wherever it already is, which is how you resume after a STOP.
 
 `SET MACHINE name=` names the machine. A machine built from `-n` is called `none` until you say
 otherwise, and the name is what `SHOW MACHINE` prints, what `CONFIG SAVE` writes into the file,
@@ -209,3 +212,9 @@ in it leaves you exactly where you were rather than halfway between two machines
 the shipped one is a few lines long, because it says `base = "default"` and then writes down only
 what makes it different. That is the next thing to learn, and `recipes/from-a-builtin.pdf` is the
 walkthrough for it.
+
+**And look at what is already on the shelf before you build another one by hand.** `SHOW MACHINES`
+lists every machine built into altairsim, and `SHOW MACHINE <name>` opens one up without loading
+it. `SHOW MACHINE default` is the machine you just built, board for board, with one addition — the
+host bridge, which moves files between the guest and your own disk. Building it yourself was worth
+doing once; now you know what that one line is made of. The other recipe starts there.

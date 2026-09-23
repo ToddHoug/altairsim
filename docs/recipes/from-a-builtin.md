@@ -17,13 +17,38 @@ Work in a copy of `examples/cpm/`, which has the disk this recipe boots.
 $ cd examples/cpm
 ```
 
-## 1. Take a machine off the shelf
+## 1. See what is on the shelf
+
+Machines are built into altairsim. `SHOW MACHINES` lists them, each with a line saying what it
+is:
 
 ```
 $ altairsim -n
-altairsim> MACHINE default
-machine default: 6 board(s)
-altairsim> BOARDS
+altairsim> SHOW MACHINES
+  NAME             DESCRIPTION
+  ---------------  -----------------------------------------------------------
+  8085             A minimal 8085 machine: an `8085` CPU, 64K of RAM, and a
+                   2SIO console.
+  basic4k          The machine Altair 4K BASIC was sold to run on: an 88-SIO
+                   Teletype, a cassette in the ACR.
+  dazzler          A Cromemco Dazzler in an Altair -- the bench for the
+                   S-100's first color graphics card.
+  default          The machine you get when you name none: 56K, and the DBL
+                   boot PROM at FF00.
+```
+
+— and more; the list goes on past what is printed here.
+
+**`SHOW MACHINE <name>` opens one up without loading it**, so you can see exactly what is in a
+machine before you decide to take it:
+
+```
+altairsim> SHOW MACHINE default
+name      default
+          The machine you get when you name none: 56K, and the DBL boot PROM
+          at FF00.
+startup   (none)
+
   ID    TYPE        I/O       UNITS                                                               MEMORY
   ----  ----------  --------  ------------------------------------------------------------------  --------------------------------
   fp0   fp          FF        -                                                                   -
@@ -37,12 +62,24 @@ altairsim> BOARDS
   * holds the console
 ```
 
-One line, and there is the whole 56K CP/M Altair: front panel, 8080, serial board with your
-terminal on it, floppy controller with four empty drives, the host bridge, 56K of RAM and the
-boot loader in ROM at `FF00`. `SHOW MACHINES` lists the other built-ins, and `SHOW MACHINE
-<name>` shows what is in one before you take it.
+That is the whole 56K CP/M Altair: front panel, 8080, serial board with your terminal on it,
+floppy controller with four empty drives, the host bridge, 56K of RAM and the boot loader in ROM
+at `FF00`. A bare `SHOW MACHINE`, with no name, shows the machine you are running instead.
 
-## 2. Change it
+## 2. Take it
+
+```
+altairsim> MACHINE default
+machine default: 6 board(s)
+```
+
+One line, and every board you just looked at is in the backplane. `MACHINE <name>` replaces
+whatever was there, and it is the command form of a machine file's `base = "<name>"`.
+
+It gives you the **hardware** and not the boot: a built-in's own `startup` is not run, which is
+why the drives are empty above and why you do the `MOUNT` and the `RUN` yourself below.
+
+## 3. Change it
 
 Three edits: pull a board out, slow the processor down to the real thing, put a disk in.
 
@@ -87,7 +124,7 @@ not one.
 `default`, and this is no longer the default machine, so it gets a name of its own — the one
 `CONFIG SAVE` writes into the file.
 
-## 3. Save it, quit, load it back
+## 4. Save it, quit, load it back
 
 **`SHOW MACHINE` is what you are about to save** — the name, the startup list, and the backplane
 as it now stands:
@@ -135,7 +172,7 @@ Five boards, not six — the one you pulled stayed pulled. Ctrl-E gets you back 
 `altairsim>` prompt, and `$ altairsim altair2mhz.toml` does the same thing as the two lines
 above.
 
-## 4. The short way to write the same file
+## 5. The short way to write the same file
 
 `CONFIG SAVE` writes down the whole machine: every board, every setting, including everything
 you never touched. That is right for a file you want to keep working, and it is more than you
@@ -165,7 +202,7 @@ id = "dsk0"
   mount = "cpm22b23-56k.dsk"
 ```
 
-`base` is the same thing as the `MACHINE default` you typed in step 1, and the rest is your three
+`base` is the same thing as the `MACHINE default` you typed in step 2, and the rest is your three
 edits, one block each. That is the trade: a `base` file is short and says what you meant, a saved
 file is long and complete.
 
