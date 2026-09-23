@@ -26,7 +26,7 @@ method each, and the other two are the Limitations section.
 | 5 | **Geometry.** Native w×h — fixed, decoded from registers each frame, or **the monitor's**: a board with a real CRT controller can carry a fixed-frequency display and place the chip's picture in it. `PixelFormat::Indexed8` is the only format the seam has | the `mode` strap's VESA frame (640x480 by default); the ACRTC's picture placed by HDS/VDS against the mode's porches | `render()`, `acquire()` |
 | 6 | **Palette.** How many entries, from where. Dazzler: 16 from an RGBI nibble. VDM-1: 2. cadzilla: **256, and they are a chip** | `Bt453::palette()` | `setPalette()` |
 | 7 | **Observable timing.** A status bit a guest can *time* (vblank, scan parity) comes off `clock_->now()` — never a poll counter. An oscillator the guest cannot observe (a cursor blink) comes off `Display::hostSeconds()` | none yet — see Limitations | `statusByte()` |
-| 8 | **Straps vs live status.** A strap has a setter and round-trips through `CONFIG SAVE`; live status has **no setter**, and that absence is the whole signal. A register that is write-only *on the wire* (a chip's format byte, or a board's own glue register) is still reflected as read-only live status — the board keeps the shadow the wire cannot give back. Every video board pushes `Display::widthProperty(videoWidth_)` | `port`, `mode`, `vram`, `width`; live `video`, `picture`, `wiring`, `hspol`/`vspol`/`amode`/`olen`, `status` | `properties()` |
+| 8 | **Straps vs live status.** A strap has a setter and round-trips through `CONFIG SAVE`; live status has **no setter**, and that absence is the whole signal. A register that is write-only *on the wire* (a chip's format byte, or a board's own glue register) is still reflected as read-only live status — the board keeps the shadow the wire cannot give back. A fixed hardware fact with no jumper on the real card (cadzilla's 2 MB of SRAM) is neither a strap nor live status — it is a constant. Every video board pushes `Display::widthProperty(videoWidth_)` | `port`, `mode`, `width`, `interrupt`; live `video`, `picture`, `wiring`, `hspol`/`vspol`/`amode`/`olen`, `status`, `irq` | `properties()` |
 | 9 | **Snapshot.** Runtime state only — never a strap, never the `Display*`. If no memory board holds your pixels, **they travel with you** | both chips, frame memory as a `blob` | `serialize()` |
 
 Two things that are *not* the board's business, and each is the classic mistake: a **keyboard**
@@ -42,9 +42,9 @@ Bt453's C1C0 — and the board decodes an address onto them:
 
 ```cpp
 uint8_t CadzillaBoard::read(const BusCycle& c) {
-    uint8_t p = c.port();
-    if (p == port_ || p == (uint8_t)(port_ | 1)) return acrtc_.read(p & 1);   // RS = A0
-    return dac_.read(p & 3);                                                 // C1C0 = A1A0
+    uint8_t off = (uint8_t)(c.port() - port_);
+    if (off == 0 || off == 2) return acrtc_.read(off == 2);   // RS: +0 status, +2 data/FIFO
+    return dac_.read(off & 3);                                // C1C0 = A1A0
 }
 ```
 
@@ -52,8 +52,8 @@ The pay-off is that a chip is tested on its own, from its data sheet, with no bu
 `tests/test_hd63484.cpp` and `tests/test_bt453.cpp` — and the board test is left with only the
 board's own decisions to prove. The **decisions a chip cannot make** are the board's, and they
 belong in the board header where cadzilla's are: the shift register (8 bits per pixel, 8 words
-per fetch, low byte first), the monitor (a fixed VESA frame), how much DRAM was fitted, what the
-overlay inputs are tied to, whether IRQ\* is wired. Draw the line where the hardware draws it:
+per fetch, low byte first), the monitor (a fixed VESA frame), how much frame memory was fitted,
+what the overlay inputs are tied to, where IRQ\* is strapped. Draw the line where the hardware draws it:
 the ACRTC only ever puts an *address* on its bus, so `Hd63484` answers address-level questions
 (`backgroundRaster()`, `windowRaster()`, `gaiWords()`) and the *board* fetches words and makes
 pixels of them — which is also why a program that sets the chip to 4 bpp gets a scrambled
@@ -196,9 +196,11 @@ host (`frames()` advanced, `frameCrc()` moved, the pixel bytes unchanged), and t
 
 ## What cadzilla left for next time
 
-Its own `docs/boards/cadzilla.md` says exactly what is not modeled. The three that matter for
-the recipe: **interrupts** (add an `IrqJumper` and `irqJumperProperty()`, override
-`assertsInt()`, and call `intChanged()` from every place the chip's `irq()` could move — the
-lamp chapter's closing section), **observable timing** (a raster counter a guest reads must come
-off the `Clock`, like the Dazzler's vblank bit), and **the rest of the command set**, which
-drops into `Hd63484::execute()`'s dispatch with its parameter count already in `paramsFor()`.
+Its own `docs/boards/cadzilla.md` says exactly what is not modeled. **Interrupts** are wired —
+`IrqJumper` and `irqJumperProperty()`, `assertsInt()`/`assertsVi()` reading the chip's own
+`irq()`, and `intChanged()` called from every place that could move, per the lamp chapter's
+closing section — so that recipe step is already done here and is the worked example for the
+next board that needs it. Two still remain: **observable timing** (a raster counter a guest
+reads must come off the `Clock`, like the Dazzler's vblank bit), and **the rest of the command
+set**, which drops into `Hd63484::execute()`'s dispatch with its parameter count already in
+`paramsFor()`.

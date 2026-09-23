@@ -22,9 +22,10 @@ struct Rig {
     NullDisplay    disp;
     CadzillaBoard* cad = nullptr;
 
-    static constexpr uint8_t kAcrtc = 0x70;   // RS=0 at BASE+0, RS=1 at BASE+1
-    static constexpr uint8_t kMode  = 0x73;   // MODE register, BASE+3, write-only
-    static constexpr uint8_t kDac   = 0x74;   // Bt453, BASE+4..+7 -- fixed relative to BASE now
+    static constexpr uint8_t kAcrtc     = 0x70;   // BASE+0: ACRTC RS=0 (address/status)
+    static constexpr uint8_t kMode      = 0x71;   // BASE+1: MODE register, write-only
+    static constexpr uint8_t kAcrtcData = 0x72;   // BASE+2: ACRTC RS=1 (data/FIFO)
+    static constexpr uint8_t kDac       = 0x74;   // BASE+4..+7: Bt453
 
     Rig() {
         std::string err;
@@ -40,8 +41,8 @@ struct Rig {
     // ---- the ACRTC through its two ports, 8-bit MPU mode ----
     void    ar(uint8_t a) { m.bus.ioWrite(kAcrtc, a); }
     uint8_t sr() { return m.bus.ioRead(kAcrtc); }
-    void    data(uint8_t v) { m.bus.ioWrite(kAcrtc + 1, v); }
-    uint8_t data() { return m.bus.ioRead(kAcrtc + 1); }
+    void    data(uint8_t v) { m.bus.ioWrite(kAcrtcData, v); }
+    uint8_t data() { return m.bus.ioRead(kAcrtcData); }
     void reg(uint8_t even, uint16_t v) {
         ar(even);
         data((uint8_t)(v >> 8));
@@ -66,7 +67,7 @@ struct Rig {
         m.bus.ioWrite(kDac + 1, b);
     }
 
-    // ---- the MODE register: one write-only byte at BASE+3 ----
+    // ---- the MODE register: one write-only byte at BASE+1 ----
     void mode_reg(uint8_t v) { m.bus.ioWrite(kMode, v); }
 
     // Program the ACRTC for the monitor mode the board is strapped to, the way the board's
@@ -109,7 +110,7 @@ struct Rig {
 } // namespace
 
 void test_cadzilla() {
-    SECTION("cadzilla -- one 8-port block: the ACRTC, MODE (write-only), the Bt453, the BASE+2 gap");
+    SECTION("cadzilla -- one 8-port block: ACRTC RS=0/RS=1 split by MODE, the Bt453, the BASE+3 gap");
     {
         Rig g;
         BusCycle c;
@@ -117,12 +118,12 @@ void test_cadzilla() {
             c.type = dir ? Cycle::IoRead : Cycle::IoWrite;
             c.addr = 0x70;
             CHECK(g.cad->decodes(c), "ACRTC RS=0 at BASE+0, both directions (AR out, SR in)");
-            c.addr = 0x71;
-            CHECK(g.cad->decodes(c), "ACRTC RS=1 at BASE+1, both directions");
+            c.addr = 0x72;
+            CHECK(g.cad->decodes(c), "ACRTC RS=1 at BASE+2, both directions -- NOT adjacent to BASE+0");
             c.addr = 0x6F;
             CHECK(!g.cad->decodes(c), "not the port below BASE");
-            c.addr = 0x72;
-            CHECK(!g.cad->decodes(c), "BASE+2 is not decoded at all -- nobody answers it");
+            c.addr = 0x73;
+            CHECK(!g.cad->decodes(c), "BASE+3 is not decoded at all -- nobody answers it");
             for (uint16_t p = 0x74; p <= 0x77; ++p) {
                 c.addr = p;
                 CHECK(g.cad->decodes(c), "Bt453: all four of BASE+4..+7, both directions");
@@ -130,10 +131,10 @@ void test_cadzilla() {
             c.addr = 0x78;
             CHECK(!g.cad->decodes(c), "and not BASE+8 -- the block is eight ports");
         }
-        // BASE+3, MODE, is write-only -- like the Dazzler's format port floats on a read.
-        c.addr = 0x73;
+        // BASE+1, MODE, is write-only -- like the Dazzler's format port floats on a read.
+        c.addr = 0x71;
         c.type = Cycle::IoWrite;
-        CHECK(g.cad->decodes(c), "BASE+3 (MODE) decodes OUT");
+        CHECK(g.cad->decodes(c), "BASE+1 (MODE) decodes OUT");
         c.type = Cycle::IoRead;
         CHECK(!g.cad->decodes(c), "...but not IN");
 
@@ -453,6 +454,46 @@ void test_cadzilla() {
         CHECK(g.px(16, 4) == 5 && g.px(16, 2) == 0 && g.px(16, 5) == 0, "two rasters tall, from raster 3");
     }
 
+    SECTION("cadzilla -- interrupts (SW1-8): disconnected by default, strapped to pin 73 or a VI line");
+    {
+        Rig g;
+        std::string err;
+        CHECK(!g.cad->assertsInt() && g.cad->assertsVi() == 0,
+              "SW1-8 off by default: nothing pulled, whatever the chip wants");
+
+        // Arm CED's interrupt enable (CCR bit 5, CEE) so the reset-time CED=1 becomes a
+        // live, enabled request -- acrtc_.irq() is SR & CCR's enables, and CED is one of
+        // the eight bits both share.
+        g.reg(0x02, 0x0020);
+        CHECK(g.cad->acrtc().irq(), "the chip itself wants an interrupt: CED is set and CEE enables it");
+        CHECK(!g.cad->assertsInt() && g.cad->assertsVi() == 0,
+              "but SW1-8 is still off -- the chip's own IRQ* pin does not reach the bus");
+
+        CHECK(setProperty(*g.cad, "interrupt", "vi3", err), "strap SW1-8 on, to VI3");
+        CHECK(g.cad->assertsVi() == 0x08 && !g.cad->assertsInt(),
+              "VI3 (bit 3) is pulled; pin 73 is not -- the strap chose a VI line, not int");
+
+        auto prop = [&](const char* name) -> Property {
+            for (auto& p : g.cad->properties())
+                if (p.name == name) return p;
+            return Property{};
+        };
+        CHECK(prop("irq").get().b() == true, "SHOW's irq line agrees: asserted right now");
+
+        CHECK(setProperty(*g.cad, "interrupt", "int", err), "restrap to pin 73 instead");
+        CHECK(g.cad->assertsInt() && g.cad->assertsVi() == 0,
+              "now pin 73 is pulled and no VI line is");
+
+        // Clearing CEE drops the enabled condition -- acrtc_.irq() is pure (SR & CCR's
+        // enables), so it and both assertsInt()/assertsVi() follow the register write
+        // immediately, with no separate "clear" step of their own.
+        g.reg(0x02, 0x0000);   // CCR low byte back to 0: CEE disabled: CED is still SET in
+                                // SR (nothing read it), but no longer an ENABLED request
+        CHECK(!g.cad->acrtc().irq() && !g.cad->assertsInt() && g.cad->assertsVi() == 0,
+              "disabling CEE drops the request even though CED itself is still pending");
+        CHECK(prop("irq").get().b() == false, "and SHOW's irq line drops with it");
+    }
+
     SECTION("cadzilla -- SHOW: the straps validate, the live lines are read-only");
     {
         Rig g;
@@ -465,12 +506,16 @@ void test_cadzilla() {
             Property p = prop(name);
             return p.get ? p.get().text(p.radix) : std::string("<missing>");
         };
-        CHECK(val("mode") == "640x480" && val("vram") == "2048", "defaults: 640x480, 2 MB of frame memory");
-        CHECK(g.cad->acrtc().vram().size() == 1u << 20, "2048 KB is the ACRTC's whole 1 M-word address space");
+        CHECK(val("mode") == "640x480", "defaults: 640x480");
+        CHECK(g.cad->acrtc().vram().size() == 1u << 20, "2 MB of SRAM -- the ACRTC's whole 1 M-word "
+              "address space, fixed, not a strap");
+        CHECK(!prop("vram").get, "there is no vram property at all any more");
         CHECK(val("video") == "off" && val("status") == "0x23", "comes up stopped");
-        CHECK(!prop("video").set && !prop("picture").set && !prop("wiring").set && !prop("status").set,
+        CHECK(val("interrupt") == "none" && val("irq") == "false", "SW1-8 off by default: IRQ* disconnected");
+        CHECK(!prop("video").set && !prop("picture").set && !prop("wiring").set && !prop("status").set &&
+                  !prop("irq").set,
               "live status is read-only");
-        CHECK((bool)prop("mode").set && (bool)prop("port").set && (bool)prop("vram").set,
+        CHECK((bool)prop("mode").set && (bool)prop("port").set && (bool)prop("interrupt").set,
               "the straps are settable");
         CHECK(!prop("hspol").set && !prop("vspol").set && !prop("amode").set && !prop("olen").set,
               "the MODE register's four decoded fields are read-only, like the rest of live status");
@@ -482,18 +527,19 @@ void test_cadzilla() {
         CHECK(!setProperty(*g.cad, "mode", "320x200", err), "an unlisted mode is refused");
         CHECK(!setProperty(*g.cad, "port", "71", err), "a BASE that is not a multiple of 8 is refused");
         CHECK(!setProperty(*g.cad, "port", "74", err), "not even a multiple of 4 is enough now -- the whole block moves together");
-        CHECK(!setProperty(*g.cad, "vram", "100", err), "a non-power-of-two vram is refused");
-        CHECK(!setProperty(*g.cad, "vram", "4096", err), "and more than the ACRTC can address");
+        CHECK(!setProperty(*g.cad, "interrupt", "vi9", err), "an interrupt strap outside vi0..vi7 is refused");
         CHECK(setProperty(*g.cad, "port", "E0", err), "a multiple of 8 is taken");
         BusCycle c;
         c.type = Cycle::IoWrite;
         c.addr = 0xE1;
-        CHECK(g.cad->decodes(c), "and the ACRTC's data port now decodes there");
+        CHECK(g.cad->decodes(c), "and the MODE register now decodes at the new BASE+1");
+        c.type = Cycle::IoRead;
+        c.addr = 0xE2;
+        CHECK(g.cad->decodes(c), "the ACRTC's data/FIFO port now decodes at BASE+2");
         c.addr = 0xE4;
         CHECK(g.cad->decodes(c), "with the Bt453 four ports along, still at BASE+4 -- one strap moves both chips");
         c.addr = 0x74;
         CHECK(!g.cad->decodes(c), "and nothing answers at the old Bt453 address any more");
-        CHECK(setProperty(*g.cad, "vram", "16", err) && g.cad->acrtc().vram().size() == 16 * 512, "vram refits the frame memory: 16 KB is 8 K words");
 
         // Changing the mode re-opens the window at the new size on the next frame.
         Rig h;

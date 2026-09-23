@@ -7,16 +7,22 @@
 //
 //   I/O     -- ONE 8-port block from BASE (default 0x70; BASE must be a multiple of 8):
 //                BASE+0  ACRTC RS=0 (OUT: address register, IN: status)
-//                BASE+1  ACRTC RS=1 (the 16-bit register the address names, one byte per
-//                        cycle, or the command FIFOs)
-//                BASE+2  not decoded -- nobody answers it
-//                BASE+3  MODE register (write-only) -- the board's own glue-logic strap,
+//                BASE+1  MODE register (write-only) -- the board's own glue-logic strap,
 //                        not a chip register; see MODE REGISTER below
+//                BASE+2  ACRTC RS=1 (the 16-bit register the address names, one byte per
+//                        cycle, or the command FIFOs)
+//                BASE+3  not decoded -- nobody answers it
 //                BASE+4..+7  Bt453 by C1C0 -- address register, color palette RAM, address
 //                        register again, overlay registers -- all read/write
-//   MEMORY  -- NONE decoded. The frame memory is DRAM on the board, private to the ACRTC;
-//              the CPU draws by issuing commands through the FIFO, never by poking a byte.
-//              The opposite reason from the Dazzler's for decoding no address.
+//              The ACRTC's own RS=0/RS=1 pair is therefore NOT adjacent on this board --
+//              MODE sits between them. That is a real decode choice (SW1 selects the
+//              8-port BASE; within the block, address bit A1 is the ACRTC's RS pin and
+//              A0 picks MODE vs. the ACRTC at A1=0), not an accident.
+//   MEMORY  -- NONE decoded. The frame memory is 2 MB of SRAM on the board, private to the
+//              ACRTC and fixed (no refresh cycles, no `vram` strap -- the reference design
+//              is exactly this much and no other); the CPU draws by issuing commands
+//              through the FIFO, never by poking a byte. The opposite reason from the
+//              Dazzler's for decoding no address.
 //   DISPLAY -- once per pump() the board builds the MONITOR'S frame -- a fixed VESA raster
 //              chosen by the `mode` strap, 640x480 by default -- by running its own shift
 //              register over the addresses the ACRTC puts out, and hands the host the
@@ -58,11 +64,10 @@
 //   worth 8 pixels of the frame instead of 16. Superimposed mode (ACM = 11) is not wired:
 //   the window's second phase would need its own fetch path.
 //
-//   Also: how much DRAM is fitted (`vram` in kilobytes, default 2048 = the full 1 M words the
-//   ACRTC addresses; 1024x768 at 8 bpp needs 768 KB),
-//   OL1..0 tied low (no overlay source), and IRQ* not wired to the bus yet.
+//   Also: OL1..0 tied low (no overlay source); IRQ* wired to the `interrupt` strap (SW1-8
+//   on the real card enables it; off, the default, disconnects it -- see below).
 //
-// THE MODE REGISTER (BASE+3, write-only) is the board's own glue logic, not a register on
+// THE MODE REGISTER (BASE+1, write-only) is the board's own glue logic, not a register on
 // either chip -- the host programs it in tandem with the ACRTC's own OMR when it sets up
 // the picture, and it is what the board's OWN fetch logic (programmedWidth/X, paintFrame)
 // reads for single vs. interleaved access, not the ACRTC's OMR bit. The bit assignment
@@ -80,6 +85,13 @@
 //
 // HSPOL/VSPOL are recorded and reported (`SHOW`'s hspol/vspol) but drive nothing: this
 // model has no separate sync-pulse signal for a polarity to invert. See Limitations.
+//
+// THE 8-POSITION DIP SWITCH SW1, for reference (docs/boards/cadzilla.md has the full row):
+// SW1-1..5 pick the I/O BASE (bits 7-3, i.e. the `port` strap); SW1-6 (16-bit host mode)
+// and SW1-7 (16-bit I/O decode) have no expressible effect on an 8080/Z80 S-100 bus, which
+// only ever runs 8-bit IN/OUT cycles -- both are fixed Off in this machine, not straps;
+// SW1-8 is the `interrupt` strap below: Off (`none`, the default) disconnects IRQ*, On
+// means the strap names which S-100 line it reaches (`int` or `vi0`..`vi7`).
 // ---------------------------------------------------------------------------
 
 #include "chips/bt453.h"
@@ -107,6 +119,17 @@ public:
     void reset(Reset r) override;
     void power() override;
     void pump() override;
+
+    // ---- Interrupts: IRQ* strapped to a bus line, or disconnected (SW1-8) ----
+    //
+    // acrtc_.irq() is already pure and combinational (SR & CCR's enable bits) -- exactly
+    // the shape assertsInt()/assertsVi() want. `irq_ == IrqJumper::None` (the default) is
+    // SW1-8 off: IRQ* is asked for but nothing is soldered to it, same as the front
+    // panel's own unclaimed lines. See docs/devguide/adding-a-board.md's interrupt section
+    // for why intChanged() must be called from every place assertsInt()/assertsVi() could
+    // move -- here, that is every ACRTC register or FIFO write and read.
+    bool    assertsInt() const override { return irq_ == IrqJumper::Int && acrtc_.irq(); }
+    uint8_t assertsVi() const override { return acrtc_.irq() ? viBit(irq_) : 0; }
 
     // SNAPSHOT/RESTORE (DESIGN.md 13): both chips, frame memory included -- no memory board
     // holds it, so it must travel here.
@@ -157,7 +180,7 @@ private:
     void render();
     void paintFrame(Surface* s, int w, int h);
 
-    // The board's own notion of access mode -- from the MODE register (BASE+3), not the
+    // The board's own notion of access mode -- from the MODE register (BASE+1), not the
     // ACRTC's OMR. This is what the shift register (paintFrame, programmedWidth/X) runs on;
     // `wiring()` is what compares it against the chip's own OMR ACM bit.
     int glueAccessMode() const { return (modeReg_ & kModeAmode) ? 2 : 1; }
@@ -165,20 +188,24 @@ private:
     Hd63484 acrtc_;
     Bt453   dac_;
 
-    // MODE register bits (BASE+3) -- see the header comment for why these positions.
+    // MODE register bits (BASE+1) -- see the header comment for why these positions.
     static constexpr uint8_t kModeHspol = 0x01;
     static constexpr uint8_t kModeVspol = 0x02;
     static constexpr uint8_t kModeAmode = 0x04;
     static constexpr uint8_t kModeOlen  = 0x08;
 
+    // 2 MB (1 M sixteen-bit words) -- the reference design's fixed SRAM fit; the ACRTC's
+    // own 20-bit address space, exactly. Not a strap: the real card has no jumper for it.
+    static constexpr size_t kVramWords = 1u << 20;
+
     // ---- Straps ----
-    uint8_t port_ = 0x70;         // the 8-port block's BASE; a multiple of 8
-    int     vramKB_ = 2048;       // frame memory fitted, in KILOBYTES (power of two); words = KB * 512
-    int     mode_ = 1;            // index into the VESA mode table: 640x480
-    int     videoWidth_ = 0;      // host window width in px, 0 = auto
+    uint8_t   port_ = 0x70;       // the 8-port block's BASE; a multiple of 8
+    int       mode_ = 1;          // index into the VESA mode table: 640x480
+    int       videoWidth_ = 0;    // host window width in px, 0 = auto
+    IrqJumper irq_ = IrqJumper::None;   // SW1-8: where IRQ* lands, if anywhere
 
     // ---- Runtime state written by the guest, not a strap ----
-    uint8_t modeReg_ = 0;         // MODE register (BASE+3): HSPOL/VSPOL/AMODE/OLEN
+    uint8_t modeReg_ = 0;         // MODE register (BASE+1): HSPOL/VSPOL/AMODE/OLEN
 
     // ---- Render bookkeeping ----
     bool dirty_ = true;           // something in the picture moved since the last frame
