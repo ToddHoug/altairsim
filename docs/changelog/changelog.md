@@ -16,6 +16,11 @@ and it can interrupt once a second with an `RST` of your choosing. Four ports fr
 must be a multiple of 4, and the clock chip is the OKI MSM5832 the System Support 1 already
 carried.
 
+### Name a machine at the prompt
+
+`SET MACHINE name=<name>` renames the machine you are running, so a machine built at the prompt
+and written out with `CONFIG SAVE` no longer lands in the file as `name = "none"`.
+
 ## 1.1.0
 
 **1.1.0 is the release that makes a running machine reachable.** Where 1.0.0 filled out the
