@@ -8,6 +8,13 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+### The CP/M disks carry the current file-transfer utilities
+
+The CP/M disks in `examples/cpm` and `examples/ai-mcp` now have the current `R.COM`, `W.COM` and
+`HDIR.COM`, the same programs as in `hostbridge/`. `HDIR` on those disks now lists one file on
+each line, with its size and date. The hard-disk image in `examples/hdsk` now has all three
+utilities too, so you can move files in and out of that machine with no paste.
+
 ### The Monitor document reads more plainly
 
 *The Monitor* is rewritten in shorter, simpler sentences. Its `HELP` menu matches the program
