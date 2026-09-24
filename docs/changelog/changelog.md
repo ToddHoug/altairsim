@@ -8,6 +8,15 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+### The Monitor document reads more plainly
+
+*The Monitor* is rewritten in shorter, simpler sentences. Its `HELP` menu matches the program
+again, and it now shows `DO`, `MACHINE` and `STARTUP`. It points to the User Manual for the board
+reference. It also no longer says that the machine keeps running during a `!` shell command. The
+machine stays stopped, as it does at every monitor prompt. The section on board names now explains
+the two shorter forms. You can omit the digits at the end of a board's id, and you can omit a unit
+when only one unit fits the command.
+
 ### SHOW BOARDS fits on a screen
 
 `SHOW BOARDS` now lists each board type on one line, with a short summary. The full description,
