@@ -56,7 +56,11 @@ not on the 6850. *Disks*, *Tapes* and *Serial ports, sockets and telnet* are now
 the reader: the safety rules for a disk are in one section, the scratch-disk steps end at a
 working `B:`, the tape chapter starts with the steps to load BASIC, and the serial chapter
 explains the console settings one time. The serial chapter now gives the correct default for
-`bsdel`, which is `bs`. *Moving files in and out* now says that a relative `hostdir` starts from the
+`bsdel`, which is `bs`. *Boards* now starts with the commands that add, remove and show
+boards, and the conflict check. The front panel comes first in the list of boards, and the
+notes for every video window are in one place. It no longer says that a cassette loads in the
+same number of T-states at any processor speed, and `sense = 0x80` on `basic4k` now reads as a
+cassette load. *Moving files in and out* now says that a relative `hostdir` starts from the
 machine's folder whether you type it or write it in the file, and its `LOAD R` sample matches the
 current `R.HEX`. *Worked examples* now shows the real `DIR` listings of the CP/M and hard disks,
 and says that `rate=real`, not the processor clock, makes a tape load at its real speed. *The MCP server* chapter is now written for the person who
