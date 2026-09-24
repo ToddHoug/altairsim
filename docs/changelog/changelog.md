@@ -46,7 +46,8 @@ sections for disk controllers whose example is not in the package now say that y
 disk image. The `pb1` section no longer depends on an example that is not in the package, and it says
 that its default control port is the same as the 2SIO's. *Disks* no longer says that the CP/M disk hides
 most of its files from `DIR`, or that a path you type starts from your shell. It now says that
-the package has a hard-disk image too.
+the package has a hard-disk image too. *Tapes* now says which machine to start before you load 4K BASIC by
+hand, and it points to the Boards chapter for the sense switches.
 
 ### SHOW BOARDS fits on a screen
 

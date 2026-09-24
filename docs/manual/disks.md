@@ -20,11 +20,11 @@ disk goes in a drive. You can name it in the machine file, or `MOUNT` it at the 
 the same thing.
 
 > **A disk is not a cassette.** A machine file *can* name the floppy in drive 0, and the CP/M
-> example does. A machine file never names the tape in the recorder. A floppy drive is connected
-> to its controller, and the guest can tell what is in it. **A cassette recorder has no motor
-> control on the board.** Nothing in the machine can start the tape, sense it, or know that it
-> is there. For this reason, a person puts the tape in and presses PLAY, at the prompt. See the
-> tapes chapter.
+> example does. A drive has a `mount` key, but a tape recorder has no such key. A floppy drive
+> is connected to its controller, and the guest can tell what is in it. **A cassette recorder
+> has no motor control on the board.** Nothing in the machine can start the tape, sense it, or
+> know that it is there. For this reason, a person puts the tape in and presses PLAY, with
+> `MOUNT`. See the tapes chapter.
 
 ## The controllers in this chapter
 
