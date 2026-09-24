@@ -1,52 +1,44 @@
 # Disks
 
-A disk on an Altair is really three things: a **controller** board on the bus, some number of
-**drives** hanging off it, and a **disk image** sitting in one of those drives. The three are
-separate, and the manual keeps them separate, because the machine did.
+A disk on an Altair is three things:
 
-This chapter is about the last two — the **image** and the **drive it goes in** — and the
-`MOUNT` workflow that puts one in the other. That workflow is the same whichever controller you
-have. **`altairsim` has many disk controllers** — the **controllers themselves** are boards,
-one per section in the Boards chapter; this chapter uses just the MITS hard-sector pair (`dcdd`
-and `mds`) for its examples, because that is what the shipped machines boot from.
+- a **controller** board on the bus
+- some **drives** on that controller
+- a **disk image** in one of those drives
 
-The controller is a board. It goes in the machine file. The drives are part of the
-controller — a MITS 88-DCDD addresses up to sixteen of them, whether or not you own sixteen.
-The disk goes in a drive, and you may put it there either way: name it in the machine file, or
-`MOUNT` it at the prompt. They do the same thing.
+The three are separate, and this manual keeps them separate, because the machine did.
 
-> **A disk is not a cassette, and the difference is real.** A machine file *may* name the
-> floppy that is in drive 0 — the CP/M example does exactly that — but it may never name the
-> tape in the recorder. A floppy drive is wired to its controller and the guest can tell what
-> is in it. **A cassette recorder has no motor control on the card**: nothing in the machine
-> can start the tape, sense it, or know it is there. So the tape is something a human puts in
-> and presses PLAY on, and it stays at the prompt where humans are. See the tapes chapter.
+This chapter is about the **image** and the **drive that it goes in**, and about `MOUNT`, which
+puts one in the other. `MOUNT` works in the same way for every controller. The controllers
+themselves are boards, and the Boards chapter has a section for each one. This chapter uses the
+MITS hard-sector controllers, `dcdd` and `mds`, for its examples, because the machines in the
+package boot from them.
 
-## The controllers this chapter uses
+The controller is a board, and it goes in the machine file. The drives are part of the
+controller. A MITS 88-DCDD addresses up to sixteen drives, whether or not you have sixteen. The
+disk goes in a drive. You can name it in the machine file, or `MOUNT` it at the prompt. Both do
+the same thing.
 
-`altairsim` has many disk controllers — the two MITS hard-sector boards below, plus the
-Datakeeper hard disk (`hdsk`), the SD Systems VersaFloppy (`versafloppy`), the Tarbell
-single- and double-density boards (`tarbell`, `tarbelldd`), the iCOM 8″ (`icom`), and the
-S100Computers CompactFlash and SD boards (`dualide`, `dualsd`). Each has its own section in the
-**Boards** chapter, which is where the hardware detail lives.
+> **A disk is not a cassette.** A machine file *can* name the floppy in drive 0, and the CP/M
+> example does. A machine file never names the tape in the recorder. A floppy drive is connected
+> to its controller, and the guest can tell what is in it. **A cassette recorder has no motor
+> control on the board.** Nothing in the machine can start the tape, sense it, or know that it
+> is there. For this reason, a person puts the tape in and presses PLAY, at the prompt. See the
+> tapes chapter.
 
-This chapter uses just the two the shipped machines boot from — the MITS hard-sector pair —
-because everything it teaches about the *image* and the `MOUNT` workflow is the same on all of
-them:
+## The controllers in this chapter
 
 | Board | What it is | Drives | Ports |
 |---|---|---|---|
-| `dcdd` | **MITS 88-DCDD** — the 8″ hard-sector floppy controller. The one CP/M booted from. | up to 16 | 08, 09, 0A |
-| `mds` | **88-MDS** — the 5¼″ minidisk. Smaller, slower, four drives. | 4 | 08, 09, 0A |
+| `dcdd` | **MITS 88-DCDD**: the 8″ hard-sector floppy controller. CP/M booted from it | up to 16 | 08, 09, 0A |
+| `mds` | **88-MDS**: the 5¼″ minidisk. Smaller and slower, with four drives | 4 | 08, 09, 0A |
 
-Read the ports column again. **They are the same ports**, which means these two boards cannot
-coexist in one machine. That is not a limitation of the simulator; it is the MITS address map.
-A real Altair with both would have had two cards decoding 08 and fighting on the data bus,
-and the bus view in the monitor will tell you so if you try it. Pick one.
+**The two boards use the same ports**, so you cannot put both in one machine. The Boards chapter
+tells you more.
 
-Drives are units on the board: `drive0`, `drive1`, and so on up to the board's limit.
+The drives are units on the board: `drive0`, `drive1` and so on, up to the limit of the board.
 
-## Putting a disk in — `MOUNT`
+## Putting a disk in: `MOUNT`
 
 ```
 MOUNT <id>[:<unit>] <file> [WP] [CREATE]
@@ -56,11 +48,11 @@ MOUNT <id>[:<unit>] <file> [WP] [CREATE]
 altairsim> MOUNT dsk0:drive1 games.dsk
 ```
 
-That is a floppy going into drive 1 of the controller called `dsk0`. The socket was empty
-before; it isn't now.
+This puts a floppy in drive 1 of the controller called `dsk0`. The drive was empty before, and
+now it has a disk.
 
-**The file has to be there already.** A name that does not exist is not a new disk, it is a
-typo, and you are told so rather than handed a disk you did not mean to make:
+**The file must already exist.** A name that does not exist is a typing mistake, not a new disk.
+The program tells you so, and does not make a disk that you did not want:
 
 ```
 altairsim> MOUNT dsk0:drive1 my-scratch.dsk
@@ -68,16 +60,16 @@ dsk0: 'my-scratch.dsk': no such file
 dsk0: to make a blank one, add CREATE: MOUNT dsk0:drive1 my-scratch.dsk CREATE
 ```
 
-`CREATE` is how you make one on purpose, and "Making a scratch disk" below is what to do
-with it once you have.
+`CREATE` makes a disk on purpose. "Making a scratch disk" below tells you what to do with it.
 
-### An `.imd` is converted on the way in
+### An `.imd` file is converted when you mount it
 
-`MOUNT` on a file whose name ends `.imd` (an **ImageDisk** file, the format much archived 8″
-and 5¼″ software is distributed in) does not mount the `.imd` itself. It **reads it, converts
-it to a raw sector image, writes that beside it as `foo.dsk`, and mounts the `.dsk`** — because
-a controller reads raw sectors, not ImageDisk's track records. The conversion is reported so you
-can check it against the disk you expected:
+An `.imd` file is an **ImageDisk** file. Much archived 8″ and 5¼″ software is in this format.
+When you `MOUNT` a file whose name ends in `.imd`, the program does not mount the `.imd` itself.
+It **reads the file, converts it to a raw sector image, writes that image beside it as
+`foo.dsk`, and mounts the `.dsk`**. A controller reads raw sectors, not the track records of
+ImageDisk. The program reports the conversion, so that you can check that it is the disk you
+expected:
 
 ```
 altairsim> MOUNT dsk0:drive0 cpm.imd
@@ -87,32 +79,29 @@ dsk0:   337568 bytes
 dsk0:drive0: mounted cpm.dsk
 ```
 
-It **never overwrites a `.dsk` that is already there** — the same caution as `CREATE`. If
-`cpm.dsk` already exists you are told to remove it or mount it directly, so a re-mount cannot
-silently discard edits you made to the converted disk. From then on the `.dsk` is the disk;
-the `.imd` is just where it came from.
+**It never overwrites a `.dsk` that is already there**, as with `CREATE`. If `cpm.dsk` already
+exists, the program tells you to remove it or to mount it directly. For this reason, a second
+mount cannot lose the changes that you made to the converted disk. After the conversion, the
+`.dsk` is the disk, and the `.imd` is only where it came from.
 
-`WP` **write-protects the disk**, and it does what a real diskette's write-protect notch did: the
-guest may read the disk, and a write is refused at the controller and never reaches the file on
-your host.
+### Write protection: `WP`
 
-A real 8" or 5.25" diskette had no movable tab — a notch in the jacket was either covered or it
-was not, and the drive's photocell read it. (The two sizes read that notch in *opposite* senses,
-which is a fact about the drive, not about the disk, and nothing here depends on it: a disk is
-either protected or it is not.)
+`WP` **write-protects the disk**, as the write-protect notch of a real diskette did. The guest
+can read the disk. The controller refuses every write, and no write reaches the file on your
+computer.
 
 ```
 altairsim> MOUNT dsk0:drive2 golden-master.dsk WP
 ```
 
-`RO` is accepted and means exactly the same thing. It is the right word for a ROM socket, which is
-read-only because of what it is — for a floppy, `WP` is the thing you are actually doing.
+`RO` is also accepted, and it means the same thing. `RO` is the word for a ROM socket. For a
+floppy disk, `WP` is the correct word.
 
-**The guest is not told, and cannot be** — see "Read-only is not an error message" below. Mount
-`WP` for a disk you intend to read.
+**The guest is not told, and it cannot be.** See "Write protection is not an error message"
+below. Use `WP` for a disk that you only want to read.
 
-A protected disk says so wherever it is listed, so you never have to remember which one you did
-it to:
+A write-protected disk shows this in every list, so that you do not have to remember which disk
+it was:
 
 ```
 altairsim> SHOW MOUNTS
@@ -120,44 +109,44 @@ altairsim> SHOW MOUNTS
   dsk0:drive2  disk  golden-master.dsk  (write-protected)
 ```
 
-And if the **host** would not let us write the file — the permissions say no — the disk still
-mounts, protected, and says that it was not your idea:
+If **your computer** does not let the program write the file, because of its permissions, the
+disk still mounts. It is write-protected, and the list says that you did not ask for this:
 
 ```
   dsk0:drive2  disk  master.dsk  (write-protected -- THE HOST WON'T LET US WRITE IT; you did not ask for this)
 ```
 
-That one is worth reading closely. You did not ask for the protection, so CP/M is about to bounce
-every write off a disk you believe is writable.
+Look for this message. You did not ask for the protection, so CP/M will fail every write to a
+disk that you think is writable.
 
-And taking it out:
+### Taking a disk out: `UNMOUNT`
 
 ```
 altairsim> UNMOUNT dsk0:drive1
 ```
 
-The socket is empty again. The guest sees a drive with no disk in it, which is a thing a real
-drive could be.
+The drive is empty again. The guest sees a drive with no disk in it, which a real drive could
+also be.
 
-### Names, and what you may leave out
+### Names, and what you can leave out
 
-Board names are **case-blind everywhere** — `dsk0`, `DSK0` and `Dsk0` are the same board.
+Board names are **not case-sensitive**. `dsk0`, `DSK0` and `Dsk0` are the same board.
 
-Beyond that you may omit **what carries no information**:
+You can also leave out a part of the name when it adds no information:
 
-- the **trailing index**, when only one board of that type is in the machine. One floppy
-  controller means `dsk` finds `dsk0`.
-- the **unit**, when the board has only one thing you could possibly mount into. `MOUNT ACR
-  tape.bin` needs no unit, because a cassette recorder has one slot.
+- the **number at the end**, when the machine has only one board of that type. With one floppy
+  controller, `dsk` finds `dsk0`.
+- the **unit**, when the board has only one thing that you can mount into. `MOUNT ACR tape.bin`
+  needs no unit, because a cassette recorder has one place for a tape.
 
-A floppy controller does not qualify for the second one. It has several drives — four by
-default, and up to sixteen on an 88-DCDD — and which drive you meant is real information,
-so you must say it. **Anything genuinely plural, you must name.**
+A floppy controller has several drives, four by default and up to sixteen on an 88-DCDD. The
+drive that you mean is real information, so you must give it. **When there is more than one, you
+must name the one that you mean.**
 
-## …or put it in the machine file
+## Putting a disk in the machine file
 
-`MOUNT` at the prompt is for the disk you are dealing with *now*. A disk that belongs to a
-machine belongs in the machine file, and that is how the shipped examples do it:
+`MOUNT` at the prompt is for the disk that you are using *now*. A disk that belongs to a machine
+goes in the machine file. The examples in the package do this:
 
 ```toml
 [[board]]
@@ -168,63 +157,62 @@ id = "dsk0"                    # no `type`: the controller is already there
   mount = "cpm22b23-56k.dsk"   # relative to THIS FILE
   # readonly = true            # refuse every write; your file cannot change
   # create   = true            # make it blank if it isn't there -- CREATE, in a file
-  # media    = "8in"           # what a blank one is; see "The geometry is probed" below
+  # media    = "8in"           # what a blank one is; see "The geometry comes from the file size"
 ```
 
-`writeprotect = true` says the same thing, and is there because everything *else* here calls
-it write-protect — `MOUNT` takes `WP`, `SHOW MOUNTS` prints `(write-protected)`, and on the
-real diskette it was a notch. `readonly` is the spelling a machine file is saved with.
+`writeprotect = true` means the same as `readonly = true`. It is there because the rest of the
+program says "write-protect": `MOUNT` takes `WP`, and `SHOW MOUNTS` prints `(write-protected)`.
+`CONFIG SAVE` writes `readonly`.
 
-The two forms do the same thing. The difference is only *when*: one is the drive as the
-machine ships, the other is you, at the prompt, changing your mind.
+The file form and the prompt form do the same thing. Only the time is different. The file gives
+the drive as the machine starts, and the prompt is you, changing it later.
 
-Note the path. It names the file lying **beside the machine file**, with no directory at all —
-which is what lets the whole folder be copied somewhere else and still boot. A path inside a
-machine file is resolved against **that file**; a path you type is resolved against **your
-shell**. The machines chapter has the rest of that rule.
+The path names the file **beside the machine file**, with no folder. For this reason, you can
+copy the whole folder to another place, and it still boots. A relative path, in a machine file
+or typed at the prompt, starts from the machine's folder. The machines chapter gives the full
+rule.
 
-## …or fetch it over the network
+## Getting a disk over the network: TNFS
 
-Everything so far assumed the image is a file on your host. It need not be. Point `MOUNT` at a
-**TNFS server** — the network file system the FujiNet project speaks — and the disk is fetched
-across the network instead of read off your disk:
+A disk image does not have to be a file on your computer. You can point `MOUNT` at a **TNFS
+server**, the network file system of the FujiNet project. The program then gets the disk over
+the network:
 
 ```
 altairsim> MOUNT dsk0:drive0 tnfs://fileserver/cpm/games.dsk
 altairsim> MOUNT dsk0:drive1 tnfs://fileserver:16384/scratch.dsk WP
 ```
 
-The form is `tnfs://<host>[:<port>]/<path>`. The port may be left off and defaults to **16384**,
-the TNFS port; the path is where the image lives on the server. A machine file may name one the
-same way — `mount = "tnfs://fileserver/cpm/games.dsk"` on the drive — and because a `tnfs://`
-name carries its own server with it, it is **not** re-based against the machine file or your
-shell the way a bare filename is. It means the same thing wherever you write it.
+The form is `tnfs://<host>[:<port>]/<path>`. The port is **16384** by default, which is the TNFS
+port. The path is where the image is on the server. A machine file can name one in the same way,
+with `mount = "tnfs://fileserver/cpm/games.dsk"` on the drive. A `tnfs://` name includes its
+server, so it does **not** start from the machine's folder as a plain file name does. It means
+the same thing wherever you write it.
 
-What happens after that is what happens with any disk. The image is pulled in **once, at mount**,
-and from then on it behaves exactly like a local one: the guest reads and writes it, the geometry
-is probed from its size (below), `SHOW MOUNTS` lists it, and your changes are written back to the
-server when you `UNMOUNT` or the guest flushes. `WP` write-protects it just as it does a local
-disk, and if the **server** will not let us write — the file is read-only there — the disk still
-mounts, protected, and says the protection was not your idea, exactly as a host file whose
-permissions say no.
+After that, it is like any other disk. The program gets the whole image **one time, when you
+mount it**. From then on, it works like a local disk. The guest reads and writes it, the program
+finds the format from its size (below), and `SHOW MOUNTS` lists it. The program writes your
+changes back to the server when you `UNMOUNT` it, or when the guest flushes. `WP` write-protects
+it as it does a local disk. If the **server** does not let the program write, because the file
+is read-only there, the disk still mounts, write-protected, and says that you did not ask for
+this. This is the same as for a file on your computer.
 
-A network can go away in the middle of a session, and a local disk cannot — so this one case is
-worth watching for. If the server stops accepting writes while you are using the disk, altairsim
-**tells you**: it prints a line saying it can no longer save changes to that mount, and that they
-are being held in memory only. The guest keeps running, and altairsim keeps trying; when the
-server comes back it says so and the held changes are saved. But until then, treat those changes
-as not yet safe — if you quit or the server never returns, what was written after the warning is
-lost.
+A network can go away in the middle of a session. If the server stops accepting writes while you
+use the disk, **the program tells you**. It prints a line that says it can no longer save
+changes to that disk, and that it keeps them in memory only. The guest continues to run, and the
+program continues to try. When the server comes back, the program says so, and saves the
+changes. Until then, the changes are not safe. If you quit, or the server never comes back, the
+writes after the message are lost.
 
-There is one limit worth knowing. TNFS carries the **single-file images** — a floppy, a
-minidisk, an 8 MB `fdc8mb`, a cassette tape — the ones small enough to hold whole in memory. The
-larger card images that keep their geometry in a companion file (the CompactFlash and SD boards'
-`.img`) are **not** mountable over TNFS; those stay on your host.
+TNFS carries only **single-file images**: a floppy, a minidisk, an 8 MB `fdc8mb` disk and a
+cassette tape. These are small enough to keep in memory. The larger card images of the
+CompactFlash and SD boards keep their size in a second file (`.img` with `.geo`), and you cannot
+mount them over TNFS. Keep them on your computer.
 
-## The geometry is probed, not declared
+## The geometry comes from the file size
 
-You do not tell `altairsim` what kind of disk you just mounted. It **looks at the file's byte
-count** and works it out:
+You do not tell `altairsim` what kind of disk you mounted. It **looks at the number of bytes in
+the file** and finds the format:
 
 | Format | Tracks | Sectors | Bytes/sector | File size |
 |---|---|---|---|---|
@@ -232,36 +220,36 @@ count** and works it out:
 | `minidisk` | 35 | 16 | 137 | **76,720** |
 | `fdc8mb` | 2048 | 32 | 137 | **8,978,432** |
 
-A file of 337,568 bytes is an 8″ floppy. There is nothing else it could be. This is why the
-quick start never mentions a format: there was nothing to mention.
+A file of 337,568 bytes is an 8″ floppy. It cannot be anything else. For this reason, the quick
+start does not name a format.
 
-The `8in` and `fdc8mb` rows belong to the `dcdd`; `minidisk` is the `mds`'s one format, and
-the probe only ever chooses among the formats the board it is on can take.
+The `8in` and `fdc8mb` formats belong to the `dcdd`. `minidisk` is the only format of the `mds`.
+The program chooses only from the formats that the board can take.
 
-**The size in that column is the disk, and the file you have may be slightly bigger.** Almost
-every image in circulation was moved by XMODEM at some point, which pads to a 128-byte block
-— the CP/M disk in this package is 337,664 bytes rather than 337,568, and the minidisk images
-you will find are 76,800 rather than 76,720. The probe allows that padding, so those are 8″
-floppies and minidisks like any other. Do not go looking for the exact number on your own
-disk; it is the format's size, not a checksum.
+**The size in the table is the size of the disk. Your file can be a little bigger.** Almost
+every image in circulation was sent by XMODEM at some time, and XMODEM adds bytes to fill a
+128-byte block. The CP/M disk in this package is 337,664 bytes, not 337,568, and the minidisk
+images that you find are 76,800 bytes, not 76,720. The program allows for this, so those files
+are 8″ floppies and minidisks like any other. Do not look for the exact number on your own disk.
+It is the size of the format, not a checksum.
 
-**Only 8″ floppies ship.** Every disk image in the package is one — a `minidisk` or an
-`fdc8mb` image is one **you supply**. The `mds` board and the 8 MB medium are both here and
-both work; what is not here is a disk to put in them.
+**The package has 8″ floppy images and one Datakeeper hard-disk image.** You supply any
+`minidisk` or `fdc8mb` image. The `mds` board and the 8 MB format both work, but the package has
+no disk for them.
 
-### And a file that matches nothing at all
+### A file that matches no format
 
-A blank disk is a file of no size, and a size of zero is not in the table. It mounts anyway,
-because refusing it would leave you no way to make a disk:
+A blank disk is a file of zero bytes, and zero is not in the table. It mounts anyway, because
+otherwise you could not make a disk:
 
-**A file whose size matches no row is mounted UNFORMATTED, at the widest format the board
-can reach** — `fdc8mb` on a `dcdd`, `minidisk` on an `mds` — and the guest's own formatter
-fills it in. The file **grows as it is written**, out to as far as the head can step. That is
-what makes `CREATE` and a period FORMAT program add up to a disk.
+**A file whose size matches no format is mounted UNFORMATTED, at the largest format that the
+board can use**: `fdc8mb` on a `dcdd`, and `minidisk` on an `mds`. The guest's own format
+program fills it in. The file **grows as the guest writes it**, up to as far as the head can
+step. For this reason, `CREATE` and a period format program together make a disk.
 
-So the thing to know about a blank one is that it starts out as big as the controller goes.
-If you want a blank 8″ floppy rather than a blank 8 MB disk — because you are about to format
-it with something that expects 77 tracks — say so with `media`:
+A blank disk starts as big as the controller can use. If you want a blank 8″ floppy and not a
+blank 8 MB disk, for example because you will format it with a program that expects 77 tracks,
+set `media`:
 
 ```toml
   [[board.drive]]
@@ -271,24 +259,23 @@ it with something that expects 77 tracks — say so with `media`:
   media  = "8in"        # not "as far as a dcdd can step"
 ```
 
-`media` is a machine-file key on the drive, not something you can set at the prompt. It also
-settles a truncated image, or a format you are inventing, where the byte count genuinely
-cannot decide.
+`media` is a machine-file key on the drive. You cannot set it at the prompt. Also use it for an
+image that is cut short, or for a format that you make up, where the size cannot decide.
 
-## Why an 8 MB disk works at all
+## How an 8 MB disk works
 
-`fdc8mb` is a 2048-track disk on a controller MITS designed for 77 tracks, and it works through
-the **stock card with the stock PROM** — because the controller cannot tell the two apart. It
-steps the head and shifts bytes; it never asks how big the disk is. All the intelligence about
-*where track 1500 is* lives in the BIOS, which is software.
+`fdc8mb` is a disk with 2048 tracks on a controller that MITS designed for 77 tracks. It works
+with **the stock board and the stock PROM**, because the controller cannot tell the difference.
+The controller steps the head and moves bytes. It never asks how big the disk is. The BIOS,
+which is software, knows *where track 1500 is*.
 
-The useful upshot is that **format and spindle are per drive, not per controller**, so mixed
-geometry on one board is the intended arrangement: period 8 MB CP/M BIOSes expect an 8 MB disk
-on A:/B: and ordinary 77-track floppies on C:/D:, so you can `PIP` between them.
+For this reason, **the format and the spindle belong to each drive, not to the controller**. One
+board can have drives of different sizes, and that is correct. The period 8 MB CP/M BIOSes
+expect an 8 MB disk on A: and B:, and ordinary 77-track floppies on C: and D:, so that you can
+`PIP` between them.
 
-**Both are images you supply** — neither is in the package, so the lines below are the shape of
-the command, not files you have. The period 8 MB CP/M image is one you supply; the package
-chapter explains where the wider collection of disks and tapes will come from.
+**You supply both images.** The package has neither, so the lines below show the form of the
+command, not files that you have:
 
 ```
 altairsim> MOUNT dsk0:drive0 big.dsk
@@ -298,95 +285,91 @@ altairsim> SHOW dsk0
 
 ## THE TRACK BUFFER TRAP
 
-Read this section. It is the one thing about disks in this simulator that will cost you work
-if you do not know it, and it is not the simulator's doing — **it is what a BIOS may do**, and
-the CP/M in this package is one that does.
+If you do not know this, you can lose work. It is not caused by the simulator. **A BIOS can work
+this way**, and the CP/M in this package does.
 
 **A track-buffering BIOS does not write to the controller when CP/M closes a file.**
 
-`BIOS WRITE` copies your data into a **track buffer in memory** — 32 sectors of 137 bytes, one
-whole track — marks it dirty, and returns. Nothing has touched the disk. Nothing will touch
-the disk until something calls the flush. And the flush is called from **`CONIN`**: the BIOS
-console-input routine. **Reading the console is the flush trigger.**
+`BIOS WRITE` copies your data into a **track buffer in memory**, which holds 32 sectors of 137
+bytes, one whole track. It marks the buffer as changed, and returns. Nothing has gone to the
+disk, and nothing goes to the disk until something calls the flush routine. **`CONIN`**, the
+BIOS routine that reads the console, calls the flush. **A read of the console writes the buffer
+to the disk.**
 
-This is not madness. A track write is one seek and one revolution instead of thirty-two, and
-the moment the machine sits down to wait for a human to type something is precisely the moment
-it has spare time and nothing to lose. It is a very good piece of engineering. It is also a
-loaded gun.
+The BIOS does this for speed. A track write needs one seek and one turn of the disk, not
+thirty-two. When the machine waits for a person to type, it has time to spare.
 
 ### Not every CP/M does this
 
-Buffering is not a property of CP/M, and it is not a property of the controller. It is a
-decision the author of a **BIOS** made, and the BIOS is precisely the part of CP/M that every
-machine's owner rewrote for himself. Period Altair BIOSes went both ways:
+Buffering is not part of CP/M, and it is not part of the controller. The author of the **BIOS**
+decided it, and the BIOS is the part of CP/M that every owner rewrote. Period Altair BIOSes work
+in one of two ways:
 
-- **Track-buffered.** Writes pile up in memory and reach the disk on a console read. The CP/M
-  that ships in this package is one of these.
-- **Write-through.** Every `BIOS WRITE` puts a sector on the disk before it returns, and when
-  you get your prompt back your file is already there. Some of these hook `CONIN` too — but
-  only to *unload the head*, which is a courtesy to the drive and touches no data.
+- **Track-buffered.** Writes stay in memory, and go to the disk when the BIOS reads the console.
+  The CP/M in this package works this way.
+- **Write-through.** Every `BIOS WRITE` puts a sector on the disk before it returns. When you
+  get your prompt back, your file is already on the disk. Some of these BIOSes also use `CONIN`,
+  but only to *unload the head*. This protects the drive, and does not change any data.
 
-You cannot tell which one you have by looking at the `A>` prompt, and a disk image somebody
-handed you arrives with whatever BIOS its author wrote on it. So treat the rule below as the
-rule regardless: on a write-through BIOS it costs you nothing, and on a buffered one it is the
-difference between having your file and not.
+You cannot tell which kind you have from the `A>` prompt. A disk image from another person has
+the BIOS that its author wrote. For this reason, always obey the rule below. On a write-through
+BIOS, it costs you nothing. On a buffered BIOS, it decides whether your file is on the disk.
 
-> **Never `UNMOUNT`, copy, or kill the program immediately after a file operation.**
-> **Get back to the `A>` prompt first.**
+> **Do not `UNMOUNT`, copy or stop the program right after a file operation.**
+> **Go back to the `A>` prompt first.**
 
-The `A>` prompt is CP/M reading the console; the console read flushes the buffer if there is
-one, and the directory update lands on the disk. Once you are looking at `A>`, the disk on
-your host is what you think it is — under either kind of BIOS. Save the file, watch the prompt
-come back, *then* do whatever you were going to do.
+At the `A>` prompt, CP/M reads the console. The console read writes the buffer to the disk, if
+there is a buffer, and the directory update goes to the disk. When you see `A>`, the disk on
+your computer is correct, with either kind of BIOS. Save the file, wait for the prompt, and
+*then* do the next thing.
 
-`^E` back to the monitor from the `A>` prompt is safe. `^E` back to the monitor one instant
-after `ED` says it has written your source file is **not**, and on the CP/M in this package
-the file will not be there.
+`Ctrl-E` to the monitor from the `A>` prompt is safe. `Ctrl-E` to the monitor right after `ED`
+says it wrote your source file is **not** safe. On the CP/M in this package, the file is then
+not on the disk.
 
 ## The disk is real, and there is no undo
 
-A mounted disk is mounted **read/write**, and every write goes through to the file on your
-host as it happens. There is no journal and no way back — and `SNAPSHOT` will not save you
-either: it captures the machine's *state*, not your host files, so the disk image is not in it.
-A CP/M cannot save your work onto a disk it is not allowed to write, so read/write is the only
-default that lets the machine be a machine — and the price of it is that you can destroy the
-example disk with one mistyped `ERA`.
+The program mounts a disk **read/write**, and every write goes to the file on your computer at
+once. There is no journal and no way back. `SNAPSHOT` does not help. It saves the state of the
+machine, not the files on your computer, so the disk image is not in it. CP/M cannot save your
+work to a disk that it cannot write, so read/write is the only useful default. The cost is that
+one wrong `ERA` can destroy the example disk.
 
-**Copy the directory before you experiment.** It is self-contained and boots from anywhere.
+**Copy the folder before you experiment.** The folder has everything the machine needs, and it
+boots from any place.
 
-Use `RO` when you want the guest to look and not touch.
+Use `WP` when you want the guest to read the disk and not change it.
 
-## Read-only is not an error message
+## Write protection is not an error message
 
-`RO` is a promise to **you**, about your file. It is not a message to the guest, and this is
-worth being exact about, because it is easy to assume otherwise.
+`WP` protects **your file**. It is not a message to the guest. It is easy to think otherwise, so
+this section explains it.
 
-**The controller has no way to say "write protected."** The 88-DCDD's status byte is seven
-bits — write-circuit-wants-a-byte, head-movement-OK, head-loaded, drive-enabled,
-interrupts-enabled, on-track-0, new-read-data — and none of them means *the notch is covered*.
-A program reading that byte cannot distinguish a protected disk from an ordinary one.
+**The controller cannot report "write protected".** The status byte of the 88-DCDD has seven
+bits: write circuit wants a byte, head movement OK, head loaded, drive enabled, interrupts
+enabled, on track 0, and new read data. None of them means *the notch is covered*. A program
+that reads the byte cannot tell a protected disk from an ordinary one.
 
-**And CP/M has nowhere to put the answer even if it had it.** A CP/M 2.2 BIOS write returns
-`0` for success and `1` for a non-recoverable error. That is the entire vocabulary. There is no
-"protected" code, which is why a genuine hardware write failure surfaces as the blunt
-`Bdos Err On A: Bad Sector` — CP/M is telling you the only thing the interface let it hear.
+**CP/M also has no way to report it.** A CP/M 2.2 BIOS write returns `0` for success and `1` for
+an error that it cannot recover from. There are no other values, and no "protected" code. For
+this reason, a real hardware write failure shows as `Bdos Err On A: Bad Sector`. That is the
+only thing that CP/M can hear from the BIOS.
 
-The message people remember — `Bdos Err On A: R/O` — is a **different mechanism entirely**. That
-is CP/M's own software read-only flag, the one `STAT A:=R/O` sets and a warm boot clears. It
-lives in CP/M's head, not on the disk and not in the controller, and a write-protected image will
-never produce it.
+The message that people remember, `Bdos Err On A: R/O`, **comes from a different mechanism**. It
+is CP/M's own software read-only flag, which `STAT A:=R/O` sets and a warm boot clears. The flag
+is in CP/M's memory, not on the disk and not in the controller. A write-protected image never
+causes it.
 
-So: a guest that tries to write to an `RO` disk is asking for something it cannot be refused
-politely. **Do not mount `RO` and then expect CP/M to cope gracefully** — mount `RO` for a disk
-you are going to read. If you want a disk the guest can write and you can throw away, copy the
-directory; that is what the copy is for.
+For this reason, CP/M cannot handle a write to a `WP` disk in a controlled way. **Do not mount a
+disk `WP` and expect CP/M to handle it well.** Use `WP` for a disk that you are going to read.
+For a disk that the guest can write and that you can throw away, copy the folder.
 
 ## Making a scratch disk
 
-It is two steps, not two ways, and the second one is the guest's — which is exactly how it
-was in 1976. **`CREATE` gets you the blank medium; a formatter makes it a disk.**
+There are two steps, and the guest does the second one. **`CREATE` gives you the blank medium,
+and a format program makes it a disk.**
 
-**Step one, from the monitor.** `CREATE` makes the file and puts it in the drive:
+**Step 1, at the monitor.** `CREATE` makes the file, and puts it in the drive:
 
 ```
 altairsim> MOUNT dsk0:drive1 my-scratch.dsk CREATE
@@ -394,13 +377,12 @@ dsk0:drive1: created my-scratch.dsk (empty)
 dsk0:drive1: mounted my-scratch.dsk
 ```
 
-Zero bytes, and mounted — an unformatted disk, which is a thing you can hold in your hand
-and a thing CP/M will refuse to read. That is the correct state for a disk nobody has
-formatted yet.
+The file has zero bytes, and it is mounted. It is an unformatted disk, and CP/M will refuse to
+read it. That is correct for a disk that nobody has formatted.
 
-**Step two, from inside CP/M.** Boot, and format it the way the period did. The CP/M disk in
-this package carries **`AFORMAT`**, Eberhard's Altair Disk Format Utility, and formatting an
-image is formatting a disk:
+**Step 2, in CP/M.** Boot, and format the disk as people did then. The CP/M disk in this package
+has **`AFORMAT`**, the Altair Disk Format Utility by Martin Eberhard. It formats an image as it
+formats a disk:
 
 ```
 A>AFORMAT B:
@@ -408,51 +390,45 @@ A>AFORMAT B:
 Put disk in B
 Ready (Y/N)?Y
 Formatting an 8" Disk............................................................................
+Format another (Y/N)?
 ```
 
-The dots are tracks. When they stop, the file on your host has grown from nothing to a
-formatted 8″ floppy, and `B:` is a disk CP/M will `DIR`, `PIP` to, and put files on.
+Each dot is a track. When the dots stop, the file on your computer is a formatted 8″ floppy, and
+`B:` is a disk that CP/M can `DIR`, `PIP` to and put files on.
 
-> **`DIR` on the CP/M disk in this package shows one file, and the disk is nearly full.**
-> Almost everything on it is marked `$SYS`, which is precisely the attribute that hides a
-> file from `DIR` — `STAT *.*` is the command that lists them, and it is a long list.
-> `AFORMAT` is one of the hidden ones, and so is `DDT`.
+If you want a blank **8″ floppy**, not a blank disk as large as the controller can step, set
+`media = "8in"` on the drive. See "The geometry comes from the file size" above. `AFORMAT`
+formats either one, but a period program that expects 77 tracks works better with the 77-track
+disk.
 
-And if what you want is a blank **8″ floppy** rather than a blank disk as wide as the
-controller can step, say `media = "8in"` on the drive — see "The geometry is probed" above.
-`AFORMAT` will format either, but a period program that assumes 77 tracks is happier with
-the 77-track one.
-
-**`CREATE` only works on a controller that can grow its disk.** The `dcdd` and `mds` mount
-a blank at the widest format they reach and let the guest's formatter fill it in — that give
-is what makes the empty file a disk. A **fixed-geometry** controller has none: the 88-HDSK
-"Datakeeper" hard disk knows exactly how big a platter is and nothing else, so it cannot make
-a blank one for you. `CREATE` there is refused with
+**`CREATE` works only on a controller that can grow its disk.** The `dcdd` and `mds` mount a
+blank disk at the largest format that they can use, and the guest's format program fills it in.
+A **fixed-geometry** controller cannot do this. The 88-HDSK "Datakeeper" hard disk knows the
+exact size of its platter, so it cannot make a blank one. It refuses `CREATE` with this message:
 
 ```
 h0: 88-HDSK has a fixed geometry and cannot make a blank platter -- supply an existing
     4988928-byte image (406 cyl x 2 sides x 24 sectors x 256)
 ```
 
-and the empty file is removed, not left behind. For that disk you supply a full-size image;
-there is no scratch-disk step.
+The program removes the empty file. For this disk, you supply a full-size image, and there is no
+scratch-disk step.
 
-Either way, remember which chapter you are in: get back to `A>` before you go looking at the
-file.
+With either controller, go back to `A>` before you look at the file.
 
 ## Looking at what is in the machine
 
-`SHOW` on the controller lists its drives and what is in each one:
+`SHOW` on the controller lists its drives and the disk in each one:
 
 ```
 altairsim> SHOW dsk0
 ```
 
-`BOARDS` shows the backplane — every board, where it decodes, and who is fighting whom:
+`BOARDS` shows the backplane: every board and the addresses that it decodes:
 
 ```
 altairsim> BOARDS
 ```
 
-Between them they answer nearly every "why is it not booting" question there is, and the
-first one is almost always *the disk is in the wrong drive*.
+These two commands answer most questions about why a machine does not boot. The most common
+answer is that the disk is in the wrong drive.

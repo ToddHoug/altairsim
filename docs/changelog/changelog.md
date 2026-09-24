@@ -44,7 +44,9 @@ chapter's board list now includes `gsio`, `io4`, `16fdc` and `64fdc`, and its SB
 ExpandoRAM II sections describe what those boards do today. It now has a section for the Cromemco 16FDC and 64FDC, and the
 sections for disk controllers whose example is not in the package now say that you supply the
 disk image. The `pb1` section no longer depends on an example that is not in the package, and it says
-that its default control port is the same as the 2SIO's.
+that its default control port is the same as the 2SIO's. *Disks* no longer says that the CP/M disk hides
+most of its files from `DIR`, or that a path you type starts from your shell. It now says that
+the package has a hard-disk image too.
 
 ### SHOW BOARDS fits on a screen
 
