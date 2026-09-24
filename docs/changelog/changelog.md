@@ -32,7 +32,9 @@ The User Manual is being rewritten in the same shorter, simpler sentences as *Th
 Debugger* as the documents that describe the monitor's commands. *What is in the package* now
 says where the Developer Guide is (with the source, not on the release page), and it describes
 the version line as the program prints it today. *Running it* now shows the Windows command,
-and it says that `-x BOARDS` loads a machine to look at it, not that it boots one.
+and it says that `-x BOARDS` loads a machine to look at it, not that it boots one. In the
+*Quick start*, the command to write-protect the CP/M disk works now, and the `DIR` listing
+shows every file that is on the disk.
 
 ### SHOW BOARDS fits on a screen
 
