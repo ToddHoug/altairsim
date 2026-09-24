@@ -25,6 +25,12 @@ its **debug flags** for `SET … DEBUG`, and the **instruction history** and **b
 `HISTORY`. The steps to set up an AI assistant are now numbered. The `SHOW DEBUG` example now
 lists the channels in the order that the program shows them.
 
+### The User Manual reads more plainly
+
+The User Manual is being rewritten in the same shorter, simpler sentences as *The Monitor* and
+*The Debugger*, one chapter at a time. The first chapter, *What altairsim is*, is done. It now
+names *The Monitor* and *The Debugger* as the documents that describe the monitor's commands.
+
 ### SHOW BOARDS fits on a screen
 
 `SHOW BOARDS` now lists each board type on one line, with a short summary. The full description,
