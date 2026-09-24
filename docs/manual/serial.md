@@ -1,24 +1,24 @@
 # Serial ports, sockets and telnet
 
-The Altair had no screen. What it had was a serial card, and whatever you chose to hang off
-it — a Teletype, a glass terminal, a modem, a paper tape reader. The card did not know or
-care. It moved characters.
+The Altair had no screen. It had a serial board, and you connected a device to it: a Teletype, a
+video terminal, a modem or a paper-tape reader. The board did not know which. It moved
+characters.
 
-`altairsim` keeps that arrangement exactly. **Any board that moves characters has one or
-more UNITS, and every unit can be CONNECTed to an ENDPOINT.** The unit is the socket on the
-back of the board. The endpoint is what you plugged into it.
+`altairsim` works in the same way. **Every board that moves characters has one or more UNITS,
+and you can CONNECT each unit to an ENDPOINT.** The unit is the connector on the back of the
+board. The endpoint is what you connected to it.
 
 ```
 altairsim> CONNECT sio0:b socket:2323
 altairsim> DISCONNECT sio0:b
 ```
 
-That is the whole of the interface. The interesting part is the endpoint grammar, and it is
-short enough to print in full.
+That is all the interface. The endpoints are the important part, and the list is short enough to
+give in full.
 
 ## The endpoints
 
-This table is exhaustive. There are no others.
+This is the complete list. There are no others.
 
 | Endpoint | Is |
 |---|---|
@@ -27,66 +27,64 @@ This table is exhaustive. There are no others.
 | `loopback` | itself. What the guest writes comes straight back as a read. |
 | `socket:PORT` | **LISTENS** on that TCP port, as a raw pipe. Add `?banner` to greet each caller (see *The connect banner*, below). |
 | `socket:HOST:PORT` | **CALLS OUT** to that host and that port, as a raw pipe. |
-| `telnet:PORT` | **LISTENS** like `socket:PORT`, but speaks the **Telnet protocol** — so a `telnet` client behaves: no double echo, one key at a time. This is the telnet-in case for a **person**. Greets each caller; `?banner=off` stops that. |
-| `telnet:HOST:PORT` | **CALLS OUT** like `socket:HOST:PORT`, taking the telnet client's part. |
+| `telnet:PORT` | **LISTENS** like `socket:PORT`, but speaks the **Telnet protocol**, so that a `telnet` client works well: no double echo, one key at a time. Use it when a **person** connects. It greets each caller. `?banner=off` stops that. |
+| `telnet:HOST:PORT` | **CALLS OUT** like `socket:HOST:PORT`, as a telnet client. |
 | `serial:DEVICE` | a real serial port on this host. |
 | `in:PATH` | a host file, read-only — a **paper-tape reader**. The file's bytes feed the board. |
 | `out:PATH` | a host file — a **paper-tape punch**. Whatever the board sends is written to it. |
 | `in:PATH,out:PATH` | both at once on one line: a reader and a punch, two files, two positions. |
-| `terminal` | a terminal in a window the simulator draws itself — a built-in VT100 (or ADM-3A, VT52, H19). Present only in a build with a display. See *A terminal in its own window*, below. |
+| `terminal` | a terminal in a window that the simulator draws itself: a built-in VT100, ADM-3A, VT52 or H19. See *A terminal in its own window*, below. |
 | `printer:QUEUE` | a real print queue on this host, write-only. Buffers the bytes into a job and prints it. Present only where the build found a host print system. |
-| `scripted` | a terminal with a caller in place of a human. No tty need exist. It is what the MCP tools and the test suite type into; you are unlikely to type it yourself. |
+| `scripted` | a terminal with a program in place of a person. No tty needs to exist. The MCP tools and the test suite type into it. You will probably not use it yourself. |
 
-Any of these can be **tapped**: append `|FILE` to log the line to a hex file as it runs, or
-`|socket:PORT` to **mirror** it live — a second person `telnet`s in to watch the session and can
-type back onto the line to take over. Both are modifiers on an endpoint, not endpoints of their
-own — see *Tapping a line to a log file* and *Mirroring a line so a person can watch and take
-over*, below.
+You can **tap** any of these. Add `|FILE` to log the line to a hex file as it runs, or add
+`|socket:PORT` to **mirror** it live. With a mirror, a second person can use `telnet` to watch
+the session, and can type on the line to take over. Both are changes to an endpoint, not
+endpoints of their own. See *Tapping a line to a log file* and *Mirroring a line so a person can
+watch and take over*, below.
 
 ### `null` is not an error
 
-An unconnected unit is `null`, and **that is a legitimate state, not a fault.** A 6850 with
-no cable in it sits there with its transmit register permanently empty, forever ready, and a
-program that writes to it runs perfectly and talks to nobody. Reads never complete because
-nothing is sending.
+A unit that is not connected is `null`, and **that is a correct state, not a fault.** A 6850
+with no cable has an empty transmit register, and it is always ready. A program that writes to
+it runs correctly, and nobody receives the output. Reads never complete, because nothing sends.
 
-Which is precisely what the real card does with no cable in it. A machine with a second
-serial port nobody plugged anything into is not a broken machine. `null` models the missing
-cable, and the guest is entitled to be fooled by it exactly as it would have been in 1977.
+A real board with no cable does the same. A machine with a second serial port that has nothing
+connected to it is not broken. `null` is the missing cable, and the guest sees what it saw in
+1977.
 
-### The colon is the whole distinction
+### The colon makes the difference
 
-`socket:2323` **listens.** `socket:localhost:2323` **calls out.** One colon, and it is the
-same convention every terminal program has used for forty years: a bare port is a port you
-own, a host and a port is a place you go. Nothing else about the endpoint changes.
+`socket:2323` **listens.** `socket:localhost:2323` **calls out.** The only difference is the
+colon. Terminal programs use the same rule: a port alone is a port that you own, and a host with
+a port is a place that you go to. Nothing else about the endpoint changes.
 
-## Telnetting into the guest
+## Using telnet to connect to the guest
 
-Wire a unit to a listening `telnet:` port, and the guest has a serial port with a terminal on
-the end of it. That the terminal is your telnet client, several processes away, is not
-something the guest can discover.
+Connect a unit to a listening `telnet:` port, and the guest has a serial port with a terminal on
+it. The guest cannot tell that the terminal is your telnet client, in another program.
 
 ```
 altairsim> CONNECT sio0:b telnet:2323
 altairsim> RUN
 ```
 
-Then, from another terminal on your machine:
+In another terminal on your computer, type:
 
 ```
 $ telnet localhost 2323
 Connected to AltairSim X.Y.Z (sio0:b) on port 2323
 ```
 
-The guest is now talking to that window. Your first terminal still has the monitor and
-`^E` in it. This is how you give a machine two terminals, and it is how you drive a program
-that wants a console that is not the one you are sitting at.
+The guest now talks to that window. Your first terminal still has the monitor and `Ctrl-E`. In
+this way, you can give a machine two terminals, or run a program that needs a console other than
+the one that you use.
 
 ### `socket:` or `telnet:`
 
-Both listen on a port (or call out to `HOST:PORT`), both raise carrier when a caller connects
-and drop it when they leave, and the guest cannot tell them apart. They differ in what they
-say to the far end:
+Both listen on a port, or call out to `HOST:PORT`. Both raise carrier when a caller connects,
+and drop it when the caller leaves. The guest cannot tell them apart. They differ in what they
+send to the far end:
 
 | | `socket:` | `telnet:` |
 |---|---|---|
@@ -95,42 +93,42 @@ say to the far end:
 | What the person sees | each key twice (their terminal echoes it, then the guest does), and Enter sent as a whole line | one echo, from the guest, and each key sent as it is pressed |
 | Greeting | none, unless you add `?banner` | one line naming the machine, the board line and the port; `?banner=off` stops it |
 
-So: `telnet:` when a person types at the guest. `socket:` when a program is at the far end —
-one altairsim wired to another, a file transfer, a tool that speaks raw bytes, or a line you
-mirror.
+Use `telnet:` when a person types to the guest. Use `socket:` when a program is at the far end:
+one `altairsim` connected to another, a file transfer, a tool that uses raw bytes, or a line
+that you mirror.
 
-A raw `socket:` shows its problem the moment a person uses it: a stock `telnet` client, left
-in its own defaults, echoes every key locally *and* the guest echoes it back, so each
-character appears twice, and Enter arrives as a whole line with its carriage return turned
-into a line feed. The fix is not on your keyboard. The two ends have to negotiate, and that is
-what the Telnet protocol is for.
+A raw `socket:` shows its problem as soon as a person uses it. A standard `telnet` client, with
+its default settings, shows each key locally, and the guest also echoes it, so each character
+shows two times. Enter arrives as a whole line, with its carriage return changed to a line feed.
+You cannot fix this from the keyboard. The two ends must agree on the settings, and the Telnet
+protocol does that.
 
 ### The connect banner
 
-A `telnet:PORT` line says hello to each person who connects, before the guest says anything —
-the `Connected to ...` line above. It names the build, the board line you reached and the
-port, so you know you have the right machine and the right line. Only the caller sees it. The
-guest does not, and nothing reaches the board. To turn it off, add `?banner=off`:
+A `telnet:PORT` line greets each person who connects, before the guest sends anything. This is
+the `Connected to ...` line above. It gives the build, the board line that you reached and the
+port, so that you know that you have the correct machine and line. Only the caller sees it. The
+guest does not, and nothing goes to the board. To turn it off, add `?banner=off`:
 
 ```
 altairsim> CONNECT sio0:b telnet:2323?banner=off
 ```
 
-A `socket:PORT` line has no banner, because another machine is often at the far end, and it
-would take the banner as data. If a person is calling a raw socket and you want the greeting,
-add `?banner`: `CONNECT sio0:b socket:2323?banner`. The banner is only for a port that
-listens. A line that calls out (`socket:HOST:PORT`, `telnet:HOST:PORT`) is the caller itself,
-so `?banner` there is refused.
+A `socket:PORT` line has no banner, because the far end is often another machine, and it would
+read the banner as data. If a person calls a raw socket and you want the greeting, add
+`?banner`: `CONNECT sio0:b socket:2323?banner`. The banner is only for a port that listens. A
+line that calls out (`socket:HOST:PORT`, `telnet:HOST:PORT`) is the caller, so the program
+refuses `?banner` there.
 
 ## A terminal in its own window
 
-The telnet route above works, but it has moving parts you do not own: a telnet client must be
-installed, it must be pointed at the right port, and it mangles any byte it thinks is a telnet
-command — which breaks cursor sequences and file transfers, because to a serial line every
-byte is just data. And a modern host terminal emulates a modern terminal, not the ADM-3A or
-VT52 the 1970s software on the disk was written for.
+The telnet method works, but it needs things that you do not control. A telnet client must be
+installed, and you must point it at the correct port. It also changes any byte that it thinks is
+a telnet command. That breaks cursor sequences and file transfers, because on a serial line
+every byte is data. Also, a modern terminal emulates a modern terminal, not the ADM-3A or VT52
+that the 1970s software on the disk expects.
 
-`terminal` removes all of that. It is a terminal the simulator draws itself, in its own
+`terminal` avoids all of that. It is a terminal that the simulator draws itself, in its own
 window:
 
 ```
@@ -138,13 +136,14 @@ altairsim> CONNECT sio0:a terminal
 altairsim> RUN
 ```
 
-The guest's console is now that window; the monitor and `^E` stay in the one you launched
-from. There is nothing to install and nothing to connect — the window is up the moment the
-line is, on every platform. Because the terminal is the simulator's, the emulation is exactly
-the one you ask for, and it answers the reports (like `ESC[6n`) a period program expects.
+The guest's console is now that window. The monitor and `Ctrl-E` stay in the terminal that you
+started from. There is nothing to install and nothing to connect. The window opens when you
+connect the line, on every platform. The terminal is part of the simulator, so its emulation is
+the one that you select, and it answers the reports that a period program asks for, such as
+`ESC[6n`.
 
-Bare `terminal` is a VT100 in an 80×24 window. Options ride the connect string after a `?`,
-joined by `&`, the same as any other endpoint:
+`terminal` alone is a VT100 in an 80×24 window. Give options after a `?`, joined by `&`, as for
+any other endpoint:
 
 ```
 altairsim> CONNECT sio0:a terminal?emulation=adm3a
@@ -152,26 +151,25 @@ altairsim> CONNECT sio0:a terminal?emulation=vt52&size=80x24
 altairsim> CONNECT sio0:a "terminal?emulation=h19&size=132x24"
 ```
 
-`emulation` is one of `vt100` (the default; `ansi` is the same engine), `adm3a` (the Lear
-Siegler ADM-3A, the classic CP/M terminal), `vt52`, or `h19` (the Heath/Zenith H19, a VT52
-superset with an ANSI mode). `size` is *columns*×*rows* and defaults to `80x24`. `phosphor` is
-the tube colour — `green` (the default) or `amber`. `width` is the opening window width in
-pixels (a bare number, e.g. `width=1100`); left off, the window auto-sizes to about half the
-screen. The text is drawn in the real **DEC VT220** character set, and pairs with the period
-tube look — `[display] crt = true` (see [Configuring](configuring.md)), under which a `width`
-opens the window at exactly that size.
+- `emulation` is one of `vt100` (the default, and `ansi` is the same), `adm3a` (the Lear Siegler
+  ADM-3A, the classic CP/M terminal), `vt52`, or `h19` (the Heath/Zenith H19, a VT52 with an
+  ANSI mode added).
+- `size` is *columns*×*rows*, and it is `80x24` by default.
+- `phosphor` is the color of the tube: `green` (the default) or `amber`.
+- `width` is the width of the window when it opens, in pixels, for example `width=1100`. Without
+  it, the window is about half as wide as the screen.
+
+The text uses the real **DEC VT220** character set. It goes well with the period look,
+`[display] crt = true` (see the configuring chapter). With that look, a `width` opens the window
+at that exact size.
 
 ```
 altairsim> CONNECT sio0:a terminal?emulation=vt100&phosphor=amber&width=1100
 ```
 
-A `terminal` needs a window, so it is available only in a build with a display. Ask for one in
-a build without, and it is refused cleanly at `CONNECT`, with the reason named; use `console`
-or a `socket:` there instead.
-
-The built-in terminal has the same fold-the-bytes settings the console does — `strip7out`,
-`upper`, a CR/LF option and the rest — under `[terminal]`. They matter for a period monitor
-that sets bit 7; see *The built-in terminal has these too*, later in this chapter.
+The built-in terminal has the same settings as the console for changing bytes: `strip7out`,
+`upper`, a CR/LF option and the others, under `[terminal]`. They are important for a period
+monitor that sets bit 7. See *The built-in terminal has these too*, later in this chapter.
 
 ## Calling out
 
@@ -179,8 +177,8 @@ that sets bit 7; see *The built-in terminal has these too*, later in this chapte
 altairsim> CONNECT sio0:b socket:bbs.example.com:23
 ```
 
-The guest dials. As far as the software inside the machine is concerned it has a modem and
-the modem is connected; it will happily run a period terminal program over it.
+The guest dials. The software in the machine sees a connected modem, and it can run a period
+terminal program over it.
 
 ## A real serial port
 
@@ -189,50 +187,48 @@ altairsim> CONNECT sio0:b serial:/dev/tty.usbserial-A600K1XY
 altairsim> CONNECT sio0:b serial:COM3
 ```
 
-The second form is Windows. The bytes go out of a real UART, down a real wire, into whatever
-you have on the other end.
+The second form is for Windows. The bytes go out of a real UART, down a real cable, to the
+device at the other end.
 
-**If you get the device name wrong, it lists the ports that actually exist on your machine.**
-It does not merely say "cannot open". A cable that appeared under a name one character off
-from the one you expected is ten minutes of somebody quietly deciding the simulator is
-broken, and the fix is to print the answer instead of the complaint.
+**If you give a wrong device name, the program lists the ports that are on your computer.** It
+does not only say "cannot open". A cable can appear under a name that is one character different
+from what you expected, and the list shows you the correct name.
 
-### What the board does to the wire
+### What the board does to the line
 
-The host port is opened at 9600 8N1, and then **immediately re-programmed by the board** —
-because the board is the only thing in the system that knows what frame it is carrying. What it
-re-programs the port *from* depends on the board, and the difference is real hardware, not a
-house style:
+The program opens the host port at 9600 8N1, and then **the board sets it up again at once**,
+because only the board knows what frame it carries. Where the board gets the settings depends on
+the board, as on the real hardware:
 
-- On an **88-SIO** or an **88-ACR** the word format is a set of **jumpers**, so it is the
-  board's `baud`, `data_bits`, `stop_bits` and `parity` properties that become the frame on the
-  wire.
-- On an **88-2SIO** — the board in the example above — there are **no such properties, and there
-  must not be**: the 6850's word format is a *register the guest writes*. A property would be a
-  second place to say one thing, and the two would disagree the moment software touched the chip.
-  So the frame on the wire is whatever the **guest** last programmed, and a guest that selects
-  7E1 reconfigures the cable to 7E1.
+- On an **88-SIO** or an **88-ACR**, the word format is set with **jumpers**. The board's
+  `baud`, `data_bits`, `stop_bits` and `parity` properties become the frame on the line.
+- On an **88-2SIO**, the board in the example above, the baud rate is a jumper (`baud`), but the
+  **word format is a register that the guest writes**. The 6850 has no data-bits, stop-bits or
+  parity property, and it must not have one. A property would be a second place to set the same
+  thing, and the two would disagree as soon as the software wrote to the chip. For this reason,
+  the frame on the line is what the **guest** last set. A guest that selects 7E1 sets the cable
+  to 7E1.
 
-So if you want 300 baud, 7 bits, even parity going out of that connector, you do not
-configure it on the connector. You configure it on the **board**, where a 1975 operator would
-have set it, with a jumper. Modem control lines — DCD, CTS, RTS — are wired through.
+To send 300 baud, 7 bits and even parity out of that connector, you do not set it on the
+connector. You set it on the **board**, where an operator in 1975 set it, with a jumper. The
+modem control lines (DCD, CTS and RTS) are connected through.
 
-### And give the machine its real crystal before you transfer a file
+### Give the machine its real crystal before you transfer a file
 
 ```
 altairsim> SET cpu0 clock_hz=2000000
 ```
 
-The moment the wire leaves the machine, the guest is talking to something that keeps time the
-way *you* do — and it does not: it counts instructions, so flat out it retires a "three-second"
-timeout in milliseconds and decides your sender is dead. Flat out is right for a machine talking
-to itself; **a machine talking to you wants the crystal.** The troubleshooting chapter has the
-full story.
+When the line leaves the machine, the guest talks to something that keeps real time. The guest
+does not. It counts instructions, so at full speed, its "three-second" timeout passes in a few
+milliseconds, and it decides that your sender is dead. Full speed is correct for a machine that
+talks only to itself. **A machine that talks to you needs the crystal.** The troubleshooting
+chapter tells you more.
 
 ## A paper-tape reader and punch: `in:` and `out:`
 
-A serial or parallel line is where a **paper-tape station** lived, and `altairsim` gives you one
-out of two host files. The direction is the keyword, not a flag:
+A **paper-tape station** was connected to a serial or parallel line. `altairsim` makes one from
+two host files. The keyword gives the direction:
 
 ```
 altairsim> CONNECT lpt0:prn out:printout.txt          # a punch: capture what the board sends
@@ -240,56 +236,57 @@ altairsim> CONNECT 4pio0:ja in:reader.tap             # a reader: feed a file to
 altairsim> CONNECT 4pio0:ja in:reader.tap,out:punch.tap   # both, on one bidirectional line
 ```
 
-`in:` is a **reader** — a byte *source*. It reads the file from the start, hands the bytes to the
-board one at a time, and when the file runs out the line simply goes **quiet**: no error, no
-end-of-file byte, exactly as a reader with no more tape sits idle. A file that is not there is a
-clean refusal at `CONNECT`, with the path named.
+`in:` is a **reader**, a *source* of bytes. It reads the file from the start, and gives the
+bytes to the board one at a time. When the file ends, the line goes **quiet**, with no error and
+no end-of-file byte, as a reader with no more tape stops. If the file does not exist, `CONNECT`
+refuses, and names the path.
 
-`out:` is a **punch** — a byte *sink*. Whatever the board sends is written to the file. It does
-**not** truncate: it overwrites forward from the start and extends past the old end, so a short run
-into a longer old file leaves the old tail behind — the same as spooling fresh tape over a reel
-that still had some on it. An absent file is created.
+`out:` is a **punch**, a *sink* for bytes. The board's output is written to the file. The punch
+does **not** truncate the file. It writes from the start and continues past the old end. For
+this reason, a short run into a longer old file leaves the end of the old file there, as new
+tape wound onto a reel that still had some tape on it. If the file does not exist, the punch
+makes it.
 
-`in:` and `out:` are **separate files with separate positions**, so the combined form is two
-independent heads on one line — reading the tape cannot disturb what the punch has written, and
-vice versa. Both are **8-bit clean**: the bytes on the wire are the bytes in the file, control
-codes and all. Nothing reformats them. A relative path follows the usual rule: it resolves
-against the machine's directory, whether it is written in a machine configuration or you type it.
+`in:` and `out:` are **separate files, each with its own position**. The combined form is two
+independent heads on one line. A read of the tape cannot change what the punch wrote, and the
+other way around. Both are **8-bit clean**: the bytes on the line are the bytes in the file,
+with the control codes. Nothing changes them. A relative path starts from the machine's folder,
+in a machine file or typed at the prompt.
 
-### The 88-HSR — a reader with a speed
+### The 88-HSR: a reader with a speed
 
-A real paper-tape reader has a rate, and a program that times its input cares. Pace an `in:` reader
-with `?cps=N` (characters per second) or `?baud=N` (a line rate at 10 bits per character):
+A real paper-tape reader has a speed, and a program that times its input needs it. To pace an
+`in:` reader, add `?cps=N` (characters per second) or `?baud=N` (a line rate, at 10 bits per
+character):
 
 ```
 altairsim> CONNECT 4pio0:ja in:tape.tap?cps=300       # the 88-HSR high-speed reader
 altairsim> CONNECT 4pio0:ja in:tape.tap?cps=30        # the slow reader
 ```
 
-`in:tape.tap?cps=300` **is** the MITS 88-HSR. Give exactly one of `cps` or `baud`, and a positive
-rate. With neither, the reader runs flat out — the generic default. The punch takes no options; it
-writes at the line's own speed.
+`in:tape.tap?cps=300` **is** the MITS 88-HSR. Give only one of `cps` or `baud`, with a positive
+value. With neither, the reader runs as fast as possible. The punch takes no options. It writes
+at the speed of the line.
 
 ## Printing to a real printer
 
-Where your build was made with host printing, a line can go to a real print queue instead of a
-host file:
+When your build has host printing, a line can go to a real print queue instead of a file:
 
 ```
 altairsim> CONNECT lpt0:prn printer:linewriter
 ```
 
-Host printing is built on **macOS and Linux** today; the **Windows** builds do not have it yet, so
-on Windows `printer:` is absent and printing goes to a host file (`out:`) or a socket (`socket:`)
-instead. To see which your build has, connect to `printer:` with no name — it either lists the
-queues it can reach or tells you host printing is not in this build.
+The macOS and Linux builds have host printing. The **Windows** builds do not have it yet. On
+Windows, `printer:` is not available, and printing goes to a file (`out:`) or a socket
+(`socket:`) instead. To see what your build has, connect to `printer:` with no name. It lists
+the queues that it can reach, or tells you that this build has no host printing.
 
-`printer:` is a **write-only** sink like `out:`, and just as un-printer-specific — any line can
-use it, not only the [88-C700](boards.md). The difference is what happens to the bytes: they are
-held in a buffer and then handed to the host print system as one **job**.
+`printer:` is a **write-only** sink like `out:`, and like `out:` it is not only for printers.
+Any line can use it, not only the 88-C700 (see the boards chapter). The difference is what
+happens to the bytes. They go into a buffer, and then to the host print system as one **job**.
 
-**When does a job end?** A printer has no "done" signal — a program prints and then simply stops.
-So `altairsim` decides the boundary for you, and you can tune it in the endpoint itself:
+**When does a job end?** A printer has no "done" signal. A program prints and then stops. For
+this reason, `altairsim` decides where a job ends, and you can change this in the endpoint:
 
 | Option | Means | Default |
 |---|---|---|
@@ -303,33 +300,32 @@ altairsim> CONNECT lpt0:prn printer:linewriter?onff
 altairsim> CONNECT lpt0:prn "printer:Generic / Text Only?idle=0&onff"
 ```
 
-Write a bare option (`?onff`) to turn it on; the common case never types `=1`. The boundaries
-combine — the first to fire ends the job — and an **empty buffer never prints**, so a form feed
-followed by silence does not leave a blank page behind. A job also goes out when you `DISCONNECT`
-the line, load another machine, or quit, so nothing you printed is ever left un-sent.
+Write an option with no value (`?onff`) to turn it on. You do not need `=1`. The options
+combine, and the first one that applies ends the job. **An empty buffer never prints**, so a
+form feed and then silence does not print a blank page. A job also prints when you `DISCONNECT`
+the line, load another machine or quit, so nothing that you printed is lost.
 
-The queue must be one the host passes through **untouched** (a *raw* queue): a printer control
-language is not text, and a normal queue would try to reformat it. Creating that queue is a
-one-time step in your operating system's printer setup, outside `altairsim`. If a queue name
-contains spaces, quote the whole endpoint as shown above. Connect to `printer:` with no name and
-`altairsim` lists the queues it can see.
+The queue must be one that the host passes through **unchanged** (a *raw* queue). A printer
+control language is not text, and a normal queue would try to change it. You make that queue one
+time, in the printer settings of your operating system, not in `altairsim`. If a queue name
+contains spaces, put quotes around the whole endpoint, as above.
 
-Like `out:`, a printer line is **8-bit clean** — the bytes the program sent are the bytes the
-printer gets.
+Like `out:`, a printer line is **8-bit clean**. The printer gets the bytes that the program
+sent.
 
-## Tapping a line to a log file (a poor man's protocol analyzer)
+## Tapping a line to a log file
 
-When you are trying to work out what a guest and the far end are actually saying to each other,
-you want to *see the bytes*. Append **`|FILE`** to any endpoint and `altairsim` writes every
-byte that crosses the line — both directions — to a text file as it runs, in hex and ASCII, with
-timestamps. The guest cannot tell the tap is there, and it never changes a byte, so it is safe on
+To see what a guest and the far end send to each other, you need to *see the bytes*. Add
+**`|FILE`** to any endpoint, and `altairsim` writes every byte that crosses the line, in both
+directions, to a text file as it runs. It writes hex and ASCII, with times. The guest cannot
+tell that the tap is there, and the tap never changes a byte. For this reason, you can use it on
 a binary transfer as well as on a terminal.
 
 ```
 altairsim> CONNECT sio0:b socket:2323|bbs.hex
 ```
 
-Telnet in, drive the guest, and `bbs.hex` fills with the conversation:
+Use telnet to connect, use the guest, and `bbs.hex` fills with the conversation:
 
 ```
 # altairsim capture  socket:2323  2026-07-29 14:03:11  fmt=dump
@@ -339,82 +335,88 @@ Telnet in, drive the guest, and `bbs.hex` fills with the conversation:
 +45.30000  [DTR_]
 ```
 
-`TX` is what the guest sent, `RX` what came back; the offset counts bytes within a burst, and the
-right-hand column is the ASCII (a `.` for anything unprintable). Lines in `[...]` are **modem
-control-line** edges — carrier, DTR, RTS and the rest — logged as they change, with `^` for a
-rising edge and `_` for a falling one, so you can see the far end pick up and hang up.
+- `TX` is what the guest sent, and `RX` is what came back.
+- The offset counts the bytes in a burst.
+- The right-hand column is the ASCII, with a `.` for a character that cannot be printed.
+- A line in `[...]` is a change on a **modem control line**, such as carrier, DTR or RTS. `^` is
+  a rising edge, and `_` is a falling edge, so you can see the far end answer and hang up.
 
-The file is truncated each time you connect: a capture is a fresh trace, not an append. The whole
-tap is remembered — `SHOW` prints it and `CONFIG SAVE` writes it back — so a machine file can carry
-a line that is permanently traced.
+The program empties the file each time that you connect. Each capture is a new trace. The
+program keeps the whole tap: `SHOW` prints it, and `CONFIG SAVE` writes it. For this reason, a
+machine file can have a line that is always traced.
 
-### Three layouts, and a few knobs
+### Three layouts, and some options
 
-The tap's options ride the same `?key=value` grammar the other endpoints use, after the file name:
+The tap takes options with the same `?key=value` form as the other endpoints, after the file
+name:
 
 ```
 altairsim> CONNECT sio0:b socket:2323|bbs.hex?fmt=cols
 altairsim> CONNECT sio0:b in:reader.tap?cps=300|trace.log?fmt=jsonl
 ```
 
-- **`fmt=dump`** (the default) is the layout above: one hex row per line, strictly in time order —
-  the easy one to read, and the easy one to `grep`.
-- **`fmt=cols`** puts what the guest sent on the **left** and what it received on the **right**, so a
-  request and its reply read down the page like a transcript.
-- **`fmt=jsonl`** writes one JSON record per transfer — for feeding another program, diffing two
-  runs, or importing into a spreadsheet.
+- **`fmt=dump`** (the default) is the layout above. It has one hex row on each line, in time
+  order. It is easy to read, and easy to search with `grep`.
+- **`fmt=cols`** puts what the guest sent on the **left**, and what it received on the
+  **right**. A request and its reply read down the page like a transcript.
+- **`fmt=jsonl`** writes one JSON record for each transfer. Use it to give the trace to another
+  program, to compare two runs, or to import it into a spreadsheet.
 
-The rest, all optional: `ts=elapsed` (the default — seconds since the first byte), `ts=wall` (the
-host clock), or `ts=none`; `width=N` bytes per hex row (default 16); `gap=MS` for how long a quiet
-line waits before a partial row is flushed (default 200 ms); and `pins=off` to leave the modem
-control-line edges out. Note that the second example taps a **paced paper-tape reader** — the tap
-composes with any endpoint, options and all.
+The other options are all optional:
+
+- `ts=elapsed` (the default, seconds since the first byte), `ts=wall` (the host clock), or
+  `ts=none`
+- `width=N`: the bytes in each hex row (default 16)
+- `gap=MS`: how long a quiet line waits before it writes a partial row (default 200 ms)
+- `pins=off`: leave out the changes on the modem control lines
+
+The second example taps a **paced paper-tape reader**. The tap works with any endpoint, and with
+that endpoint's options.
 
 ## Mirroring a line so a person can watch and take over
 
-A tap writes to a file. A **mirror** writes to a *socket*, and it is a two-way wire: append
-`|socket:PORT` to any endpoint and a second person can `telnet localhost PORT` to watch the very
-session the machine is having — every character the guest prints — and **type back onto the line**,
-sharing it.
+A tap writes to a file. A **mirror** writes to a *socket*, in both directions. Add
+`|socket:PORT` to any endpoint, and a second person can type `telnet localhost PORT` to watch
+the session of the machine, with every character that the guest prints. That person can also
+**type on the line**, and share it.
 
 ```
 altairsim> CONNECT sio0:a console|socket:2323
 ```
 
-Now the guest talks to your terminal as before, and anyone who telnets to port 2323 sees the same
-output and can join in at the keyboard. It is the same idea as the tap — a modifier that composes
-with any endpoint — but where the tap only listens, the mirror also speaks. The everyday use is a
-console being driven by a program: a person telnets in, watches it work, and takes the keyboard
-when they want to.
+The guest talks to your terminal as before. Anyone who connects to port 2323 with telnet sees
+the same output, and can type too. A mirror is like a tap: it works with any endpoint. A tap
+only listens, but a mirror also speaks. The common use is a console that a program drives. A
+person connects, watches the program work, and takes the keyboard when they want to.
 
-There is no echo added by the mirror. What the watcher sees is exactly what the guest sends, and
-what the watcher types is input the guest reads — so if the guest echoes (a monitor, CP/M), the
-typed characters come back the ordinary way, and a password the guest does *not* echo stays unseen
-at the mirror too. One watcher at a time, the same as a serial line is one wire.
+The mirror adds no echo. The watcher sees what the guest sends, and what the watcher types goes
+to the guest. If the guest echoes (a monitor or CP/M, for example), the typed characters come
+back in the usual way. A password that the guest does *not* echo also stays hidden at the
+mirror. One watcher can connect at a time, as a serial line is one wire.
 
-Add `?ro` to make it **watch-only** — a spectator who cannot touch the keyboard:
+Add `?ro` to make the mirror **watch-only**. The watcher then cannot type:
 
 ```
 altairsim> CONNECT sio0:a console|socket:2323?ro
 ```
 
-The watcher never sets the pace. If a watcher's connection is slow, or they pause their terminal,
-the guest runs on regardless — a laggy watcher loses a little scrollback, never a byte of the
-guest's. Like the tap, the mirror is remembered: `SHOW` prints it and `CONFIG SAVE` writes it back.
+The watcher never sets the speed. If a watcher's connection is slow, or they pause their
+terminal, the guest continues. A slow watcher loses a little output, and the guest loses no
+bytes. Like the tap, the program keeps the mirror: `SHOW` prints it, and `CONFIG SAVE` writes
+it.
 
-## A `CONNECT` it does not understand is an error
+## An endpoint that `CONNECT` does not understand is an error
 
-If `altairsim` cannot make sense of your endpoint, it **refuses, and tells you what it could
-have meant.** It never quietly falls back to `null`.
+If `altairsim` cannot read your endpoint, it **refuses, and lists the forms that it accepts.**
+It never uses `null` instead without telling you.
 
-This matters more than it sounds like it does. A silent fallback gives you a machine that
-boots, runs, prints nothing, and hands you a dead terminal to debug — and you will debug the
-guest, and the board, and the disk, before you think to doubt the thing you typed. A refusal
-is a worse morning for exactly two seconds. A dead terminal is a worse afternoon.
+If it did, you would have a machine that boots, runs and prints nothing. You would look for the
+fault in the guest, the board and the disk before you looked at what you typed. An error message
+shows the mistake at once.
 
-## Exactly one unit may hold the console
+## Only one unit can hold the console
 
-The console is **your keyboard**, and there is one of it.
+The console is **your keyboard**, and you have one.
 
 ```
 altairsim> CONNECT sio1:a console
@@ -422,45 +424,41 @@ console taken from sio0:a
 sio1:a: connected to console
 ```
 
-Connecting a second unit to `console` **steals it, and says who it took it from.** It is not
-an error and it is not shared. Two boards reading one keyboard would each get roughly half
-the characters, in an order neither of them could predict, and the resulting machine would
-appear to be haunted.
+When you connect a second unit to `console`, **it takes the console, and says which unit it took
+it from.** This is not an error, and the console is not shared. If two boards read one keyboard,
+each one would get about half the characters, in an order that neither could predict.
 
-To see who has it:
+To see which unit has it:
 
 ```
 altairsim> SHOW CONSOLE
 ```
 
-That also shows the transforms, which is the rest of this chapter.
+This also shows the transforms, which the rest of this chapter describes.
 
-## The transform chain belongs to the console
+## The transforms belong to the console
 
-This is the most important rule in the chapter, and it is worth stating twice before
-explaining it.
+This is the most important rule in the chapter:
 
-**The `[console]` settings are the only thing in the simulator that alters a byte. Every
-serial LINE is 8-bit clean. There is no knob anywhere on any board that masks a bit.**
+**The `[console]` settings are the only part of the simulator that changes a byte. Every serial
+LINE is 8-bit clean. No board has a setting that masks a bit.**
 
-They belong to the console, so they stop where the console does. Send a board's console unit
-down a `socket:` or a real `serial:` port and the far end gets the bytes as the guest wrote
-them — see *Where the transforms stop*, below, because it is the same rule and it surprises
-people.
+The settings belong to the console, so they stop where the console stops. See *Where the
+transforms stop*, below.
 
 | Setting | Does |
 |---|---|
-| `upper` | folds what you type to upper case |
+| `upper` | changes what you type to upper case |
 | `strip7in` | clears bit 7 of every character you type |
 | `strip7out` | clears bit 7 of every character the guest prints |
 | `crlf` | translates line endings |
-| `echo` | echoes your keystrokes locally |
-| `bell` | rings the terminal bell on `^G` |
-| `bsdel` | folds backspace and delete together: `off` (default), `bs` (send BS for both), or `del` (send DEL for both) |
-| `stop` | which control character is the STOP key (default `^E`; `attn` is an accepted alias) |
-| `base` | `hex` or `octal` — the base the **monitor** prints numbers in. Not a transform: it changes nothing about a byte crossing the console, only how a number is spelled back to you. The *Monitor* document has it. |
+| `echo` | shows your keys locally |
+| `bell` | rings the terminal bell on `Ctrl-G` |
+| `bsdel` | makes Backspace and Delete send the same code: `off` (default), `bs` (send BS for both), or `del` (send DEL for both) |
+| `stop` | the control character that is the STOP key (default `Ctrl-E`; `attn` is the same setting) |
+| `base` | `hex` or `octal`: how the **monitor** prints numbers. This is not a transform. *The Monitor* describes it |
 
-Set them with `CONSOLE k=v`. (`SET CONSOLE k=v` is the same thing said longer.)
+Set them with `CONSOLE k=v`. `SET CONSOLE k=v` does the same thing.
 
 ```
 altairsim> CONSOLE strip7out=on
@@ -468,40 +466,39 @@ altairsim> CONSOLE upper=on crlf=off
 altairsim> CONSOLE stop=1D
 ```
 
-`stop=1D` moves the escape key from `^E` to `^]`. **It must be a control character** — a
-STOP key you can type by accident in the middle of a sentence is not an escape key, it is a
-trap.
+`stop=1D` moves the STOP key from `Ctrl-E` to `Ctrl-]`. **It must be a control character.** A
+STOP key that you can type by accident in the middle of a sentence would stop the machine when
+you do not want it to.
 
 ### Why it works this way: `MEMORY SIZ?`
 
-Boot MITS BASIC with the transforms off and it asks you:
+Boot MITS BASIC with the transforms off, and it asks:
 
 ```
 MEMORY SIZ?
 ```
 
-The `E` is missing, and there is a garbage character where it should be. BASIC is not
-broken. **MITS BASIC sets bit 7 of the last character of every message**, as a string
-terminator — that is how it knows where a string ends — and it sends it. `E` is `45`; with
-bit 7 set it is `C5`, and your terminal prints whatever `C5` happens to mean to it.
+The `E` is missing, and there is a wrong character in its place. BASIC is not broken. **MITS
+BASIC sets bit 7 of the last character of every message**, to mark the end of the string, and it
+sends that character. `E` is `45`. With bit 7 set, it is `C5`, and your terminal prints whatever
+`C5` means to it.
 
-The fix is `CONSOLE strip7out=on`, and the reason the fix lives *there* is the whole
-argument:
+The fix is `CONSOLE strip7out=on`, and the reason that the fix is *there* is the whole argument:
 
-**On the real machine, the card sent all eight bits.** Nothing masked anything. The card
-put `C5` on the wire because that is the byte BASIC handed it. The Teletype on the other end
-simply **did not look at bit 7** — on a Model 33, that is the parity position, and the
-printing mechanism does not decode it. It printed `E` and threw the eighth bit on the floor.
+**On the real machine, the board sent all eight bits.** Nothing masked anything. The board put
+`C5` on the line, because BASIC gave it that byte. The Teletype at the other end **did not read
+bit 7**. On a Model 33, bit 7 is the parity position, and the printer does not decode it. It
+printed `E`, and ignored the eighth bit.
 
-Nothing was masked. Something on the far end did not look. **`strip7out` is the terminal not
-looking.** It is a property of the thing you are sitting at, and it belongs on the thing you
-are sitting at.
+Nothing was masked. The device at the far end did not read the bit. **`strip7out` is the
+terminal that does not read bit 7.** It is a property of the device that you use, and it belongs
+on that device.
 
 ### Where the transforms stop
 
-Follow that argument one step further and it tells you something the first time it happens is
-alarming. If `strip7out` is your terminal not looking at bit 7, then the moment your terminal
-is **not** the thing on the far end, there is nothing there to do the not-looking:
+This argument also explains something that can surprise you the first time. If `strip7out` is
+your terminal not reading bit 7, then when your terminal is **not** at the far end, nothing
+ignores the bit:
 
 ```
 altairsim> CONSOLE strip7out=on
@@ -509,82 +506,78 @@ altairsim> CONNECT sio0:a socket:2323
 sio0:a: connected to socket:2323
 ```
 
-Telnet in, and `MEMORY SIZ?` is back — garbage character and all, exactly as though you had
-never set `strip7out`. The same is true of `upper`, `crlf`, `echo`, `bell` and `bsdel`, and it
-is true of a `serial:` port as well as a socket.
+Connect with telnet, and `MEMORY SIZ?` is back, with the wrong character, as if you had never
+set `strip7out`. The same is true of `upper`, `crlf`, `echo`, `bell` and `bsdel`, and of a
+`serial:` port as well as a socket.
 
-**Nothing has been undone.** The console settings are still on and still doing their job; the
-byte simply no longer goes through the console. It goes 2SIO → socket → your telnet client,
-and every hop on that path is 8-bit clean — which is the rule at the top of this section, not
-an exception to it. A transform that *did* travel down the cable would be a filter on a line,
-and the previous two sections are about why that is the one thing this simulator will not do.
+**Nothing was undone.** The console settings are still on, and they still work. The byte no
+longer goes through the console. It goes from the 2SIO to the socket to your telnet client, and
+every step on that path is 8-bit clean. That is the rule above, not an exception to it.
 
-So set the equivalent where it now belongs — on the terminal that is actually displaying the
-text. Every terminal emulator and telnet client has these, under its own names: strip parity or
-7-bit display for `strip7out`, local echo for `echo`, newline or CR/LF handling for `crlf`.
-That is not a workaround; it is the same fix in the same place, one machine further out.
+Set the same thing where it now belongs, on the terminal that shows the text. Every terminal
+emulator and telnet client has these settings, under its own names: strip parity or 7-bit
+display for `strip7out`, local echo for `echo`, and newline or CR/LF handling for `crlf`. It is
+the same fix in the same kind of place, one device further out.
 
-### The built-in terminal has these too — in `[terminal]`
+### The built-in terminal has these too, in `[terminal]`
 
-There is one terminal one machine further out that *is* the simulator's: the built-in
-`terminal` window from *A terminal in its own window*, above. It draws the text itself, so it
-is the simulator that must do the not-looking — and it gives you the same knobs the console
-has, under `[terminal]` instead of `[console]`:
+One terminal further out *is* part of the simulator: the built-in `terminal` window (see *A
+terminal in its own window*, above). It draws the text itself, so the simulator must ignore the
+bit. It has the same settings as the console, under `[terminal]` instead of `[console]`:
 
 | Setting | Does |
 |---|---|
-| `upper` | folds what you type to upper case |
+| `upper` | changes what you type to upper case |
 | `strip7in` | clears bit 7 of every character you type |
 | `strip7out` | clears bit 7 of every character the guest prints |
 | `cr` | `cr` (default, pass the guest's CR through) or `crlf` (add an LF after every CR) |
-| `echo` | echoes your keystrokes locally, for half-duplex software |
-| `bell` | passes `^G` through to the terminal (default on) |
-| `bsdel` | folds backspace and delete together: `off` (default), `bs`, or `del` |
+| `echo` | shows your keys locally, for half-duplex software |
+| `bell` | passes `Ctrl-G` through to the terminal (default on) |
+| `bsdel` | makes Backspace and Delete send the same code: `off` (default), `bs`, or `del` |
 
-Set them with `SET TERMINAL k=v`, read them back with `SHOW TERMINAL`, or put a `[terminal]`
-block in a machine file. Like `[console]`, it is one section for the machine — the window it
-applies to is whichever `terminal` line is open.
+Set them with `SET TERMINAL k=v`, read them with `SHOW TERMINAL`, or put a `[terminal]` block in
+a machine file. Like `[console]`, it is one section for the machine. It applies to whichever
+`terminal` line is open.
 
 ```
 altairsim> CONNECT sio0:a terminal
 altairsim> SET TERMINAL strip7out=on
 ```
 
-`strip7out` earns its keep here on an **even-parity monitor** — the MITS Programming System II
-computes parity *into* bit 7 of every character, so it sends a carriage return as `8D`. To a
-console that is masked away; to the raw terminal window `8D` is not `0D`, so it prints as a
-glyph and the cursor never returns to the left — every line feeds without a carriage return.
-`strip7out=on` is the fix, exactly as it is for BASIC's prompt. `cr=crlf` is the neighbouring
-tool, for the rarer guest that sends a bare CR and expects the terminal to supply the LF.
+`strip7out` is useful here for an **even-parity monitor**. MITS Programming System II puts
+parity *into* bit 7 of every character, so it sends a carriage return as `8D`. The console masks
+this. In the terminal window, `8D` is not `0D`, so it shows as a character, and the cursor never
+goes back to the left. Every line feeds without a carriage return. `strip7out=on` fixes this, as
+it fixes BASIC's prompt. `cr=crlf` is a related setting, for a guest that sends a CR alone and
+expects the terminal to add the LF.
 
-STOP is the other half of the same fact: it is intercepted at **your keyboard**, before any
-board is offered the byte, and it is never looked for on a socket or a serial line. A `05`
-arriving down a cable is a byte of somebody's protocol, and scanning a modem line for a key
-that exists only on the operator's terminal would corrupt data rather than help.
+The STOP key works in the same way. The program reads it at **your keyboard**, before any board
+gets the byte, and never looks for it on a socket or a serial line. A `05` that comes down a
+cable is part of somebody's protocol. If the program looked for a STOP key on a modem line, it
+would change data.
 
-What *does* travel is the board's own line coding — baud, data bits, parity, stop bits — because
-that belongs to the board and not to you. That is the section after next.
+What *does* go down the line is the board's own line coding: baud, data bits, parity and stop
+bits. This belongs to the board, not to you. The section after next describes it.
 
-### Why not just strap the board to 7 bits
+### Why not strap the board to 7 bits
 
-Because it would work, and then it would silently destroy your data.
+It would work, and then it would change your data without telling you.
 
-Set a 7-bit mask on the board — or a filter on the line — and BASIC's prompt comes out clean.
-It also **silently corrupts every XMODEM transfer through that port**, because XMODEM sends
-binary, every byte of it matters, and bit 7 is a real bit in half of them. The file arrives.
-The checksums even pass on a bad packet often enough to be maddening. And the corruption is
-in the *plumbing*, which is the last place anyone looks.
+Set a 7-bit mask on the board, or a filter on the line, and BASIC's prompt is correct. It also
+**damages every XMODEM transfer through that port**, because XMODEM sends binary data. Every
+byte is important, and bit 7 is a real bit in half of them. The file arrives, and the checksum
+sometimes passes on a bad packet. The fault is in the connection, which is the last place that
+anyone looks.
 
-**A line may carry binary. A terminal is not a line.** The transform belongs to the terminal
-because only the terminal knows it is displaying text.
+**A line can carry binary. A terminal is not a line.** The transform belongs to the terminal,
+because only the terminal knows that it shows text.
 
-### `data_bits` and `parity` are real hardware, and are not this
+### `data_bits` and `parity` are real hardware, and they are different
 
-A board genuinely does have `data_bits`, `stop_bits` and `parity`, and they are genuinely
-configurable, because a 6850 genuinely has those straps. They are **a FRAME** — they describe
-what physically travels down the wire, bit by bit, and on a real serial port they are what
-the far end must agree to or it will read garbage.
+The 88-SIO and the 88-ACR have `data_bits`, `stop_bits` and `parity` properties, because those
+boards set them with jumpers. They are **a FRAME**. They describe what goes down the line, bit
+by bit. On a real serial port, the far end must use the same frame, or it reads wrong data.
 
-They are never a mask. `data_bits=7` is not "and the byte with `7F`". It is "put seven data
-bits in the frame", which is a statement about the wire, not about the byte the guest wrote.
-Do not reach for it to fix a prompt.
+They are never a mask. `data_bits=7` does not mean "AND the byte with `7F`". It means "put seven
+data bits in the frame", which describes the line, not the byte that the guest wrote. Do not use
+it to fix a prompt.

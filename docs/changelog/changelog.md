@@ -47,7 +47,9 @@ disk image. The `pb1` section no longer depends on an example that is not in the
 that its default control port is the same as the 2SIO's. *Disks* no longer says that the CP/M disk hides
 most of its files from `DIR`, or that a path you type starts from your shell. It now says that
 the package has a hard-disk image too. *Tapes* now says which machine to start before you load 4K BASIC by
-hand, and it points to the Boards chapter for the sense switches.
+hand, and it points to the Boards chapter for the sense switches. *Serial ports, sockets and telnet* now says
+that the 2SIO's baud rate is a jumper, and that the format jumpers are on the 88-SIO and 88-ACR,
+not on the 6850.
 
 ### SHOW BOARDS fits on a screen
 
