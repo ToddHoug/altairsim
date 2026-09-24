@@ -31,7 +31,8 @@ The User Manual is being rewritten in the same shorter, simpler sentences as *Th
 *The Debugger*, one chapter at a time. *What altairsim is* now names *The Monitor* and *The
 Debugger* as the documents that describe the monitor's commands. *What is in the package* now
 says where the Developer Guide is (with the source, not on the release page), and it describes
-the version line as the program prints it today.
+the version line as the program prints it today. *Running it* now shows the Windows command,
+and it says that `-x BOARDS` loads a machine to look at it, not that it boots one.
 
 ### SHOW BOARDS fits on a screen
 
