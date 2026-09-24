@@ -51,7 +51,8 @@ hand, and it points to the Boards chapter for the sense switches. *Serial ports,
 that the 2SIO's baud rate is a jumper, and that the format jumpers are on the 88-SIO and 88-ACR,
 not on the 6850. *Moving files in and out* now says that a relative `hostdir` starts from the
 machine's folder whether you type it or write it in the file, and its `LOAD R` sample matches the
-current `R.HEX`.
+current `R.HEX`. *Worked examples* now shows the real `DIR` listings of the CP/M and hard disks,
+and says that `rate=real`, not the processor clock, makes a tape load at its real speed.
 
 ### SHOW BOARDS fits on a screen
 
