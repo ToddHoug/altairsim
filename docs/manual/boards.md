@@ -552,85 +552,95 @@ Boards that read and write cassette tape.
 
 ## `acr` — MITS 88-ACR
 
-The **cassette interface**: an 88-SIO channel B with an FSK modem on the end of it, so a byte on the
-bus becomes an audible tone on a tape and back again. Unit `tape`, default port `06`, and it runs at
-300 baud because that is what an audio cassette could carry.
+The **cassette interface**. It is an 88-SIO channel B with an FSK modem, so a byte on the bus
+becomes a tone on a tape, and a tone becomes a byte again. It has unit `tape` and default port
+`06`. It runs at 300 baud, because that is what an audio cassette could carry.
 
-It brings verbs of its own — **`WIND`**, **`REWIND`** and **`EXTRACT`**. The first two are there
-because a tape has a **position** and a disk does not, and pretending otherwise would help nobody:
-`WIND` puts the head at a time on the tape (`mm:ss`, or `START` / `END`), so a tape holding several
-programs one after another is reachable, `REWIND` is the common case of `WIND START`, and `SHOW`
-reads the counter back the same way. **`EXTRACT`** is a different job — it demodulates a mounted
-`.WAV` and writes each program it finds out as its own `.TAP` file, so an audio recording becomes
-something you can mount directly.
+The board adds three commands: **`WIND`**, **`REWIND`** and **`EXTRACT`**.
 
-This is the board that shows you what an Altair actually was: no disk, no PROM, a bootstrap you
-toggle in by hand, and eight minutes of listening to a cassette. **The tapes chapter is the one to
-read**, and Altair 4K BASIC 3.1 is the machine to run.
+- A tape has a **position**, and a disk does not. **`WIND`** moves the head to a time on the
+  tape (`mm:ss`, or `START` or `END`). Use it to reach one program on a tape that holds several.
+- **`REWIND`** is the same as `WIND START`.
+- **`EXTRACT`** reads a mounted `.WAV` file, and writes each program that it finds to its own
+  `.TAP` file. You can then mount the `.TAP` file directly.
+
+`SHOW` gives the tape counter in the same form as `WIND`.
+
+With this board, an Altair needs no disk and no PROM. You enter a bootstrap by hand and load the
+program from a cassette. **Read the tapes chapter** for the details, and run Altair 4K BASIC
+3.1.
 
 ---
 
 ## `uio` — MITS 88-UIO
 
-**A serial port and a cassette interface on one board** — the Universal I/O card, which is very
-nearly what a 2SIO channel and an 88-ACR are when you put them on the same card and let them share
-the parts. It comes up looking like the two boards it replaces: a **6850 serial port** at `10`
-(unit `serial`) and a **cassette section** at `06` (unit `tape`), the standard addresses, so
-software that expects a 2SIO console and an ACR tape finds both where it left them.
+**A serial port and a cassette interface on one board.** The Universal I/O board is almost a
+2SIO channel and an 88-ACR on the same board, with some parts shared. It has the same addresses
+as the two boards that it replaces: a **6850 serial port** at `10` (unit `serial`) and a
+**cassette section** at `06` (unit `tape`). Software that expects a 2SIO console and an ACR tape
+finds both.
 
-What it adds over two separate cards is **motor control** and a **modulation switch**. `SW-1`
-chooses between the two encodings the era used — the MITS 300-baud format and the Kansas City
-standard — because the UIO was sold to talk to either. The tape half brings the same
-`WIND`/`REWIND`/`EXTRACT` verbs and the position counter the 88-ACR does.
+It adds **motor control** and a **modulation switch**. `SW-1` selects one of the two encodings
+of the period: the MITS 300-baud format or the Kansas City standard. The tape section has the
+same `WIND`, `REWIND` and `EXTRACT` commands and the same tape counter as the 88-ACR.
 
 ---
 
 ## Printers
 
-Line-printer controllers — each captures its output to a file or a print queue.
+Line-printer controllers. Each one sends its output to a file or to a print queue.
 
 ## `c700` — MITS 88-C700
 
-The **line-printer controller**: an output-only board that sends characters to an Altair C700
-printer. Unit `prn`, default port `02` — the MITS default, with Control/Status at `02` and Data
-at `03`.
+The **line-printer controller**, an output-only board for an Altair C700 printer. It has unit
+`prn` and default port `02`, which is the MITS default: control and status at `02`, data at
+`03`.
 
-There is no printer in the box, so **`CONNECT` its `prn` line wherever you want the output**: a
-file (`CONNECT lpt0:prn out:printout.txt`), the `console` to watch it print live, a `socket:`, a
-real `serial:` printer, or a **real print queue on your host** (`CONNECT lpt0:prn
-printer:linewriter`) — that last one where your build found a print system, and the serial chapter
-has the job-submission options. The capture is byte-for-byte — the bytes the program sent, control
-codes and all, not a reformatted page.
+The package has no printer, so **`CONNECT` the `prn` line to where you want the output**:
 
-Drive it **polled or on interrupts**. Polled: write a character to the data port (`03`), then poll
-the status port (`02`, bit 0 ACKNOWLEDGE, set = ready) before the next. Or arm its **single-level
-interrupt** (control bit 1) and let the printer interrupt the CPU each time it takes a byte, so the
-handler just feeds the next one. The `interrupt` strap picks the wire — pin 73 (`int`, the default),
-a vectored-interrupt level (`vi0`..`vi7`), or `none`; `interrupt_after` is the card's SW2 #4,
-firing after every character or only after a CR/LF.
+- a file: `CONNECT lpt0:prn out:printout.txt`
+- the `console`, to see it print while it runs
+- a `socket:`
+- a real `serial:` printer
+- a **real print queue on your computer**: `CONNECT lpt0:prn printer:linewriter`. This works
+  when your build found a print system. The serial chapter gives the options.
 
-The **`lineprinter`** machine is `default` with one of these already fitted; its output starts on
-`null`, so `CONNECT lpt0:prn out:printout.txt` to capture it to a file, or `console` to watch it
-live (that takes the console from the terminal).
+The output is the exact bytes that the program sent, with the control codes. It is not a
+formatted page.
+
+You can use the board **polled or with interrupts**:
+
+- **Polled:** write a character to the data port (`03`). Before the next character, read the
+  status port (`02`) until bit 0, ACKNOWLEDGE, is set.
+- **Interrupts:** set control bit 1 to turn on its **single-level interrupt**. The printer then
+  interrupts the processor each time it takes a byte, and the handler sends the next byte.
+
+The `interrupt` strap selects the line: pin 73 (`int`, the default), a vectored interrupt level
+(`vi0` to `vi7`), or `none`. `interrupt_after` is switch SW2 #4 of the board. It sets whether
+the interrupt comes after every character, or only after a CR or LF.
+
+The **`lineprinter`** machine is `default` with one of these boards added. Its output starts on
+`null`. To capture it, type `CONNECT lpt0:prn out:printout.txt`. To see it, connect it to
+`console`, which takes the console from the terminal.
 
 ---
 
 ## `lpc` — MITS 88-LPC
 
-The **other** line-printer controller — for the 88-LP printer, where the `c700` drives the C700.
-Same two-port shape (control at an even base, data above it; MITS default `02`), but it drives the
-mechanism the way it really worked, and the difference shows in what you capture.
+The **other** line-printer controller, for the 88-LP printer. The `c700` drives the C700
+printer. The `lpc` has the same two ports: control at an even base and data above it, with the
+MITS default `02`. It drives the printer as the real one worked, and the output shows the
+difference.
 
-The C700 is a **transparent byte pipe**: the bytes the program sends are the bytes you get, control
-codes and all. The **LPC is line-buffered**. The guest loads a **6-bit character code** at a time
-into an **80-character line buffer**, and nothing prints until it sends a **PRINT** command — or the
-buffer fills. **LINE FEED** and **CLEAR** are commands too. So the capture is the printed *page* —
-the codes decoded to their glyphs, one text line per printed line — not a byte stream, because on
-this board the line breaks are commands, not data.
+The C700 **passes every byte through**. The LPC **prints a line at a time**. The guest loads a
+**6-bit character code** at a time into an **80-character line buffer**. Nothing prints until
+the guest sends a **PRINT** command, or the buffer is full. **LINE FEED** and **CLEAR** are also
+commands. For this reason, the output is the printed *page*: the codes changed to characters,
+one text line for each printed line. On this board, the line breaks are commands, not data.
 
-`CONNECT` its `prn` line wherever a line can go — an `out:` file, the `console`, a `socket:`, a real
-`printer:` queue. The **`lineprinter-lpc`** machine has one fitted at `02`, its output on `null`
-until you `CONNECT` it. It is polled; unlike the `c700`, this card's interrupt is not modeled.
+`CONNECT` its `prn` line to an `out:` file, the `console`, a `socket:` or a real `printer:`
+queue. The **`lineprinter-lpc`** machine has one at `02`, with its output on `null` until you
+`CONNECT` it. The board is polled. The interrupt of the real board is not modeled.
 
 ---
 
@@ -640,77 +650,80 @@ Parallel ports, and one board that also reads analog inputs.
 
 ## `pio` — MITS 88-PIO
 
-An **8-bit parallel port**, in and out — the simplest way to move a byte that is not a serial
-character. It has **two lines you `CONNECT` independently**: `out` (an output device — a printer, a
-socket) and `in` (an input device — a keyboard, another socket), so one board can punch to an
-`out:` file *and* read a keyboard off the `console` at once, because the two directions are two
-separate connections. Default ports `04`/`05`. It is **polled**: a byte moves when a driver polls the
-status port for it.
+An **8-bit parallel port**, in and out. It is the simplest way to move a byte that is not a
+serial character. It has **two lines that you connect separately**: `out` for an output device
+(a printer or a socket), and `in` for an input device (a keyboard or another socket). For
+example, one board can write to an `out:` file and read a keyboard from the `console` at the
+same time. The default ports are `04` and `05`. The board is **polled**. A byte moves when a
+driver reads the status port for it.
 
 ---
 
 ## `4pio` — MITS 88-4PIO
 
-The programmable cousin of the `pio`: up to **four Motorola 6820 PIAs** on one card, whose **data
-direction the guest sets in software** rather than the board fixing it. Each populated port is a
-section — `ja`, `jb`, and so on — and each section is its own connectable line, so a card with two
-PIAs fitted gives you several independent ports to `CONNECT`. Sixteen ports from a default base of
-`20`. Polled, like the `pio`.
+The programmable version of the `pio`. It has up to **four Motorola 6820 PIAs** on one board,
+and **the guest sets the direction of each port in software**. Each port is a section (`ja`,
+`jb` and so on), and each section is a line that you can connect. It uses sixteen ports from a
+default base of `20`. It is polled, like the `pio`.
 
-Between them the two parallel boards cover the span from *a fixed eight bits each way* to *however
-the software wants it configured* — the same range the real MITS parallel line did. The
-**`parallel`** machine has a `pio` fitted and capturing to a file.
+The `pio` has a fixed eight bits each way. The `4pio` can be set up as the software needs. The
+**`parallel`** machine has both boards, and the `pio` sends its output to a file.
 
 ---
 
 ## `d7a` — Cromemco D+7A
 
-An **analog and parallel I/O card** — one parallel port and **seven analog channels** in a block of
-eight ports (default base `18`). Each analog channel is an **A/D converter when you read it and a
-D/A converter when you write it**, in 8-bit two's-complement: `00` is 0 V, `7F` about +2.5 V, `80`
-about −2.5 V. On a real bench it read sensors and drove instruments.
+An **analog and parallel I/O board**. It has one parallel port and **seven analog channels**, in
+a block of eight ports (default base `18`). Each analog channel is an **A/D converter when you
+read it and a D/A converter when you write it**, in 8-bit two's complement: `00` is 0 V, `7F` is
+about +2.5 V, and `80` is about −2.5 V. On a real bench, it read sensors and drove instruments.
 
-Here its job is the input end of a **game console**. It reads **one or two JS-1 joysticks**: the X
-and Y pots on analog channels, and the four buttons — **active-low** — packed into the parallel byte,
-low nibble for one stick, high nibble for the other. The sticks come from your host through the same
-kind of injected service the display uses: a **USB gamepad** where SDL3 is present, or the
-**keyboard** as a fallback (arrows and a few keys), and nothing at all in a headless build, which
-still runs.
+Here, it is the input of a **game console**. It reads **one or two JS-1 joysticks**. The X and Y
+controls go to analog channels. The four buttons of each stick are **active-low** bits in the
+parallel byte: the low four bits for one stick, and the high four bits for the other. The sticks
+come from a **USB gamepad** on your computer, or from the **keyboard** (the arrow keys and a few
+other keys) when there is no gamepad.
 
-`joystick1`/`joystick2` choose which host device drives each console. Both default to `auto`,
-which claims a **different** gamepad per console — console 1 takes gamepad 0, console 2 gamepad 1 —
-so two controllers work with no configuration, each falling back to the keyboard when its gamepad
-is absent. `SHOW <id>` shows what each console currently resolves to (a named controller, the
-keyboard, or nothing), and `SHOW JOYSTICKS` lists the controllers your host actually sees. The
-Dazzler examples in `examples/` pair the board with color graphics and set the video window to be a
-**display, not a keyboard** (`[display] keyboard = none`), so your keystrokes drive the stick instead
-of landing at a prompt. (The board's designed-but-unbuilt sound output — a JS-1's speaker is a D/A
-the CPU writes a waveform to — is not here yet.)
+`joystick1` and `joystick2` select the device on your computer for each stick. Both are `auto`
+by default, which gives each stick a **different** gamepad: stick 1 gets gamepad 0, and stick 2
+gets gamepad 1. Two controllers work with no setup, and each stick uses the keyboard when its
+gamepad is not there. `SHOW <id>` shows what each stick uses now (a named controller, the
+keyboard, or nothing). `SHOW JOYSTICKS` lists the controllers that your computer has.
+
+The Dazzler example in `examples/` uses this board with color graphics. It sets the video window
+to be a **display, not a keyboard** (`[display] keyboard = none`), so your keys move the stick
+and do not go to a prompt. The sound output of the JS-1, which is a D/A that the processor
+writes a waveform to, is not modeled.
 
 ## Floppy and disk controllers
 
-The disk controllers, from 8-inch floppies to CompactFlash — several boot an operating system by themselves.
+The disk controllers, from 8-inch floppy disks to CompactFlash. Several of them boot an
+operating system by themselves.
+
+For most of these controllers, the package has a built-in machine but no disk image. The machine
+starts with empty drives, and you supply the image. The disks chapter tells you how to mount
+one.
 
 ## `dcdd` — MITS 88-DCDD
 
-The **8″ hard-sector floppy controller**, up to sixteen drives, three ports at `08`, `09` and `0A`.
-**This is the board CP/M booted from**, and it is in `default`.
+The **8″ hard-sector floppy controller**. It has up to sixteen drives, and three ports at `08`,
+`09` and `0A`. **CP/M booted from this board**, and `default` has one.
 
-It also carries the **8 MB medium** — a large-capacity format the same controller can address,
-on an image **you supply**; no 8 MB disk is in the package.
+It can also use the **8 MB medium**, a large format that the same controller can address. You
+supply the image. The package has no 8 MB disk.
 
-Its status bits are **inverted**, for the same reason the 88-SIO's are and with the same
-consequence: a clear bit means ready.
+Its status bits are **inverted**, as on the 88-SIO. A clear bit means "ready". The `interrupt`
+strap sets where the board's interrupt goes.
 
-The disks chapter is where this board lives: formats, mounting, write protection, and the
-track-buffer trap that means you should get back to the `A>` prompt before you stop the machine.
+The disks chapter describes this board: the formats, how to mount a disk, write protection, and
+the track buffer, which is why you go back to the `A>` prompt before you stop the machine.
 
 ---
 
 ## `mds` — MITS 88-MDS
 
-The **5¼″ minidisk**, four drives. **The same registers as the DCDD** — a program written for one
-will drive the other — but **different physics**:
+The **5¼″ minidisk** controller, with four drives. **It has the same registers as the DCDD**, so
+a program for one board drives the other. The drives are different:
 
 | | `dcdd` | `mds` |
 |---|---|---|
@@ -718,347 +731,332 @@ will drive the other — but **different physics**:
 | Byte time | 32 µs | **64 µs** |
 | Motor | always turning | **stops after 6.4 seconds** |
 
-The minidisk's motor is not permanently on. It spins up, and if nobody touches the drive it spins
-down again — which the software has to cope with, and which you can watch it cope with by setting
-the motor to `real`. By default the motor is `free`: always at speed, no waiting. The DCDD needs no
-such switch, because its spindle never stopped.
+The minidisk motor does not turn all the time. It starts, and if nothing uses the drive, it
+stops again. The software must handle this. To see it do that, set `motor` to `real`. The
+default is `free`: the motor is always at speed, with no wait. The DCDD has no such setting,
+because its motor never stopped.
 
-**A minidisk image is one you supply.** The board is here and the `minidisk` machine boots its
-PROM, but no 5¼″ image is in the package, so the drives come up empty.
+**You supply the minidisk image.** The `minidisk` machine boots its PROM, but the package has no
+5¼″ image, so the drives start empty.
 
-### It cannot share a machine with a `dcdd`
+### It cannot be in the same machine as a `dcdd`
 
-**Same three ports.** Two controllers decoding `08` is not a limitation of this program; it is the
-MITS address map, and a real Altair with both cards in it would have had them fighting on the data
-bus. Fit both here and the bus view will name the contention rather than leave you wondering why
-the guest has gone strange.
-
-Pick one.
+**The two boards use the same three ports.** This is the MITS address map. A real Altair with
+both boards would have them both on the data bus at the same time. If you add both here, the bus
+view names the conflict. Use one or the other.
 
 ---
 
 ## `hdsk` — MITS 88-HDSK Datakeeper
 
-A **hard-disk controller** — the "Datakeeper" — and the board CP/M boots from when it is not booting
-from a floppy. It is an outboard controller with a **command/handshake protocol** and four internal
-**256-byte page buffers**, so unlike the floppy cards it **moves whole sectors for you** rather than
-shifting bits in real time. Eight ports, default `A0`–`A7`.
+A **hard-disk controller**, the "Datakeeper". CP/M boots from it when it does not boot from a
+floppy disk. It is a separate controller with a **command and handshake protocol** and four
+**256-byte page buffers**. Unlike the floppy disk boards, **it moves whole sectors for you**. It
+does not shift bits in real time. It has eight ports, default `A0`–`A7`.
 
-The **HDBL** boot PROM at `FC00` reads the disk's descriptor page and brings the system up. There
-is a ready-made machine for it in `examples/`, image and all: run it and you land at `A>` on a
-multi-megabyte CP/M 2.2 platter, **read/write**, with CP/M saving to it. Its README says how.
+The **HDBL** boot PROM at `FC00` reads the descriptor page of the disk and starts the system.
+The package has an example in `examples/` with the image. Run it, and you get an `A>` prompt on
+a CP/M 2.2 disk of several megabytes. The disk is **read/write**, and CP/M saves to it. The
+README of the example tells you how to start it.
 
 ---
 
 ## `versafloppy` — SD Systems VersaFloppy I & II
 
-SD Systems' **soft-sector floppy controller**, built around a **Western Digital FD177x** — and the
-board that boots **SDOS**, a CP/M work-alike, on an SBC-200.
+The **soft-sector floppy controller** of SD Systems, built on a **Western Digital FD177x**. It
+is the board that boots **SDOS**, a CP/M-compatible system, on an SBC-200.
 
-It is **one board covering both generations**, chosen with `variant`: **`vfii`** (the default) is
-the double-density **FD1791** VersaFloppy II, and **`vfi`** the single-density **FD1771**
-VersaFloppy I. They differ only in the controller chip and a few control bits; the port block (eight
-ports, default `60`) and the driver family are the same. Neither carries a boot PROM — the bootstrap
-BIOS lives on a separate PROM, which on the SBC-100/200 is the onboard socket.
+**One board type covers both versions.** `variant` selects the version:
 
-Fit a `vfii`, mount an 8″ double-density disk, and with the SBC-200's **DDBIOS** the monitor's disk
-commands come alive: **`C`** cold-boots SDOS, **`R`** and **`W`** read and write sectors. The SD
-Systems example in `examples/` is that machine with the disk already in it: press Return for the
-auto-baud, type `C`, and *32K SD-OS* comes up to its `[A]` prompt.
+- **`vfii`** (the default): the double-density VersaFloppy II, with an **FD1791**
+- **`vfi`**: the single-density VersaFloppy I, with an **FD1771**
 
-### What it will not do
+The two versions differ only in the controller chip and a few control bits. They have the same
+eight ports (default `60`) and the same drivers. Neither version has a boot PROM. The boot BIOS
+is in a separate PROM, which is the onboard socket on an SBC-100/200.
 
-`Z` **formats** a disk, and here it cannot make one from nothing. A raw disk image is only its data —
-it has none of the gaps and address marks a real format writes *between* the sectors — so there is
-nothing for a low-level format to lay down, and the controller says so (a WRITE FAULT) rather than
-pretending. This is the honest limitation every soft-sector controller here shares: mount a disk that
-already carries a format and read and write work; ask the board to create a blank one and it tells
-you it can't. For a fresh SDOS disk, copy one that is already formatted.
+Add a `vfii`, mount an 8″ double-density SDOS disk, and use the **DDBIOS** of the SBC-200. The
+disk commands of the monitor then work: **`C`** boots SDOS, and **`R`** and **`W`** read and
+write sectors.
+
+### It cannot format a blank disk
+
+The `Z` command **formats** a disk. On this board, it cannot make a disk from nothing. A disk
+image holds only the data. It has none of the gaps and address marks that a real format writes
+between the sectors, so a low-level format has nothing to write. The controller reports a WRITE
+FAULT. Mount a disk that already has a format, and reads and writes work. For a new SDOS disk,
+copy a disk that is already formatted. The iCOM board has the same limit. The Cromemco boards
+(below) can format a blank disk.
 
 ---
 
 ## `tarbell` — Tarbell #1011 single-density floppy
 
-The **Tarbell Electronics #1011** (July 1977) was the S-100 floppy interface that booted CP/M on a
-whole generation of Altair and IMSAI machines. It is a **Western Digital FD1771** soft-sector
-controller — eight ports, default `F8` — and, unlike the VersaFloppy, it carries **its own 32-byte
-boot PROM**. That is the whole experience of this card: you do not type a boot command.
+The **Tarbell Electronics #1011** (July 1977) was the S-100 floppy interface that booted CP/M on
+many Altair and IMSAI machines. It is a **Western Digital FD1771** soft-sector controller with
+eight ports, default `F8`. Unlike the VersaFloppy, it has **its own 32-byte boot PROM**, so you
+do not type a boot command.
 
-Power on with a disk in drive 0 and the machine boots itself. RESET arms the PROM at address 0000,
-where it shadows the bottom of memory; the PROM reads the first sector off the disk, and the moment
-the loaded code runs, the shadow falls away and CP/M comes up. There is a Tarbell example in
-`examples/` with a disk in the drive: run it and you land at `A>` with no monitor in between. With
-no disk in the drive the PROM has nothing to load and simply halts — put a disk in and reset.
+Turn the machine on with a disk in drive 0, and the machine boots itself. RESET puts the PROM at
+address `0000`, over the bottom of memory. The PROM reads the first sector from the disk. When
+the loaded code runs, the PROM switches off, and CP/M starts. The `tarbell` machine has this
+board. Mount a CP/M disk in drive 0, and you get the `A>` prompt with no monitor first. With no
+disk in the drive, the PROM has nothing to load, and it stops. Put a disk in and reset.
 
-The `bootstrap` switch turns the PROM off, leaving a plain disk controller for a machine that boots
-some other way. Four drives, selected by the software; the disks are 8″ single-density, 128-byte
-sectors, and the card recognises them by size when you mount one.
+The `bootstrap` switch turns the PROM off. The board is then a plain disk controller, for a
+machine that boots in a different way. It has four drives, which the software selects. The disks
+are 8″ single density, with 128-byte sectors. The board recognizes a disk by the size of its
+image.
 
 ## `tarbelldd` — Tarbell #2022 double-density floppy
 
-The **#2022** (1979-80) is the #1011's twin with a **Western Digital FD1791**, which reads
-**double-density** as well as single. It boots exactly the same way — the same automatic boot PROM,
-the same `F8` ports — from a **mixed-density** disk: the first track is single density (so the boot
-PROM can read it), and the rest are double density. The same Tarbell example folder carries a
-double-density machine that boots CP/M 2.2 off one to `A>`.
+The **#2022** (1979–80) is the #1011 with a **Western Digital FD1791**, which reads **double
+density** as well as single density. It boots in the same way, with the same boot PROM and the
+same `F8` ports. It boots from a **mixed-density** disk: the first track is single density, so
+that the boot PROM can read it, and the other tracks are double density. The `tarbelldd` machine
+boots CP/M 2.2 from a disk of this kind.
 
-Everything the `tarbell` card does, this one does; it adds only the second density and a disk format
-that carries more per track. Choose it when your disk is a double-density Tarbell image; choose
-`tarbell` for a single-density one. The card tells the two apart by the size of the image you mount.
+This board does everything that the `tarbell` does. It adds double density, and a **DMA
+register** at port `FD`. With DMA, the board moves data to memory itself, without the processor.
+Use this board for a double-density Tarbell image, and the `tarbell` for a single-density image.
+The board recognizes the two kinds by the size of the image.
 
 ---
 
 ## `icom` — iCOM FD3712 / FD3812 8″ floppy
 
-An **8″ floppy controller** of a different kind: not a bit-shifting floppy card but a
-**command/handshake** one, like the Datakeeper — it buffers a whole sector and the CPU moves bytes
-through two ports (default `C0`–`C1`), while the operating system's disk driver lives in a **boot
-PROM** up in high memory. One board covers both iCOM generations: the single-density **FD3712** and
-the double-density **FD3812**, whose disk is mixed density (a single-density track 0, then
-double-density tracks). The card tells them apart by the size of the image you mount.
+An **8″ floppy controller** of a different kind. Like the Datakeeper, it uses **commands and a
+handshake**. It does not shift bits. It holds a whole sector, and the processor moves the bytes
+through two ports (default `C0`–`C1`). The disk driver of the operating system is in a **boot
+PROM** in high memory. One board covers both iCOM versions: the single-density **FD3712**, and
+the double-density **FD3812**. The FD3812 disk is mixed density, with a single-density track 0
+and double-density tracks after it. The board recognizes the two by the size of the image.
 
-Which system it boots is set by its PROM, chosen with `rom`:
+The `rom` property selects the PROM, and the PROM selects the system that boots:
 
-- **`builtin:icom-fd3712-cpm`** (the default) boots **CP/M 2.2** single density from the PROM at
-  `F000`.
-- **`builtin:icom-fd3812-cpm`** boots **CP/M 2.23** double density, also at `F000`.
-- **`builtin:icom-fd3712-fdos`** boots iCOM's own **FDOS** disk operating system from the PROM at
-  `C000` — not CP/M, but iCOM's `!`-prompt executive, with its own `LIST`, `EDIT`, `ASMB` and the
-  rest.
+- **`builtin:icom-fd3712-cpm`** (the default) boots **CP/M 2.2**, single density, from the PROM
+  at `F000`.
+- **`builtin:icom-fd3812-cpm`** boots **CP/M 2.23**, double density, also at `F000`.
+- **`builtin:icom-fd3712-fdos`** boots iCOM's own **FDOS** from the PROM at `C000`. FDOS is not
+  CP/M. It has a `!` prompt, and its own `LIST`, `EDIT`, `ASMB` and other commands.
 
-`altairsim icom` is CP/M 2.2 the moment a disk is in it. The `examples/` folder carries ready-made
-machines for all three — single- and double-density CP/M and FDOS-III — image and all: start one and
-you land at the prompt, read/write, with the guest saving to the disk. Read and write of existing
-disks work; like the other controllers here, it will not lay down a **blank** format from nothing.
+The `icom` machine boots CP/M 2.2 as soon as you mount a disk. Reads and writes of a formatted
+disk work. Like the other controllers here, it cannot format a **blank** disk from nothing.
+
+---
+
+## `16fdc` and `64fdc` — Cromemco 16FDC and 64FDC
+
+Cromemco's double-density floppy controllers. Each board has three things on it:
+
+- a **Western Digital FD1793** floppy controller, for single and double density, with up to four
+  drives. Its registers are at `30`–`34`.
+- a **TMS 5501** console UART, unit `tty`, at `00`–`09`
+- an **RDOS** boot PROM at `C000`. The 16FDC has 4K of RDOS 2.52. The 64FDC, from 1983, has 8K
+  of RDOS 3.12, at `C000`–`DFFF`.
+
+`OUT 40H` switches the PROM off, and RESET switches it on again. With the `bootstrap` strap on
+(the default), RDOS boots the disk. With it off, RDOS gives its monitor prompt.
+
+Both boards boot Cromemco **CDOS**. The package has no CDOS disk and no built-in machine for
+these boards, so you add the board and supply the disk. **These boards can format a blank
+disk.** Mount a blank image, and the guest's own format program writes the tracks.
+
+The boards are polled. They deliver no interrupts. The front-panel switches of the 64FDC (baud
+rate, boot drive and self-test) are not modeled.
 
 ---
 
 ## `dualsd` — S100Computers Dual SD
 
-A **modern** disk controller among the period ones: the S100Computers Dual SD board puts **two
-microSD cards** on the S-100 bus as raw 512-byte-sector drives, so a Z80 machine runs **CP/M 3** off
-flash. Like the iCOM and the Datakeeper it is a **command-and-handshake** card — two ports (default
-`80`–`81`) and a byte-at-a-time protocol to an onboard microcontroller that does the actual card
-I/O — not a floppy-shift card. Each SD card is one CP/M drive, and the drive letter comes from the
-**socket** it sits in: socket 1 is A:, socket 2 is B:.
+A **modern** disk controller among the period boards. The S100Computers Dual SD board puts **two
+microSD cards** on the S-100 bus as drives with 512-byte sectors, and a Z80 machine runs **CP/M
+3** from them. Like the iCOM and the Datakeeper, it uses **commands and a handshake**. It has
+two ports (default `80`–`81`), and a microcontroller on the board does the card I/O. Each SD
+card is one CP/M drive. The **socket** of the card gives the drive letter: socket 1 is A:, and
+socket 2 is B:.
 
-**It has no boot PROM** — the CPU board's monitor boots it. That is why `altairsim dualsd` is the
-three boards together: a `z80` for the processor, the `v2z80rom` monitor EEPROM whose `I` command reads
-CP/M 3 off the card, and this controller. Bring the machine up, type `I` at the `->` monitor prompt,
-and CP/M 3 signs on at `A>`.
+**It has no boot PROM.** The monitor on the processor board boots it. For this reason, the
+`dualsd` machine has three boards: a `z80` for the processor, the `v2z80rom` monitor EEPROM,
+whose `I` command reads CP/M 3 from the card, and this controller. Start the machine, type `I`
+at the `->` monitor prompt, and CP/M 3 starts at `A>`.
 
-**Mount a card in both sockets.** The CP/M 3 boot ROM checks that each socket has a card before it
-will come up — a card in socket 1 alone boots the loader and then stops. So the example fits the
-bootable system card in socket 1 and a blank spare in socket 2.
+**Mount a card in both sockets.** The CP/M 3 boot ROM checks that each socket has a card before
+it starts. With a card in socket 1 only, the loader boots and then stops. Put the bootable
+system card in socket 1, and a blank card in socket 2.
 
-A card is a raw **`.img` with a sibling `.geo`** file beside it that declares the card's true size.
-The `.img` can be **shorter** than the card — just the live filesystem — and every sector past its
-end reads back as an erased card would (all `FF`), which is why a card that would be hundreds of
-megabytes on real flash ships here as a couple of megabytes. `MOUNT … CREATE` creates a **blank**
-data card (an empty `.img` and its `.geo`) for the guest to format; a *bootable* card, like the
-other controllers here, has to come from a real image — its system tracks cannot be invented. See
-`examples/dualsd/`, which boots CP/M 3 with the host bridge fitted so `R`/`W`/`HDIR` move files to
-and from your host at the `A>` prompt.
+A card is a raw **`.img` file, with a `.geo` file beside it** that gives the true size of the
+card. The `.img` can be **shorter** than the card, with only the live file system in it. Every
+sector after its end reads as an erased card does, as all `FF`. For this reason, a card that is
+hundreds of megabytes on real flash can be a few megabytes here. `MOUNT … CREATE` makes a
+**blank** data card, an empty `.img` and its `.geo`, for the guest to format. A *bootable* card
+must come from a real image, because nothing can make its system tracks. You supply the images.
 
 ---
 
 ## `dualide` — S100Computers IDE-AB (CompactFlash)
 
-The other half of the same physical S100Computers card. Where the Dual SD engine drives microSD,
-the **IDE-AB** side drives **two CompactFlash cards** through an 8255 parallel port wired to a CF
-card's IDE bus (default ports `30`–`34`). It presents its two cards as CP/M drives A: and B:, boots
-the same **CP/M 3** off flash, and — because it lays a card out byte-for-byte the way the SD side
-does — **a card image is interchangeable between the two**.
+The other half of the same S100Computers board. The Dual SD part drives microSD cards. The
+**IDE-AB** part drives **two CompactFlash cards**, through an 8255 parallel port that connects
+to the IDE bus of a CF card (default ports `30`–`34`). Its two cards are CP/M drives A: and B:,
+and it boots the same **CP/M 3**. It stores data on a card in the same layout as the SD part, so
+**a card image works on both boards**.
 
-**It has no boot PROM** either. `altairsim dualide` is the `z80`, the `v2z80rom` monitor EEPROM, and
-this controller; at the `->` monitor prompt the **`P` command** (rather than the Dual SD's `I`) reads
-CP/M 3 off CompactFlash drive 0, and CP/M signs on at `A>`.
+**It has no boot PROM** either. The `dualide` machine has the `z80`, the `v2z80rom` monitor
+EEPROM and this controller. At the `->` monitor prompt, the **`P` command** (not the `I` of the
+Dual SD) reads CP/M 3 from CompactFlash drive 0, and CP/M starts at `A>`.
 
-Cards behave exactly as on the Dual SD board: a raw **`.img` with a sibling `.geo`**, truncatable to
-the live filesystem with `FF` past its end; `MOUNT … CREATE` creates a blank data card, while a
-bootable one has to come from a real image. See `examples/dualide/` for the CompactFlash-only
-machine, and `examples/dualidesd/` for the **whole combination board** at once — CompactFlash as
-A:/B: and microSD as C:/D:, one CP/M 3 system spanning all four drives.
+The cards are the same as on the Dual SD board: a raw **`.img` with a `.geo` file beside it**.
+The image can stop after the live file system, with `FF` after its end. `MOUNT … CREATE` makes a
+blank data card, and a bootable card must come from a real image. The **`dualidesd`** machine
+has the **whole board** at once: CompactFlash as A: and B:, and microSD as C: and D:, with one
+CP/M 3 system on all four drives.
 
 ---
 
 ## Video and display
 
-Boards that put a picture on a display window.
+Boards that show a picture in a window.
+
+Each video board opens its own window. `[display]` in the configuring chapter sets which window
+gets the keyboard, and how the picture looks.
+
+**Closing a video window stops the machine. It does not quit the program.** The close box does
+what `STOP` does. The guest stops at an instruction boundary, and you get the monitor prompt,
+with the machine where it was. `RUN` continues in the same window. `QUIT` leaves the program.
 
 ## `vdm1` — Processor Technology VDM-1
 
-**Memory-mapped video**, and the first board here that is not a MITS one. A 1K screen of **16 rows
-by 64 columns** lives in the machine's own address space — by default at `CC00` — so a program
-puts a character on the screen by *storing a byte*, with no port and no driver. That is why it is
-fast enough to be worth having, and why it needs no `CONNECT`: the screen is memory.
+**Memory-mapped video.** A 1K screen of **16 rows by 64 columns** is in the machine's own
+address space, at `CC00` by default. A program puts a character on the screen when it *stores a
+byte*. It needs no port and no driver. For this reason, the board is fast, and it needs no
+`CONNECT`, because the screen is memory.
 
-One port (default `CC`) does the rest: writing it sets which row is at the top, which is how the
-VDM-1 scrolls — the text does not move, the *window* does. Reading it gives back two timing bits
-the software uses to avoid writing while the beam is in the way.
+One port (default `CC`) does the rest. A write to it sets which row is at the top of the screen.
+This is how the VDM-1 scrolls: the text does not move, but the window on it does. A read of the
+port gives two timing bits. The software uses them to avoid writing while the beam draws.
 
-**It needs a display.** Built with SDL3, it opens a real window; built without, it runs headless
-and everything else still works — a program writing to the screen simply has nowhere to show it.
+Bit 7 of each byte is the **cursor and blink** flag, not part of the character. For this reason,
+the board draws 128 characters from a real character ROM, not 256.
 
-**Closing that window stops the machine, it does not quit the simulator.** The close box is the
-operator talking, so it does what `STOP` does: the guest stops at an instruction boundary and you
-get the monitor prompt back, with the machine exactly where it was. `RUN` resumes it into the same
-window; `QUIT` is still how you leave.
+Two machines use it:
 
-**Which window has your keyboard is yours to say.** By default the terminal keeps it: the video
-window opens behind whatever you were doing, and when the guest stops you can type at
-`altairsim>` straight away. You can still click the window and type into it — keys typed there
-and keys typed at the terminal reach the guest as one stream — but the next time the guest stops,
-the keyboard goes back to the terminal.
+- **`vdm1`**: an Altair with a VDM-1, and a demo that draws on it
+- **`cuter`**: the period CUTER monitor, with its own VDM-1 driver
 
-That is the right default for a machine you drive from the monitor, and the wrong one for a
-Sol-20, where the window *is* the console. So:
+### The window size: the `width` property
 
-```
-altairsim> SET DISPLAY focus=on
-```
+Every video board (the VDM-1, the Dazzler and the VDB-8024) has a **`width`** property. It sets
+the width of the window in pixels. `auto`, the default, makes the window about **half as wide as
+the screen**. A number such as `width = 1024` asks for that many pixels. **The height follows
+from the shape of the board's picture.** With the default look, the program draws each pixel of
+the board as a whole number of screen pixels, so that the picture stays sharp. A thin dark
+border fills the rest. With the period look (`[display] crt = true`), the picture fills the
+width that you asked for, because a soft picture has no square pixels to keep sharp. A width
+that is too big for the screen is made smaller.
 
-and the window comes to the front when it opens and keeps the keyboard when the guest stops.
-`SHOW DISPLAY` says which way it is set, and a machine file can ask for it directly:
+The built-in `terminal` window (see the serial chapter) sets its size in the same way, with a
+`width=` option in its connect string, not a board property.
 
-```toml
-[display]
-focus = true
-```
+`width` is a property of the board, not of `[display]`. On real hardware, each board had its own
+video output and could drive its own monitor. The same is true here. Add a VDM-1 and a Dazzler
+to one machine, and you get two pictures in two windows. The keyboard is still shared. Whichever
+window you type in, the keys go to the machine.
 
-It is a setting of the **display**, not of this board — a machine with two video boards still has
-one operator with one keyboard — so it reads the same whichever board is drawing. Setting it says
-what should happen from now on; it does not go back and re-focus a window that is already open.
+### A stopped machine's window does not redraw
 
-Bit 7 of each byte is the **cursor/blink** flag rather than part of the character, so the board
-draws 128 glyphs from a real character ROM, not 256.
+The window stays live when the machine is stopped. You can move it, and you can close it. If you
+close it at the monitor prompt, `RUN` opens a new one the next time a program draws. A stopped
+machine does **not** redraw the picture, because the running machine draws it. This has two
+results:
 
-Two machines fit one: **`vdm1`**, which is an Altair with a VDM-1 and a demo that draws on it, and
-**`cuter`**, which runs the period CUTER monitor with its own built-in VDM-1 driver.
+- **A change such as `SET vdm0 video=reverse` does not show** until you type `RUN` again. The
+  program keeps the setting, but nothing redraws the screen until the machine runs.
+- **The cursor does not blink** while the machine is stopped. To see it blink, use `sol20`,
+  where SOLOS runs in a loop and does not halt.
 
-### How big the window opens — the `width` property
-
-Every video board — the VDM-1, the Dazzler, the VDB-8024 — carries a **`width`** property that
-sets how wide its window opens, in pixels. `auto` (the default) opens the window about **half the
-screen wide**; a number like `width = 1024` asks for that many pixels. The **height follows the
-board's own aspect** — you set width, height comes with it — and in the crisp default the picture
-is drawn at a whole-number multiple of the board's pixels so a 1970s frame stays a crisp grid rather
-than a blur (the leftover is a thin dark border). Under the period tube look (`[display] crt = true`)
-the window instead fills exactly the width you asked for, since the soft raster has no square pixels
-to keep sharp. A width that would run off the screen is brought down to fit.
-
-The built-in `terminal` window (see the [Serial ports](serial.md) chapter) sizes itself the same
-way, through a `width=` option on its connect string rather than a board property.
-
-`width` lives on the board, not on `[display]`, because on real hardware each board has its own
-video-out and could drive its own monitor — and the simulator matches that: **each video board
-opens its own window**, sized by its own `width`. Fit a VDM-1 and a Dazzler in one machine and you
-get two pictures on two windows, just as the real cards would drive two monitors. The keyboard and
-focus stay shared, though — one operator, one keyboard (see `[display]` in the Configuring
-chapter), so whichever window you type into, the keys reach the machine.
-
-### A stopped machine's window is responsive, but it does not redraw
-
-The window stays live even when the machine is stopped: you can move it, and its close button
-works — clicking it at the monitor prompt closes the window (`RUN` opens a fresh one the next
-time a program draws). What a stopped machine does **not** do is *repaint*, because drawing is the
-running machine's job. Two consequences, and they are the same fact:
-
-- **A change like `SET vdm0 video=reverse` does not appear** until you `RUN` again — the setting
-  is remembered, but nothing redraws the screen to show it until the machine does.
-- **The cursor does not blink** while the machine is stopped. To watch it blink, use `sol20`,
-  whose SOLOS sits in a loop rather than halting.
-
-`vdm1`'s demo halts once it has drawn its banner — that is the point — so the window you are left
-looking at belongs to a stopped machine: still there, still closeable, just not redrawing.
-
-Closing the window of a **running** machine is not the same as quitting: it stops the guest and
-gives you the monitor prompt, leaving the machine exactly where it was and the window on screen.
-`RUN` goes back into it; `QUIT` exits.
+The `vdm1` demo halts after it draws its banner. For this reason, its window belongs to a
+stopped machine. The window is still there, and you can close it, but it does not redraw.
 
 ---
 
 ## `dazzler` — Cromemco Dazzler
 
-The **first color-graphics card for the S-100 bus**, and the second video board here that is not a
-MITS one. Where the VDM-1 paints text, the Dazzler paints a **picture**, and it does it the same
-clever way: out of a **framebuffer in the machine's own RAM**. You point the board at a 512-byte or
-2 KB block anywhere on a 512-byte boundary and it scans that memory onto the screen — so a program
-draws by *storing bytes*, with no port in the inner loop.
+The **first color graphics board for the S-100 bus**. The VDM-1 shows text, and the Dazzler
+shows a **picture**. It does this in the same way, from a **frame buffer in the machine's own
+RAM**. You point the board at a block of 512 bytes or 2 KB, at any 512-byte boundary, and it
+shows that memory on the screen. A program draws when it *stores bytes*, with no port in the
+inner loop.
 
-Two ports (default `0E`/`0F`) set the rest: on/off and where the framebuffer is, then the format —
-resolution, size and color. Four modes fall out of it: **32×32 or 64×64** color or grey elements,
-and **64×64 or 128×128** on/off elements, in **16 colors** or 16 greys. Small numbers — but this was
-1976, and it was in color.
+Two ports (default `0E` and `0F`) set the rest. The first turns the board on or off, and sets
+where the frame buffer is. The second sets the format: the resolution, the size and the color.
+This gives four modes: **32×32 or 64×64** elements in color or grey, and **64×64 or 128×128**
+on/off elements, in **16 colors** or 16 greys.
 
-**It needs a display**, and like the VDM-1 it draws into it: an SDL3 build opens a window, a headless
-build runs and simply has nowhere to show the picture. The Dazzler example in `examples/` comes up
-running **Li-Chen Wang's Kaleidoscope**, a four-way-mirrored pattern turning over in the window
-(`STOP` breaks back to the monitor); the `dazzler` machine is the bare board to build on. Because a
-64×64 frame is tiny, the board's `width` property (above) sizes the window up to land near a VDM-1's
-size on your screen rather than a sixth of it.
+The Dazzler example in `examples/` runs **Li-Chen Wang's Kaleidoscope**, a pattern that turns
+and is mirrored four ways. `STOP` gives you the monitor. The `dazzler` machine is the plain
+board, for you to build on. A 64×64 picture is very small, so the board's `width` property
+(above) makes the window about the size of a VDM-1 window.
 
 ---
 
 ## `vdb8024` — SD Systems VDB-8024
 
-An **80-column by 24-line video terminal on one board** — the SD Systems answer to a serial
-console. Where the `sbc` card gives an SBC-100/200 a serial port for a teletype or a glass
-terminal, the VDB-8024 gives it *the terminal itself*: a whole intelligent display, keyboard and
-all, plugged straight into the backplane.
+An **80-column by 24-line video terminal on one board**. The `sbc` board gives an SBC-100/200 a
+serial port for a terminal. The VDB-8024 gives it *the terminal itself*: a complete display with
+a keyboard, on the backplane.
 
-**Despite the name, it is not memory-mapped.** Nothing of its screen lives in the machine's
-address space. To the computer it is simply **two I/O ports** — a status port and a data port,
-at `00` and `01` — that behave like a terminal on a wire: the program reads the status to
-see whether a key is waiting or the display is ready, writes a character or a control code to the
-data port, and reads a typed key back from it. The screen, its memory and its own processor all
-sit behind that pair of ports, invisible, exactly as they were on the real card. The real card's
-pair was wired at `00`, not jumpered; the board here still carries a `port` so you can move it,
-the same liberty the `sol` takes below.
+**It is not memory-mapped.** None of its screen is in the machine's address space. To the
+computer, it is **two I/O ports**, a status port and a data port at `00` and `01`, that work
+like a terminal on a line. The program reads the status to see whether a key is waiting or the
+display is ready. It writes a character or a control code to the data port, and it reads a typed
+key from the same port. The screen, its memory and its own processor are all behind those two
+ports, as on the real board. The real board had its ports fixed at `00`. The board here has a
+`port` property so that you can move them, as the `sol` does below.
 
-It runs the **SD monitor's video build, `sdmonv21`**, which is the same monitor as the serial
-`sbc200` machine (same commands, same `.` prompt) built to talk to this board instead of the 8251.
-There is **no “press Enter first”** here — the VDB is not a serial line with a speed to measure, so
-the prompt is on the screen the moment the machine starts:
+The board is polled by default. The `interrupt` strap (`vi0` to `vi7`) sends a keyboard
+interrupt to a vectored interrupt line, for the SBC-200's CTC. The SD video CBIOS needs this.
+
+It runs **`sdmonv21`**, the video version of the SD monitor. It is the same monitor as in the
+serial `sbc200` machine, with the same commands and the same `.` prompt. You **do not press
+Return first**, because the VDB has no serial speed to measure. The prompt is on the screen as
+soon as the machine starts:
 
 ```
-altairsim sbc200v
+$ altairsim sbc200v
 ```
 
-comes up at the monitor's `.` prompt **on the video display**, and the SD Systems example in
-`examples/` carries the same machine as a file you can read and change.
+This gives the monitor's `.` prompt **in the video window**.
 
-**It needs a display**, like the VDM-1: built with SDL3 it opens a real window in the board's own
-character font; built without, it runs headless and the text simply has nowhere to show. And like
-a Sol-20, **the window is the console** — the machine asks for `focus=on`, so the window keeps the
-keyboard while the guest runs, and window keys and terminal keys reach the monitor as one stream.
-The characters are drawn from the board's own character-generator font, with true lower-case
-descenders on `g`, `j`, `p`, `q` and `y`, the way the hardware's socketed font PROM did it.
+Like a Sol-20, **the window is the console.** The machine sets `focus=on`, so the window keeps
+the keyboard while the guest runs. Keys typed in the window and at the terminal go to the
+monitor together. The characters come from the board's own character font, with true descenders
+on `g`, `j`, `p`, `q` and `y`, as the font PROM of the hardware drew them.
 
-The board understands the control codes its firmware did: carriage return, line feed, backspace,
-tab, cursor up and right, clear-screen and home, and the `ESC` sequences that position the cursor
-and erase to the end of a line or the screen. A line that fills wraps, and a line feed at the
-bottom scrolls the page up.
+The board obeys the same control codes as its firmware: carriage return, line feed, backspace,
+tab, cursor up and right, clear screen and home, and the `ESC` sequences that move the cursor
+and erase to the end of a line or of the screen. A full line wraps, and a line feed on the
+bottom line scrolls the page up.
 
 ---
 
 ## `sol` — Processor Technology Sol-PC
 
-The **Sol-20's onboard I/O, as one card** — because on a real Sol-20 that is what it was. The
-Sol was not an Altair with cards in it; it was an integrated machine whose serial port, keyboard,
-parallel port and cassette interface were all on the one processor board, at `F8`–`FE`. On the
-real hardware those addresses were wired, not jumpered; here the board still carries a `base` so
-you can move it, which is the one liberty taken and the reference chapter records it.
+The **onboard I/O of the Sol-20, as one board**, because it was one board on a real Sol-20. The
+Sol was not an Altair with boards in it. It was one machine, with the serial port, keyboard,
+parallel port and cassette interface all on the processor board, at `F8`–`FE`. On the real
+hardware, those addresses were fixed. Here, the board has a `base` property so that you can move
+it. This is the one change from the hardware, and the reference records it.
 
-So this board carries four things at once, and you reach them as units: `serial`, `printer` and
-`keyboard` are lines you `CONNECT`, and `tape1`/`tape2` are cassette transports you `MOUNT`. The
-keyboard is connected to the console by default, so it simply takes what you type — from the
-display window when there is one, and from your terminal when there is not.
+You reach the parts of the board as units. `serial`, `printer` and `keyboard` are lines that you
+`CONNECT`. `tape1` and `tape2` are cassette decks that you `MOUNT`. The keyboard is connected to
+the console by default. It takes what you type, from the video window when there is one, or from
+your terminal.
 
-### The keyboard's special keys
+### The special keys of the keyboard
 
-The Sol's keyboard is not a subset of a modern one. Eight of its keys send codes with no ASCII
-equivalent at all, and they are how you drive SOLOS and the screen:
+The Sol keyboard has eight keys that send codes with no ASCII equal. You use them to control
+SOLOS and the screen:
 
 | Key | Sends | What it does | Press | Or type |
 |---|---|---|---|---|
@@ -1071,38 +1069,36 @@ equivalent at all, and they are how you drive SOLOS and the screen:
 | `CLEAR` | `8B` | Erase the screen, cursor home | F2 | Ctrl-K |
 | `LOAD` | `8C` | Nothing — neither SOLOS nor CONSOL ever claimed it | F3 | — |
 
-**The `Press` column works in the video window only.** Your keyboard's own arrows and Home, and
-the function keys F1–F3, send these codes when the window has focus. They cannot work from a
-terminal: there an arrow or function key sends an escape sequence rather than a single byte, and
-`ESC` is a character the guest legitimately needs, so there is nothing to safely match on. From a
-terminal, use the last column.
+**The `Press` column works only in the video window.** When the window has focus, your arrow
+keys, Home, and F1 to F3 send these codes. They cannot work from a terminal. There, an arrow key
+or a function key sends an escape sequence, not one byte, and the guest needs `ESC` as a
+character, so the program cannot safely read those sequences. From a terminal, use the last
+column.
 
-A PC keyboard has nothing that reads as `MODE SELECT`, `CLEAR` or `LOAD`, so the function keys
-stand in for them: **F1** is `MODE SELECT`, **F2** is `CLEAR`, **F3** is `LOAD`. On a Mac the
-function keys reach the window only if the system is set to send F1, F2, … as plain function keys
-(otherwise hold `fn`).
+A PC keyboard has no `MODE SELECT`, `CLEAR` or `LOAD` key, so **F1** is `MODE SELECT`, **F2** is
+`CLEAR`, and **F3** is `LOAD`. On a Mac, the function keys reach the window only if the system
+sends F1, F2 and so on as plain function keys. If not, hold `fn`.
 
-**That last column is not a hack** — it is how the hardware was built.
-Each special key's code is exactly `80` plus the control code for the same action, because SOLOS's
-display driver masks the top bit off everything it is handed before it looks the character up. So
-`CLEAR` and Ctrl-K arrive at one routine, `HOME CURSOR` and Ctrl-N at another. The command-mode
-reader does the same masking, which is why a NUL byte is `MODE SELECT`: type Ctrl-@ (Ctrl-Space on
-many keyboards) and SOLOS abandons the line you were typing and gives you a fresh prompt.
+**The last column is how the hardware worked.** The code of each special key is `80` plus the
+control code for the same action, because the display driver of SOLOS clears the top bit of each
+character before it uses it. For example, `CLEAR` and Ctrl-K go to the same routine. The command
+reader clears the top bit too. For this reason, a NUL byte is `MODE SELECT`. Type Ctrl-@
+(Ctrl-Space on many keyboards), and SOLOS drops the line that you were typing and gives a new
+prompt.
 
-The console is 8-bit clean, so if you have some way of sending the byte itself — a paste, a
-script, a terminal macro — the real code works too, and behaves identically.
+The console is 8-bit clean. If you can send the byte itself, for example with a paste, a script
+or a terminal macro, the real code works too.
 
-One register (`FA`) reports the state of *all* of them at once — and it does so with **mixed
-polarity**, the keyboard and parallel bits reading active-low while the tape bits read
-active-high. That is not a bug in the board or in this simulator; it is what the hardware did, and
-the period software inverts what it needs.
+One register (`FA`) gives the state of *all* of these parts at once, with **mixed polarity**.
+The keyboard and parallel bits are active-low, and the tape bits are active-high. This is what
+the hardware did, and the period software inverts the bits that it needs.
 
 ### The cassette decks
 
-The Sol's cassette interface is on the motherboard, not a card, and it has **two decks** —
-`tape1` and `tape2` — where the 88-ACR has one. Everything in the tapes chapter applies to them;
-only the unit name changes, and you must always name the deck (a bare `WIND sol0` is refused
-rather than guessing which tape to move):
+The Sol's cassette interface is on the main board, and it has **two decks**, `tape1` and
+`tape2`. The 88-ACR has one. Everything in the tapes chapter applies to them, with a different
+unit name. Always give the name of the deck. The program refuses a plain `WIND sol0`, because it
+does not know which tape to move.
 
 ```
 altairsim> MOUNT sol0:tape1 "mytape.tap"
@@ -1110,22 +1106,23 @@ altairsim> SET  sol0:tape1 mode=record
 altairsim> REW  sol0:tape1
 ```
 
-Three things differ from the ACR, and each is the hardware talking:
+There are three differences from the ACR, and each one comes from the hardware:
 
-- **The Sol can work the motors.** `OUT 0FAh` starts and stops each transport, and SOLOS does it
-  for you — `SAVE` spins the deck up, writes, and spins it down. So a Sol tape plays only while
-  the guest is running it, and a deck whose motor is off yields nothing at all rather than merely
-  nothing yet. That dropped motor line is a *stop*, so it writes a recording out — something the
-  88-ACR, which cannot see the deck at all, has no equivalent of. It still cannot **wind** the
-  tape on its own: a motor line only says *turn*, not which way, so `WIND`/`REWIND` is your finger
-  here too.
-- **The speed is the guest's.** The ACR's 300 baud is soldered; the Sol's cassette runs at 300 or
-  1200 and `OUT 0FAh` bit D5 picks, at run time. SOLOS's `SE TA` command is that bit.
-- **The modulation is CUTS, not the ACR's FSK.** A Sol tape is `cuts1200` (1200/600 Hz) at 1200
-  baud, an octave below the ACR's 2400/1850 Hz; it also reads Kansas City (`kcs300`, 2400/1200).
-  This is why a Sol tape mounted on an 88-ACR is refused — the tapes chapter has that story.
+- **The Sol controls the motors.** `OUT 0FAh` starts and stops each deck, and SOLOS does this
+  for you. `SAVE` starts the deck, writes, and stops it. For this reason, a Sol tape plays only
+  while the guest runs it, and a deck with its motor off gives nothing. When the motor stops,
+  the board writes the recording out. The 88-ACR cannot see the deck, so it cannot do this. The
+  Sol still cannot **wind** the tape by itself, because a motor line says only "turn", not which
+  way. You use `WIND` and `REWIND` for that.
+- **The guest sets the speed.** The ACR's 300 baud is fixed. The Sol's cassette runs at 300 or
+  1200 baud, and bit D5 of `OUT 0FAh` selects the speed while the machine runs. The SOLOS
+  command `SE TA` sets that bit.
+- **The modulation is CUTS, not the ACR's FSK.** A Sol tape is `cuts1200` (1200 and 600 Hz) at
+  1200 baud, one octave below the ACR's 2400 and 1850 Hz. It can also read Kansas City
+  (`kcs300`, 2400 and 1200 Hz). For this reason, the 88-ACR refuses a Sol tape. The tapes
+  chapter tells you more.
 
-Once a tape is in, SOLOS's own commands work:
+When a tape is mounted, the SOLOS commands work:
 
 ```
 >SA MYPROG 0100 01FF        (save memory to the tape)
@@ -1133,23 +1130,24 @@ Once a tape is in, SOLOS's own commands work:
 >CA                         (catalog what is on the tape)
 ```
 
-**Writing audio a real Sol will load** takes more than the right tones — it takes the right
-*shape* and level. A genuine Sol CUTS modem is a flip-flop dividing a master clock into a square,
-rounded by an RC network, recorded at a modest level. Three properties reproduce that when the
-board writes a `.WAV` back, and their defaults are measured off a real archived dub:
+**To write audio that a real Sol can load**, you need the right tones, and also the right
+*shape* and level. A real Sol CUTS modem is a flip-flop that divides a master clock into a
+square wave. An RC network rounds the wave, and the tape records it at a moderate level. Three
+properties copy this when the board writes a `.WAV` file. Their defaults come from measurements
+of a real archived tape:
 
 | Property | Default | What it does |
 |---|---|---|
-| `leader` | `3` | Seconds of steady tone before the data — the real dub carries 3.05 s (the ACR's is longer, 15 s). |
-| `trailer` | `2` | Seconds of tone after it — the dub's measured 1.93 s. |
-| `rc` | `4000` | Edge-rounding low-pass corner, Hz. Rounds the square's edges the way the modem's RC network and the cassette's own bandwidth do, so the tone curves like a real dub instead of sitting on a flat top. CUTS only. |
+| `leader` | `3` | Seconds of steady tone before the data. The real tape has 3.05 s. The ACR's leader is longer, 15 s |
+| `trailer` | `2` | Seconds of tone after the data. The real tape has 1.93 s |
+| `rc` | `4000` | The corner of the low-pass filter that rounds the edges, in Hz. It rounds the edges of the square wave as the modem's RC network and the cassette do. CUTS only |
 
-`level` (percent of full scale, default `36`) matters on both boards and is covered in the tapes
-chapter; the point of these Sol defaults together is that a CUTS tape the simulator writes lays
-its tones on the same clock grid a real Sol expects, at a real dub's level — built to load on the
+`level` (percent of full scale, default `36`) applies to both boards, and the tapes chapter
+describes it. With these defaults, a CUTS tape from the simulator has its tones on the same
+clock grid as a real Sol expects, at the level of a real tape. It is made to load on the
 hardware, not only to read back here.
 
-Fit it with a `vdm1` and you have the **`sol20`** machine, which cold-starts the real SOLOS
+Add a `vdm1` to this board, and you have the **`sol20`** machine, which starts the real SOLOS
 operating system.
 
 ---
