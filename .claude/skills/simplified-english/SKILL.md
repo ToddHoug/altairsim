@@ -120,7 +120,8 @@ A review reports. It does not edit.
    fails in many places, give the worst five and the count.
 5. Show a before and an after for the three worst passages.
 6. Report factual errors that you find on the way in a separate list. An unrelated error
-   gets a GitHub issue, as `work-task` says.
+   gets a GitHub issue, as `work-task` says. To check a sample's output against the binary,
+   use the `check-doc-samples` skill. Do not make up your own replay.
 7. Stop.
 
 A rewrite is a separate change, made through `work-task`. Do not leave review notes in the
