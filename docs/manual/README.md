@@ -1,76 +1,57 @@
 # altairsim — User Manual
 
-A simulator of the **MITS Altair 8800** and the **S-100 bus**.
+These files are the source of the *altairsim User Manual*. The release package has the manual as
+one document, `altairsim-manual.pdf`. Read that document if you have the package. This page
+lists the chapters in the order of the manual, so that you can read them here.
 
-This is the manual for the program you have. It describes `altairsim` itself, the machines
-built into it, and the worked examples that ship beside it. Media beyond those is
-a separate thing, and the next chapter says where it will come from.
+**Start with the [Quick start](quick-start.md)**, which boots CP/M with one command. To learn
+what the program is first, read [What altairsim is](introduction.md).
 
-## Getting started
+## The chapters
 
-| | |
-|---|---|
-| [What altairsim is](introduction.md) | What it does, and what it does not do. |
-| [What is in the package](package.md) | The binary, the built-in machines, the examples that boot — and where the rest is. |
-| [Running it](running.md) | Unzip and go. |
-| [**Quick start**](quick-start.md) | **CP/M in one command.** Get out with `^E`, back in with `RUN`, out with `QUIT`. |
+1. [What altairsim is](introduction.md): what the program does, and what it does not do.
+2. [What is in the package](package.md): the program, the documents, the built-in machines, the
+   examples, and what is not in the package.
+3. [Running it](running.md): unzip the package and run the program.
+4. [Quick start](quick-start.md): CP/M with one command. Stop with `Ctrl-E`, continue with
+   `RUN`, leave with `QUIT`.
+5. [Quick reference](ref/cheatsheet.md): the command line, every command, the outline of a
+   machine file, and the boards, on one page.
+6. [Machines](machines.md): the command line, the built-in machines, and where a relative path
+   starts.
+7. [The machine file](configuring.md): the TOML format, in full.
+8. [Boards](boards.md): what each board is, and what it is for.
+9. [Disks](disks.md): `MOUNT`, disk formats, and the track buffer.
+10. [Tapes](tapes.md): the cassette interface, and how to load BASIC as MITS intended.
+11. [Serial ports, sockets and telnet](serial.md): how to connect a board to your terminal, a
+    TCP port or a real serial port.
+12. [Moving files in and out](file-transfer.md): `HDIR`, `R` and `W` at the CP/M prompt.
+13. [Worked examples](examples.md): complete sessions, from start to end.
+14. [The MCP server](mcp.md): how an AI assistant controls the machine.
+15. [Troubleshooting](troubleshooting.md): the most common problems, and what to do.
+16. [Glossary](glossary.md): S-100, PHANTOM\*, hard-sector, BDOS and other terms.
+17. [Boards and their properties](ref/boards.md): every board, every key and every default.
+18. [The built-in machines](ref/machines.md): every built-in machine, and what is in it.
 
-## Quick reference
+## Other documents
 
-| | |
-|---|---|
-| [Quick reference](ref/cheatsheet.md) | One page: the command line, every command, the machine-file skeleton, the boards. |
+Two more documents ship beside the manual. They describe the `altairsim>` prompt and its
+debugger, which control the program, not the simulated hardware.
 
-## Driving the machine
+- [*The Monitor*](../monitor/monitor.md) (`altairsim-monitor.pdf`): the `altairsim>` prompt,
+  short forms of commands, the number rule, board names and STOP. It also has the command
+  reference, with every `altairsim>` command and its usage and examples.
+- [*The Debugger*](../debugger/debugging.md) (`altairsim-debugger.pdf`): breakpoints, stepping,
+  disassembly, and how to look at the bus.
 
-| | |
-|---|---|
-| [Machines](machines.md) | The command line, the built-in machines, and where a path is relative to. |
-| [Machine files](configuring.md) | The TOML format, in full. |
-| [Boards](boards.md) | What each board is, and what it is for. |
+To build a board of your own, you need the source and a different document, the **Developer
+Guide**. It is not in the package. It is with the source.
 
-Driving `altairsim` *itself* — the `altairsim>` prompt and its debugger — is two separate
-documents that ship beside this one. They are about the program, not the emulated hardware,
-and each stands on its own:
+## If you change these files
 
-| | |
-|---|---|
-| [The monitor](../monitor/monitor.md) — `altairsim-monitor.pdf` | The `altairsim>` prompt: prefix commands, the number rule, naming a board, STOP. |
-| [Debugging](../debugger/debugging.md) — `altairsim-debugger.pdf` | Breakpoints, stepping, disassembly, and looking at the bus itself. |
-
-## Using it
-
-| | |
-|---|---|
-| [Disks](disks.md) | `MOUNT`, drive geometry, and the track-buffer trap. |
-| [Tapes](tapes.md) | The cassette interface, and loading BASIC the way MITS meant you to. |
-| [Serial, sockets and telnet](serial.md) | Wiring a board to your terminal, a TCP port, or a real UART. |
-| [Moving files in and out](file-transfer.md) | `HDIR`, `R` and `W` at the CP/M prompt. |
-| [Worked examples](examples.md) | Complete sessions, start to finish. |
-| [Driving it from an AI assistant](mcp.md) | The MCP server. |
-
-## When it goes wrong
-
-| | |
-|---|---|
-| [Troubleshooting](troubleshooting.md) | The things that catch everybody. |
-| [Glossary](glossary.md) | S-100, PHANTOM\*, hard-sector, BDOS, and the rest. |
-
-## Reference
-
-**Generated from the program itself** — every default, range and help string below is printed
-from the same table the monitor resolves against, so it cannot disagree with what you have.
-
-| | |
-|---|---|
-| [Boards and their parameters](ref/boards.md) | Every board, every key, every default. |
-| [The built-in machines](ref/machines.md) | |
-
-The command reference — every `altairsim>` command, with usage and examples — ships with
-[the monitor document](../monitor/monitor.md) (`altairsim-monitor.pdf`), because that is what
-it describes.
-
----
-
-*Want to build a board of your own? That needs the source, and a different document — the
-**Developer Guide**.*
+- The order of the chapters is in `ORDER`, in this folder. A new chapter must be added there, or
+  it is not in the manual.
+- The pages in `ref/` are generated from the program. Do not edit them by hand. Change the
+  program, and generate the pages again. The Developer Guide tells you how.
+- The manual may name only what is in the package. A check fails if a chapter names a file that
+  the package does not have.

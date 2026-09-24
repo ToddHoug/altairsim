@@ -2,83 +2,93 @@
 
 ```
 altairsim                the program. One file, nothing to install.
-QUICK-START.pdf          boot CP/M in one command. Start here.
-altairsim-manual.pdf     this.
-altairsim-changelog.pdf  what changed in this release, and the ones before it.
-altairsim-cheatsheet.pdf every command and option, rendered for reading.
-altairsim-monitor.pdf    the altairsim> prompt: driving the machine from the console.
-altairsim-debugger.pdf   breakpoints, stepping, and looking at the bus itself.
-migrating.pdf            coming from AltairZ80 (SIMH) or z80pack? read this.
-DRIVING-WITH-AI.md       for an AI assistant driving the machine; see below.
-cheatsheet.md            the same reference as plain text, for the AI to read.
-LICENSE                  the MIT licence this is published under.
-LICENSE-SDL3             the licence of SDL3, which is built into the program.
-examples/                machines that boot, media included.
+QUICK-START.pdf          boot CP/M with one command. Start here.
+altairsim-manual.pdf     this manual.
+altairsim-changelog.pdf  what changed in this release, and in the releases before it.
+altairsim-cheatsheet.pdf every command and option, formatted for reading.
+altairsim-monitor.pdf    the altairsim> prompt: how to control the machine from the console.
+altairsim-debugger.pdf   breakpoints, stepping, and how to look at the bus.
+migrating.pdf            for users of AltairZ80 (SIMH) or z80pack.
+DRIVING-WITH-AI.md       for an AI assistant that controls the machine. See below.
+cheatsheet.md            the same reference as plain text, for an AI assistant to read.
+LICENSE                  the MIT license of altairsim.
+LICENSE-SDL3             the license of SDL3, which is built into the program.
+examples/                machines that boot, with their media.
 recipes/                 build a machine yourself, one typed line at a time.
-hostbridge/              the file-transfer utilities: source, HEX, COM.
-skills/                  the same AI briefing, packaged for a client that reads skills.
+hostbridge/              the file-transfer utilities: source, HEX and COM.
+skills/                  the AI briefing again, packaged for a client that reads skills.
 ```
 
-That is the whole archive. There is no library to install, no runtime, and no configuration
-file you must write before the program will start.
+That is the whole package. You do not install a library or a runtime. You do not have to write
+a machine file before the program starts.
 
-**Start with `QUICK-START.pdf`.** It boots CP/M in a single command and shows you the three
-keys — `^E`, `RUN`, `QUIT` — that move you between the CPU and the monitor. This manual is
-the long version of it; that one page is enough to get a machine running. And if you are
-arriving from another Altair simulator, `migrating.pdf` is the map: what carries over from
-**AltairZ80 (SIMH)** or **z80pack**, what has a new name here, and what you would give up.
+**Start with `QUICK-START.pdf`.** It boots CP/M with one command. It shows you the `Ctrl-E` key
+and the `RUN` and `QUIT` commands, which move you between the running machine and the monitor.
+That one page is enough to get a machine running. This manual gives the full detail.
 
-`altairsim-changelog.pdf` is the release history — what this version does that the last one did
-not, and the same for the versions before it. It is a separate document from this manual on
-purpose: the manual describes the program as it is *now*, and a record of what changed reads
-better on its own than as a chapter that would have to grow one section per release.
+If you used another Altair simulator before, read `migrating.pdf`. It tells you what carries
+over from **AltairZ80 (SIMH)** or **z80pack**, what has a different name here, and what you
+cannot do here.
 
-**`recipes/` is where to go if you would rather be shown than told.** Each recipe is a short
-document of its own, and each one walks the same road: start with an empty chassis, fit the
-boards by hand, watch the machine answer every line, save what you built to a file, quit, and
-load it back. One builds a CP/M Altair, one builds a Cromemco Dazzler machine with a Z80 in it,
-and one starts from a machine that already works and changes it. Open whichever names the thing
-you want to do.
+`altairsim-changelog.pdf` is the release history. It tells you what each version added.
 
-`altairsim-monitor.pdf` and `altairsim-debugger.pdf` are two more documents beside this one.
-They are about driving the program itself — the `altairsim>` prompt where you start and stop
-the machine, and the debugger you reach for at that prompt when something has gone wrong —
-rather than the emulated hardware this manual describes. Open them the way you open this one;
-each says at the top where to start if it is the first one you picked up.
+**Read `recipes/` if you learn best from an example.** Each recipe is a short document. Each one
+follows the same steps:
 
-`altairsim` is a single self-contained program. The one outside library it uses — **SDL3**,
-which opens the window the video boards draw into — is compiled *into* it rather than shipped
-beside it, so there is nothing to install and nothing that can go missing. `LICENSE-SDL3` is
-that library's licence, and it is in the package because its code is in the program.
+1. Start with an empty machine.
+2. Add the boards one at a time, and see the machine answer each command.
+3. Save the machine to a file.
+4. Quit, and load the file again.
 
-The **Developer Guide** is not in here — it is a separate download from the same release page
-this came from, and you want it only if you intend to build a board of your own.
+One recipe builds a CP/M Altair. One builds a Cromemco Dazzler machine with a Z80. One starts
+from a machine that works and changes it. Open the recipe for the task that you want to do.
+
+`altairsim-monitor.pdf` and `altairsim-debugger.pdf` are two more documents that ship beside
+this manual. This manual describes the simulated hardware. *The Monitor* describes the
+`altairsim>` prompt, where you start and stop the machine. *The Debugger* describes how to find
+a fault from that prompt. Each document tells you at the top where to start.
+
+`altairsim` is one program that needs no other files. It uses one outside library, **SDL3**,
+to open the window for the video boards. SDL3 is built into the program, so its license is in
+the package as `LICENSE-SDL3`.
+
+The **Developer Guide** is not in the package. It is with the source, at the address in
+[What is not in the package: the source](#what-is-not-in-the-package-the-source). You need it
+only if you want to build a board of your own.
 
 ### `DRIVING-WITH-AI.md`
 
-This one is not for you, exactly. It is a briefing document for an **AI assistant**: drop it in
-a working directory, start an assistant there, and say *"using altairsim, boot CP/M and show me
-what is on the disk."* It tells the assistant how to drive the machine over the program's MCP
-interface. Ignore it if that is not how you work — nothing else depends on it.
+This document is for an **AI assistant**, not for you. It tells the assistant how to control the
+machine through the MCP interface of the program. To use it:
 
-`skills/altairsim/` is that same briefing with a cover sheet on it. An assistant that reads
-**Agent Skills** picks a skill up by its description, so copying that folder into your client's
-skills directory is enough — you ask for a machine and it goes and reads the briefing itself,
-instead of you first telling it which file to open. The folder is self-contained: move it
-wherever your client keeps skills and nothing inside it breaks. If your assistant does not know
-what a skill is, ignore the folder and hand it `DRIVING-WITH-AI.md` the way this section
-describes.
+1. Put `DRIVING-WITH-AI.md` in a working folder.
+2. Start an assistant in that folder.
+3. Ask for what you want, for example: *"Using altairsim, boot CP/M and show me what is on the
+   disk."*
 
-The quick reference travels beside it: the whole command surface — every option, every monitor
-command, every board and machine — generated from this very program so it matches the binary you
-have. It ships in two forms of the same content. `altairsim-cheatsheet.pdf` is the one for you —
-open it the way you open this manual. `cheatsheet.md` is the same thing as plain text, there for
-the assistant to read.
+If you do not use an AI assistant, you can ignore this document. Nothing else needs it.
+
+`skills/altairsim/` contains the same briefing as an **Agent Skill**. Agent Skills come from
+Anthropic, for its Claude assistants. Claude finds a skill from its description, so when you ask
+for a machine, Claude reads the briefing itself. You do not have to tell it which file to open.
+To install the skill for Claude Code, copy the `altairsim` folder to one of these places:
+
+- `.claude/skills/altairsim/` in your project folder, for that project only
+- `~/.claude/skills/altairsim/` in your home folder, for every project
+
+The folder needs no other files, so it works in either place. Some other assistants can also
+read skills. Their documentation tells you where to put the folder. If your assistant does not
+read skills, give it `DRIVING-WITH-AI.md` as the steps above show.
+
+The quick reference lists every option, every monitor command, every board and every machine.
+The program generated it, so it matches the program that you have. It ships in two forms with
+the same content. `altairsim-cheatsheet.pdf` is for you. `cheatsheet.md` is plain text, for an
+AI assistant to read.
 
 ## The machines are in the program
 
-You do not need any files to get a running machine — the machine descriptions are compiled into
-the binary, and naming one boots it:
+You do not need any files to run a machine. The machine descriptions are built into the program,
+and when you give a name, that machine boots:
 
 ```
 $ altairsim --list                what the built-in names are
@@ -86,58 +96,55 @@ $ altairsim altmon                a monitor in ROM, on a terminal
 $ altairsim sol20                 a Processor Technology Sol-20, running SOLOS
 ```
 
-A built-in is an ordinary machine file that happens to live inside the executable — the same
-TOML format you would write yourself, and `CONFIG SAVE mine.toml` writes any running machine out
-as one you can edit. **Several carry their software in ROM and need nothing else** (`altmon`,
-`amon`, `sol20`, `vdm1`, `rombasic`, the SD Systems `sbc200`/`sbc200v`, among others); the rest
-carry at most a boot PROM and come up with empty drives, wanting media — which the next section
-is about. The machines chapter has the full story.
+A built-in machine is an ordinary machine file that is stored inside the program. It uses the
+same TOML format that you would write yourself. `CONFIG SAVE mine.toml` writes any running
+machine to a file that you can edit.
+
+**Some built-in machines have their software in ROM and need nothing else.** Examples are
+`altmon`, `amon`, `sol20`, `vdm1`, `rombasic`, and the SD Systems `sbc200` and `sbc200v`. The
+other machines have at most a boot PROM, and they start with empty drives. They need media,
+which the next section is about. The machines chapter gives the full detail.
 
 ## The examples, media included
 
-`examples/` holds complete machines. **Each is a folder with the media in it**, so every
-one of them comes up the moment you unzip the archive — nothing to fetch, nothing to mount.
+`examples/` contains complete machines. **Each example is a folder with its media in it.** Every
+example boots as soon as you unzip the package. You do not have to get or mount anything.
 
-**Every folder carries its own README**, in Markdown and as a PDF beside it, and that README
-is the description of that example: what the machine is, what is in the drive or the deck,
-what to type, and what it should print back. So the list of examples is not written down in
-this manual — look in `examples/`, and read the README of whichever one you want.
+**Every folder has its own README**, in Markdown and as a PDF. The README describes the
+example: what the machine is, what is in the drive or the tape reader, what to type, and what
+the machine should print. This manual does not list the examples. Look in `examples/`, and read
+the README of the example that you want.
 
 ```
 $ ls examples/
 $ altairsim examples/cpm/cpm22-buffered.toml
 ```
 
-**The folder is the unit, and you may move it anywhere.** A path written *inside* a machine
-file resolves against **that file**, not against wherever you were standing when you ran the
-program — so `examples/cpm/cpm22-buffered.toml` names its disk as plain `cpm22b23-56k.dsk`, the one lying next
-to it, and the folder still boots after you copy it to your desktop, rename it, or mail it to
-somebody.
+**You can move an example folder anywhere.** It still boots after you copy it, rename it or send
+it to another person. The machines chapter tells you how the paths in a machine file work.
 
-(The other half of that rule matters just as much: a path *you type* at the prompt is relative
-to **your shell**, because you are the one who can see your own directory. The machines chapter
-covers both halves.)
-
-The examples chapter walks through some of them at length. Where an example carries period
-documentation of its own — a game's own printed manual, say — that travels in the folder too,
-and its README says so.
+The examples chapter describes some of the examples in detail. Some examples include period
+documentation, such as the printed manual of a game. That documentation is in the folder too,
+and the README tells you.
 
 ## The file-transfer utilities
 
-`hostbridge/` holds the programs the file-transfer chapter uses to move files between CP/M
-and your host — `R`, `W` and `HDIR`. Both the 8080 **source** and the assembled `.HEX` and
-`.COM` are in there. You do not need them to *use* the utilities on the shipped CP/M disk, which
-already carries the `.COM`; they ship for the other case that chapter covers — putting the
-utilities onto a disk that has not got them, where you paste `R.HEX` in through the console.
+`hostbridge/` contains `R`, `W` and `HDIR`. The file-transfer chapter uses these programs to
+move files between CP/M and your computer. The folder has the 8080 **source**, and the assembled
+`.HEX` and `.COM` files.
+
+You do not need this folder to use the utilities on the CP/M disk in the package. That disk
+already has the `.COM` files. The folder is for a disk that does not have the utilities. The
+file-transfer chapter tells you how to put them on that disk, by pasting `R.HEX` through the
+console.
 
 ## What is *not* in the package: everything else to run
 
-**What is in `examples/` is the whole of the shipped media.** The other built-ins that want a
-disk or a tape — `basic8k`, `ps2`, `minidisk` and the rest — start up perfectly well, with an
-empty drive:
+**The media in `examples/` is all the media in the package.** The other built-in machines that
+need a disk or a tape, such as `basic8k`, `ps2` and `minidisk`, start with an empty drive:
 
 ```
-$ altairsim -x "SHOW MOUNTS" basic4k
+$ altairsim basic4k -x "SHOW MOUNTS"
 altairsim> SHOW MOUNTS
   UNIT       KIND  HOLDS
   acr0:tape  tape  (empty)
@@ -145,64 +152,61 @@ altairsim> SHOW MOUNTS
   Paths are AS WRITTEN.  SHOW PATHS says what they are relative to.
 ```
 
-You supply the media and `MOUNT` it. The disks and tapes chapters describe how — and where
-those chapters name an image that is not in `examples/`, they are showing you the shape of
-the command, not a file you already have.
+You supply the media, and you `MOUNT` it. The disks chapter and the tapes chapter tell you how.
+When those chapters name an image that is not in `examples/`, the name shows the form of the
+command. It is not a file that you have.
 
-> **Where the rest will come from.** A separate **`altairsim-packages`** repository is planned
-> to hold the wider collection of disks, tapes and machine files, packaged the same way — each
-> example a self-contained folder you can drop anywhere. **It is not published yet**, and
-> exactly which images go in it has not been settled, so there is nothing to link to here yet.
-
-The bulk of the media is kept out of the program's own archive on purpose: an image is large,
-most of the good ones are not ours to redistribute, and the simulator's version and the
-software's have no reason to move together. The ones that ship are the ones that make the
-manual's first chapters true.
+Most disk and tape images are not ours to give away, so they are not in the package.
 
 ## What is *not* in the package: the source
 
-The **source code** is not here — the simulator's, that is. `altairsim` is an open project under
-the MIT licence, and the source is a separate thing to fetch:
+The **source code** of the simulator is not in the package. `altairsim` is an open project under
+the MIT license. You can get the source here:
 
 **<https://github.com/deltecent/altairsim>**
 
-(The one bit of source that *does* ship is `hostbridge/` above — but that is 8080 program
-source for the file-transfer utilities, not the simulator's own code.)
+The only source in the package is in `hostbridge/`. That is the 8080 source of the file-transfer
+utilities, not the source of the simulator.
 
-Nothing in this manual requires it. The one exception worth naming: **if you want to build a
-board of your own** — which is what the simulator is really for — you need the source, and
-you want the *Developer Guide*, which is a different document. This one is about driving the
-machine, not extending it.
+You do not need the source to use anything in this manual. If you want to **build a board of
+your own**, you need the source and the *Developer Guide*. This manual tells you how to use the
+machine. It does not tell you how to add to the program.
 
 ## Reporting a bug, or asking for something
 
-Both go in the same place — the **Issues** tab of that repository:
+Report a bug or ask for a feature in the **Issues** tab of the repository:
 
 **<https://github.com/deltecent/altairsim/issues>**
 
-Search it first; if nobody has raised your problem, open a new issue. You need a GitHub
-account, and nothing else.
+Search the issues first. If nobody has reported your problem, open a new issue. You need a
+GitHub account.
 
-**What makes a bug report useful** is enough for somebody else to see what you saw:
+Ask a question or talk about `altairsim` in the **Discussions** tab of the repository:
 
-- The **version** — the line `altairsim` prints at startup, or `altairsim --version` — and
-  which operating system. Paste it whole: the commit in the parentheses is what says which
-  source built your copy, and between releases the number alone names them all the same.
-  `SHOW VERSION` prints that from inside the monitor, plus a `video` row saying whether this
-  copy can open a window — worth including in anything about the video boards.
-- The **machine**: the built-in's name, or the machine file itself, which is a small text
-  file you can paste.
-- **What you typed and what happened.** Paste the terminal, prompt and all. The monitor
-  echoes every command, so a pasted session is a complete record of what was asked of it.
-- What you expected instead, when that is not obvious.
+**<https://github.com/deltecent/altairsim/discussions>**
 
-If the guest software misbehaved rather than the simulator, say which software and where you
-got it — a period program failing on real hardware in 1976 is a fair thing for it to do here
-too, and knowing the image is how that gets untangled.
+Use **Q&A** when you need help to do something, for example to boot a disk or set up a board.
+Use **Show and tell** to show a machine or a program that you made. An issue is for a bug or a
+feature request. If you open an issue that is only a question, we move it to Discussions.
 
-**A feature request is an issue as well**, and does not need an apology. Say what you are
-trying to do rather than only which knob you want, because the machine often has a way in
-already; and if it does not, the shape of the problem is what decides the shape of the
-answer. A missing S-100 board is a particularly good request when you can name the manual it
-was documented in — every board here was modelled from its own documentation, and a board
-with no surviving source is one nobody can build honestly.
+**A useful bug report lets another person see what you saw.** Include:
+
+- The **version**. This is the line that `altairsim` prints when it starts, or that
+  `altairsim --version` prints. Paste the whole line. Between releases, the part after the
+  version number tells which source built your copy. Also give your operating system.
+  `SHOW VERSION` prints the same information from the monitor. It also has a `video` row that
+  tells whether your copy can open a window. Include it in a report about a video board.
+- The **machine**. Give the name of the built-in machine, or paste the machine file. A machine
+  file is a small text file.
+- **What you typed and what happened.** Paste the terminal output, with the prompts. The monitor
+  shows every command, so the pasted output is a full record.
+- What you expected, when that is not clear.
+
+If the guest software failed and the simulator did not, tell us which software it is and where
+you got it. Some period programs failed on real hardware too. With the image, we can find out
+which kind of failure it is.
+
+**A feature request is also an issue.** Tell us what you are trying to do, not only the setting
+that you want. The machine often has a way to do it already. If it does not, your problem tells
+us what the answer should be. If you ask for an S-100 board that is not here, name the manual
+that documents the board. We build each period board from its manual.

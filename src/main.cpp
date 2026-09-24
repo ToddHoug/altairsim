@@ -86,7 +86,7 @@ static const char* kCwdConfig = "./altairsim.toml";
 static void usage(std::ostream& o) {
     o << kVersion << " -- an Altair 8800 / S-100 simulator\n"
          "\n"
-         "usage: altairsim [options] [machine]\n"
+         "usage: altairsim [machine] [options]\n"
          "\n"
          "  machine            a built-in name (altairsim original), or a config file if it\n"
          "                     has a '/' in it or ends in .toml. Omitted: ./altairsim.toml\n"

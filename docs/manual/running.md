@@ -1,6 +1,6 @@
 # Running it
 
-`altairsim` is a single executable. Unzip the package and run it from a terminal.
+`altairsim` is one program file. Unzip the package, and run the program from a terminal.
 
 ```
 $ ./altairsim
@@ -9,61 +9,56 @@ machine: default.  HELP for commands.
 altairsim>
 ```
 
-`X.Y.Z` is the release you are holding. A binary built from a **later** commit than a release says
-so, appending the commit it was built from — `AltairSim X.Y.Z-37-gcc64cca` — because between
-releases the version number alone names every build alike, and it is the commit that says which
-source produced the program in front of you. Quote whichever you see in a bug report.
-`SHOW VERSION` prints it on its own, and says whether the tree had uncommitted edits in it at the
-time.
+On **Windows**, the program is `altairsim.exe`:
 
-That prompt is **the monitor**. The machine exists — it has memory, a processor, a console
-board and a floppy controller in it — but it is not running. Nothing has been started. This
-is the equivalent of standing in front of the real Altair with the power on and your hands
-on the switches.
+```
+> altairsim.exe
+```
 
-You are not obliged to keep it in the current directory. Put it on your `PATH` and
-`altairsim` works from anywhere.
+You can run the program from any folder. Put its folder on your `PATH`, and type `altairsim`.
+
+The `altairsim>` prompt is **the monitor**. The machine has power, but it is stopped. No program
+runs until you start one.
 
 ## macOS: the first run
 
-macOS marks anything that arrives from the internet and refuses to run it until you say
-otherwise. If you see *"cannot be opened because the developer cannot be verified"*, clear
-the mark:
+macOS marks a file that comes from the internet. It does not run a marked program that is not
+signed. If you see *"cannot be opened because the developer cannot be verified"*, remove the
+mark:
 
 ```
 $ xattr -dr com.apple.quarantine ./altairsim
 ```
 
-Do that once. It is not a comment on the program; it is what macOS does to every unsigned
-binary that arrives in a zip, whoever wrote it.
+You do this one time. macOS does this to every unsigned program in a downloaded archive.
 
-The mark is put there by whatever *fetched* the file — a browser, a mail client — so if you
-pulled the zip down with `curl` or `scp` there may be nothing to clear. The command says
-nothing and succeeds either way, which is why it is `-dr` and not `-d`: plain `-d` reports an
-error when the flag is already absent, and that error is not a problem.
+A browser or a mail client adds the mark. If you got the archive with `curl` or `scp`, the file
+may have no mark. In that case, the command does nothing, and that is correct.
 
 ## Getting help, and getting out
 
 | Type | To |
 |---|---|
 | `HELP` | list every command |
-| `HELP DUMP` | the usage and worked examples for one command |
-| `QUIT` | leave |
+| `HELP DUMP` | show the usage and examples for one command |
+| `QUIT` | leave the program |
 
-**There is no `EXIT`.** `QUIT` is the word, and `Q` is enough of it.
+**There is no `EXIT` command.** Type `QUIT`, or only `Q`.
 
-Commands resolve by **prefix**, so you type as much as it takes to be unambiguous and no
-more — `HELP` shows each command with its shortest form in brackets: `D[UMP]`, `DE[POSIT]`,
-`RES[ET]`. Type the part before the bracket. And **commands are not case-sensitive**, nor
-are the names of the boards in the machine; this manual writes them in capitals only because
-it is easier to read.
+You can type a short form of a command. `HELP` shows each command with brackets, for example
+`D[UMP]`, `DE[POSIT]` and `RES[ET]`. The part before the bracket is the short form. You can type
+the short form, the full name, or any length between them.
+
+**Commands are not case-sensitive**, and the names of the boards in the machine are not
+case-sensitive. This manual writes commands in capitals because they are easier to read.
 
 ## Which machine you get
 
-Running `altairsim` with no arguments gives you a machine called `default` — a 56K Altair
-with a console and a floppy controller, which is the machine most period software expects.
+When you run `altairsim` with no arguments, you get the machine called `default`. It is a 56K
+Altair with a console, a floppy disk controller and a boot PROM. If the folder that you are in
+has a file called `altairsim.toml`, you get that machine instead.
 
-Naming something gets you something else:
+To get a different machine, give its name or its file:
 
 ```
 $ altairsim examples/cpm/cpm22-buffered.toml     a machine file: this one boots CP/M
@@ -71,16 +66,15 @@ $ altairsim basic4k                     a BUILT-IN machine, by name
 $ altairsim --list                      what the built-in names are
 ```
 
-A **built-in** is a machine file that lives inside the program. There is nothing special
-about it — it is written in the same format as the ones under `examples/`. To see what
-is actually in one, boot it and look:
+A **built-in** machine is a machine file that is stored in the program. It uses the same format
+as the machine files in `examples/`. To see what is in a built-in machine, load it and look:
 
 ```
-$ altairsim -x BOARDS basic4k
+$ altairsim basic4k -x BOARDS
 ```
 
-…and if you want it as a file you can edit, `CONFIG SAVE mine.toml` writes out the machine
-you are actually running, and what it writes will boot.
+To get a built-in machine as a file that you can edit, type `CONFIG SAVE mine.toml`. This
+command writes the machine that you are running to a file, and that file boots.
 
-The full story — every command-line option, and how `altairsim` decides whether a word is a
-built-in name or a filename — is in the machines chapter.
+The machines chapter describes every command-line option. It also tells you how `altairsim`
+decides if a word is the name of a built-in machine or the name of a file.

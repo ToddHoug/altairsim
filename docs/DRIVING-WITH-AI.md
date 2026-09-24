@@ -211,7 +211,7 @@ You do not have to memorize the monitor. Two ways to get the whole surface:
 One `run` per guest command, matching the prompt each time:
 
 ```
-run {from: 0xFF00, until: "A>"}                  # boot CP/M via the DBL PROM
+run {from: 65280, until: "A>"}                   # boot CP/M via the DBL PROM (65280 = FF00)
 run {input: "DIR\r", until: "A>"}                # a command, read the reply
 run {input: "ASM FOO\r", until: "A>", timeout_ms: 20000}
 ```
@@ -226,6 +226,41 @@ trim it to what you expect the work to take, and no need to re-issue `run` by ha
 long job forward. Set it to the worst case you are willing to sit through and let `until` end
 the call. The maximum is 600000 (ten minutes); anything larger is clamped to it.
 
+**`from` is a JSON number, and JSON has no hex.** Write the decimal value: `65280` for `FF00`,
+`64512` for `FC00`, `63488` for `F800`. A string such as `"0xFF00"` is not a number, and today it
+is silently ignored, so the run starts wherever the PC was (#579).
+
+### Stopping a `run` early, and `status`
+
+A `run` ends by itself at `timeout_ms`. Two things stop it sooner, and both return
+`stopped: "interrupted"` with what the guest printed so far:
+
+- **Cancel the request.** Send the standard `notifications/cancelled` with the request id of the
+  `run`. The server reads its input while a `run` goes on, so it sees the cancel at once. A cancel
+  that names another request, or that arrives after the `run` returned, is ignored, and it never
+  applies to the next call. Other requests sent during a `run` wait, and are answered in order after
+  it returns.
+- **Send the process a `^C`** (`kill -INT`). The first `^C` is caught and only interrupts the `run`.
+  A second `^C` before the server has reported the first one ends the server. A server started in
+  the background, or with `nohup`, ignores `^C`.
+
+Either way the machine is left as it was, and the next `run` starts clean. A `^C` with no `run` in
+progress does nothing to the guest.
+
+**`status` never waits.** It is answered by the reader thread, not the worker, so it answers even
+while a `run` (or a long `monitor`, `mem_load` or `snapshot`) is in progress. It returns the board
+id, `in_flight` (whether the worker is busy on any request), and the `pc` and `steps` of the last
+`run`. Those two go stale: a `step` or a `monitor` command moves the real PC without changing them,
+and `steps` restarts at zero on the next `run`. `generation` is the one field that always climbs, so
+use it to tell "still advancing" from "stuck on the same slice". Poll `status` before you cancel, to
+see whether the `run` is still alive.
+
+**The console under `--mcp`.** There is no host keyboard behind a pipe, so the server moves the
+console line onto an in-memory terminal that `send`, `run` and `recv` read and write. Every other
+line keeps running and is serviced on every `run` slice: a second serial board on a real port, a
+socket. A program that moves bytes between the console and a modem port works as it would at a real
+terminal.
+
 ## Recipe: build a CP/M program end to end
 
 Machine: the CP/M config (`examples/cpm/cpm22-buffered.toml`). Its disk already carries `ASM.COM`, `LOAD.COM`
@@ -233,7 +268,7 @@ and the host-bridge `R/W/HDIR.COM`. Launch altairsim **from the directory holdin
 source**, or aim the sandbox elsewhere: `monitor {command: "SET hb0 HOSTDIR=/path"}`.
 
 ```
-run {from: 0xFF00, until: "A>"}                          # boot
+run {from: 65280, until: "A>"}                           # boot (65280 = FF00)
 run {input: "R FOO.ASM\r",  until: "A>"}                 # host -> CP/M (host-bridge)
 run {input: "ASM FOO\r",    until: "A>", timeout_ms: 20000}   # -> FOO.HEX + FOO.PRN
 run {input: "LOAD FOO\r",   until: "A>"}                 # -> FOO.COM

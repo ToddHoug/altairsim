@@ -84,6 +84,7 @@ misread or need to look up, add a row.
 | sufficient | enough |
 | terminate | stop, end |
 | utilize | use |
+| use (an address, a port) | decode, respond to. A board decodes an address. It does not use one. |
 | via | through, with |
 | whichever | (rewrite the sentence) |
 | worth | (drop it; say why the reader should read on) |
@@ -95,7 +96,8 @@ One name for each thing, in every document and every comment.
 | Use | Not | Note |
 |---|---|---|
 | **board** | card | `DESIGN.md` §0.3. "Card" only for the physical 1970s object. |
-| **add** a board | fit, plug in, install | Matches `BOARDS ADD`. |
+| **add** a board | fit, install | Matches `BOARDS ADD`. The action you do. |
+| a board **plugs into** the bus | connects to, attaches to, sits on | How a board is on the bus, as on real hardware. "Connect" is for a line or an endpoint: a serial board connects to a TCP socket. |
 | **remove** a board | pull, unplug | Matches `BOARDS REMOVE`. |
 | **`Ctrl-E`** | `^E` | Every control key: `Ctrl-C`, `Ctrl-]`. A reader may not know caret notation. Keep `^E` only inside a quote of what the program prints. |
 | **machine** | system, computer | The whole simulated computer. |

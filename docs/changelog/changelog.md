@@ -32,6 +32,55 @@ its **debug flags** for `SET … DEBUG`, and the **instruction history** and **b
 `HISTORY`. The steps to set up an AI assistant are now numbered. The `SHOW DEBUG` example now
 lists the channels in the order that the program shows them.
 
+### The User Manual reads more plainly
+
+The User Manual is being rewritten in the same shorter, simpler sentences as *The Monitor* and
+*The Debugger*, one chapter at a time. *What altairsim is* now names *The Monitor* and *The
+Debugger* as the documents that describe the monitor's commands. *What is in the package* now
+says where the Developer Guide is (with the source, not on the release page), and it describes
+the version line as the program prints it today. *Running it* now shows the Windows command,
+and it says that `-x BOARDS` loads a machine to look at it, not that it boots one. It also says
+that a folder with an `altairsim.toml` in it gives you that machine, not `default`. In the
+*Quick start*, the command to write-protect the CP/M disk works now, and the `DIR` listing
+shows every file that is on the disk. The *Quick start* is now numbered steps, shows the whole
+boot output, and tells you how to leave BASIC (`SYSTEM`). *Machines* now lists the `--mirror` option, and so does the cheatsheet.
+`altairsim --help` and the manual now write the command line as `altairsim [machine]
+[options]`, with the machine first. Both orders still work. *The machine file* now lists the
+`[terminal]` table and the `history` and `log` console keys, and its `base` example is the real
+CP/M example file. That example now opens the chapter, before the reference. The chapter now
+says that a decimal `#16` must be in quotes in a machine file, because `#` starts a comment. *Boards* now describes how the PMMI modem dials and answers over TCP
+(`dial=`, `answer=`, `telnet`), and `SHOW BOARD pmmi` no longer says that it cannot. The
+chapter's board list now includes `gsio`, `io4`, `16fdc` and `64fdc`, and its SBC, 88-SIO and
+ExpandoRAM II sections describe what those boards do today. It now has a section for the Cromemco 16FDC and 64FDC, and the
+sections for disk controllers whose example is not in the package now say that you supply the
+disk image. The `pb1` section no longer depends on an example that is not in the package, and it says
+that its default control port is the same as the 2SIO's. *Disks* no longer says that the CP/M disk hides
+most of its files from `DIR`, or that a path you type starts from your shell. It now says that
+the package has a hard-disk image too. *Tapes* now says which machine to start before you load 4K BASIC by
+hand, and it points to the Boards chapter for the sense switches. *Serial ports, sockets and telnet* now says
+that the 2SIO's baud rate is a jumper, and that the format jumpers are on the 88-SIO and 88-ACR,
+not on the 6850. *Disks*, *Tapes* and *Serial ports, sockets and telnet* are now arranged for
+the reader: the safety rules for a disk are in one section, the scratch-disk steps end at a
+working `B:`, the tape chapter starts with the steps to load BASIC, and the serial chapter
+explains the console settings one time. The serial chapter now gives the correct default for
+`bsdel`, which is `bs`. *Boards* now starts with the commands that add, remove and show
+boards, and the conflict check. The front panel comes first in the list of boards, and the
+notes for every video window are in one place. It no longer says that a cassette loads in the
+same number of T-states at any processor speed, and `sense = 0x80` on `basic4k` now reads as a
+cassette load. *Moving files in and out* now says that a relative `hostdir` starts from the
+machine's folder whether you type it or write it in the file, and its `LOAD R` sample matches the
+current `R.HEX`. *Worked examples* now shows the real `DIR` listings of the CP/M and hard disks,
+and says that `rate=real`, not the processor clock, makes a tape load at its real speed. *The MCP server* chapter is now written for the person who
+sets up an assistant: setup first, then a first session with the `ai-mcp` example, watching with
+`--mirror`, and running a project. The protocol details for someone who writes their own client
+are now in `DRIVING-WITH-AI.md`, which also explains how to stop a `run` early and what `status`
+reports. `DRIVING-WITH-AI.md`, the `altairsim` skill and the `ai-mcp` example now give `from` as a
+decimal number (`65280` for `FF00`), because JSON has no hex. *Troubleshooting* now has a section for disk errors in the guest. The simulator adds no disk
+errors, so the section checks a `media` line that forces the wrong format, write protection,
+and the image itself. It also gives `rate=real` for a slow tape load,
+and `REGS`, not `SHOW REG`, for the registers. The *Glossary* adds **guest** and **machine file**, and its
+**endpoint** entry points to the complete list in the serial chapter.
+
 ### SHOW BOARDS fits on a screen
 
 `SHOW BOARDS` now lists each board type on one line, with a short summary. The full description,
