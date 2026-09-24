@@ -62,8 +62,8 @@ that the 2SIO's baud rate is a jumper, and that the format jumpers are on the 88
 not on the 6850. *Disks*, *Tapes* and *Serial ports, sockets and telnet* are now arranged for
 the reader: the safety rules for a disk are in one section, the scratch-disk steps end at a
 working `B:`, the tape chapter starts with the steps to load BASIC, and the serial chapter
-explains the console settings one time. The serial chapter now gives the correct default for
-`bsdel`, which is `bs`. *Boards* now starts with the commands that add, remove and show
+explains the console settings one time. The serial chapter now says that the default for
+`bsdel` is `off`, and that the `default` machine sets `bs`. *Boards* now starts with the commands that add, remove and show
 boards, and the conflict check. The front panel comes first in the list of boards, and the
 notes for every video window are in one place. It no longer says that a cassette loads in the
 same number of T-states at any processor speed, and `sense = 0x80` on `basic4k` now reads as a
@@ -79,7 +79,10 @@ decimal number (`65280` for `FF00`), because JSON has no hex. *Troubleshooting* 
 errors, so the section checks a `media` line that forces the wrong format, write protection,
 and the image itself. It also gives `rate=real` for a slow tape load,
 and `REGS`, not `SHOW REG`, for the registers. The *Glossary* adds **guest** and **machine file**, and its
-**endpoint** entry points to the complete list in the serial chapter.
+**endpoint** entry points to the complete list in the serial chapter, and its **DBL** entry says
+what DBL reads from the disk. *What is in the package* now explains the `tree` row of
+`SHOW VERSION`. *The machine file* now says why the board reference is always current, and that a
+wrong `type` on a base board loads with no error.
 
 ### SHOW BOARDS fits on a screen
 

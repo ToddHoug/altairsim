@@ -195,7 +195,9 @@ feature request. If you open an issue that is only a question, we move it to Dis
   `altairsim --version` prints. Paste the whole line. Between releases, the part after the
   version number tells which source built your copy. Also give your operating system.
   `SHOW VERSION` prints the same information from the monitor. It also has a `video` row that
-  tells whether your copy can open a window. Include it in a report about a video board.
+  tells whether your copy can open a window. Include it in a report about a video board. The
+  `tree` row tells whether the source had changes that were not committed when your copy was
+  built.
 - The **machine**. Give the name of the built-in machine, or paste the machine file. A machine
   file is a small text file.
 - **What you typed and what happened.** Paste the terminal output, with the prompts. The monitor

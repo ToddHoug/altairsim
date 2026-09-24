@@ -391,7 +391,7 @@ is 8-bit clean.** No board has a setting that clears a bit.
 | `crlf` | changes line endings |
 | `echo` | shows your keys locally |
 | `bell` | rings the bell of your terminal on `Ctrl-G` |
-| `bsdel` | makes Backspace and Delete send the same code: `bs` (the default), `del`, or `off` |
+| `bsdel` | makes Backspace and Delete send the same code: `off` (the default), `bs`, or `del`. The `default` machine sets `bs`. `SHOW CONSOLE` shows the value in use |
 | `stop` | the STOP key, a control character. The default is `Ctrl-E`. `attn` is the same setting |
 | `base` | `hex` or `octal`: how the **monitor** prints numbers. It does not change a byte |
 

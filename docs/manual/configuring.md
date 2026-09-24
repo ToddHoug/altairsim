@@ -48,7 +48,8 @@ Backspace setting that CP/M expects.
 
 The `[[board]]` has no `type`, because `dsk0` is already in the machine, and the file changes
 it. With `type = "dcdd"`, the file would remove the controller of the base and add a new one
-with the default settings. Leave the `type` out.
+with the default settings. The file still loads, with no error, so you do not see the mistake.
+Leave the `type` out.
 
 ## Two rules
 
@@ -56,7 +57,8 @@ with the default settings. Leave the `type` out.
 there is no `BOOT` command. It can type `RUN FF00` for you, which is what the operator did.
 Every key on a board is a property that `SET` changes at the monitor, and every property is a
 key that you can write in the file. The board reference at the back of this manual lists every
-property of every board.
+property of every board. The program prints that reference from the same table that `SET` uses,
+so it is always current.
 
 **An unknown table or key is an error, and the machine does not load.** The program tells you
 which key it did not know:
