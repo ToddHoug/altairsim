@@ -64,7 +64,9 @@ sets up an assistant: setup first, then a first session with the `ai-mcp` exampl
 `--mirror`, and running a project. The protocol details for someone who writes their own client
 are now in `DRIVING-WITH-AI.md`, which also explains how to stop a `run` early and what `status`
 reports. `DRIVING-WITH-AI.md`, the `altairsim` skill and the `ai-mcp` example now give `from` as a
-decimal number (`65280` for `FF00`), because JSON has no hex. *Troubleshooting* now gives `rate=real` for a slow tape load,
+decimal number (`65280` for `FF00`), because JSON has no hex. *Troubleshooting* now has a section for disk errors in the guest. The simulator adds no disk
+errors, so the section checks a `media` line that forces the wrong format, write protection,
+and the image itself. It also gives `rate=real` for a slow tape load,
 and `REGS`, not `SHOW REG`, for the registers. The *Glossary* adds **guest** and **machine file**, and its
 **endpoint** entry points to the complete list in the serial chapter.
 

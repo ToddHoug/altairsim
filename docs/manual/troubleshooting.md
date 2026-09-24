@@ -56,6 +56,57 @@ buffered one.
 buffer is on the disk. If you stop the program right after a file operation seems to finish, the
 last track is not on the disk. The disks chapter gives the details.
 
+## The guest reports a disk error
+
+**The simulator adds no disk errors.** A simulated drive has no dust, no worn surface and no
+head out of alignment. When the guest reports `Bad Sector`, `DISK WRITE ERROR` or a directory
+that makes no sense, the cause is the setup of the drive or the image itself. Check these
+things, in this order:
+
+1. **A `media` line on the drive** in your machine file. Remove it, unless the drive holds a
+   blank disk. See below.
+2. **Write protection.** Type `SHOW MOUNTS`. A write to a disk that shows `(write-protected)`
+   fails in the guest, and CP/M reports it as `Bad Sector`. The disks chapter tells you why.
+3. **The image.** An image can be damaged, or it can be for a different machine. A download can
+   be cut short, and an archived disk can have sectors that could not be read when somebody made
+   the image. Try the image in the machine that it came from, or get another copy.
+
+### `media` is the first thing to check
+
+The program finds the format of a disk from the size of the file: the number of tracks, the
+sectors on each track and the bytes in each sector. `media` turns this off, and sets the format
+by name. If the name is wrong, the drive reads and writes the file at the wrong places:
+
+- **A format that is too small** gives the drive fewer tracks than the file has. The first
+  tracks work, so the directory and the first files are correct. The first read or write past
+  the last track fails. CP/M uses the layout in its own BIOS, so `STAT` and `LS` still show the
+  full disk and a lot of free space. The error can come late, after many good copies.
+- **A format with a different layout**, such as a different sector size or density, puts every
+  sector at the wrong place in the file. The errors start at the first read. The guest reads
+  wrong data, sees a directory that makes no sense, or reports `Bad Sector`.
+
+For example, this drive holds an 8 MB image, and `media` makes it an 8″ floppy with 77 tracks:
+
+```toml
+[[board.drive]]
+unit  = 1
+media = "8in"            # wrong: this file is an 8 MB disk
+mount = "b-8mb.dsk"
+```
+
+CP/M copies the first files to B: with no error. Later, a copy that writes past track 76 fails
+with `DISK WRITE ERROR`, and it leaves `.$$$` files. Remove the `media` line, and the program
+finds the 8 MB format from the size of the file.
+
+**Use `media` only when the size of the file cannot decide the format:**
+
+- a blank disk from `create = true`, because an empty file has no size
+- an image that is cut short, or that has a layout that the program does not know
+
+For every other disk, leave `media` out. After you fix the machine file, delete the `.$$$` files
+and any file that you are not sure of, and copy again. A write that failed can leave a file that
+is only partly written.
+
 ## The disk image changed, and I did not want it to
 
 There is no undo. **The image is mounted read/write, as on a real machine.** A CP/M that cannot

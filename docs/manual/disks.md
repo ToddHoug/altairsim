@@ -237,7 +237,9 @@ a format program that formats every track that the drive can reach:
   media  = "8in"        # a blank 77-track floppy, not a blank 8 MB disk
 ```
 
-`media` is a key in the machine file only. You cannot set it with `MOUNT`.
+`media` is a key in the machine file only. You cannot set it with `MOUNT`. **For every other
+disk, leave `media` out.** A wrong `media` gives disk errors in the guest, and the
+troubleshooting chapter tells you why.
 
 The package has 8″ floppy images and one Datakeeper hard-disk image. You supply any `minidisk`
 or `fdc8mb` image.
