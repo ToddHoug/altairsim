@@ -54,7 +54,8 @@ machine's folder whether you type it or write it in the file, and its `LOAD R` s
 current `R.HEX`. *Worked examples* now shows the real `DIR` listings of the CP/M and hard disks,
 and says that `rate=real`, not the processor clock, makes a tape load at its real speed. *The MCP server* now gives `from` as a decimal number,
 as JSON needs, and its `--mirror` example names a machine that exists. *Troubleshooting* now gives `rate=real` for a slow tape load,
-and `REGS`, not `SHOW REG`, for the registers.
+and `REGS`, not `SHOW REG`, for the registers. The *Glossary* adds **guest** and **machine file**, and its
+**endpoint** entry points to the complete list in the serial chapter.
 
 ### SHOW BOARDS fits on a screen
 
