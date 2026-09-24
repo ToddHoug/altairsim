@@ -52,7 +52,11 @@ most of its files from `DIR`, or that a path you type starts from your shell. It
 the package has a hard-disk image too. *Tapes* now says which machine to start before you load 4K BASIC by
 hand, and it points to the Boards chapter for the sense switches. *Serial ports, sockets and telnet* now says
 that the 2SIO's baud rate is a jumper, and that the format jumpers are on the 88-SIO and 88-ACR,
-not on the 6850. *Moving files in and out* now says that a relative `hostdir` starts from the
+not on the 6850. *Disks*, *Tapes* and *Serial ports, sockets and telnet* are now arranged for
+the reader: the safety rules for a disk are in one section, the scratch-disk steps end at a
+working `B:`, the tape chapter starts with the steps to load BASIC, and the serial chapter
+explains the console settings one time. The serial chapter now gives the correct default for
+`bsdel`, which is `bs`. *Moving files in and out* now says that a relative `hostdir` starts from the
 machine's folder whether you type it or write it in the file, and its `LOAD R` sample matches the
 current `R.HEX`. *Worked examples* now shows the real `DIR` listings of the CP/M and hard disks,
 and says that `rate=real`, not the processor clock, makes a tape load at its real speed. *The MCP server* chapter is now written for the person who

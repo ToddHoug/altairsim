@@ -1,65 +1,110 @@
 # Tapes
 
-Before the floppy disk, there was the **cassette recorder**. It was not a special recorder. It
-was an ordinary home audio cassette deck, with a microphone jack and an earphone jack. MITS sold
-a board that changed bytes into a sound that the deck could record, and changed the sound back
-into bytes. That board is the **88-ACR**, and it is in this simulator.
+Before the floppy disk, there was the **cassette recorder**. It was an ordinary home audio
+cassette deck, with a microphone jack and an earphone jack. MITS sold a board that changed bytes
+into a sound that the deck could record, and changed the sound back into bytes. That board is
+the **88-ACR**, and it is in this simulator.
 
-The **Sol-20** also has a cassette interface, but a different one. It is on the Sol's main
-board, with two decks, its own modulation, and motor control that the guest can use. The Boards
-chapter describes it with the rest of the Sol's onboard hardware, under `sol`. This chapter is
-about the 88-ACR. Everything in it (mounting, rewinding, audio files and recording) works in the
-same way on the Sol's decks, with a different unit name.
+This chapter starts with the most important use of the ACR: loading Altair 4K BASIC 3.1 as
+people loaded it in 1976. After that, it describes how to use a tape: mount it, move it, play it
+at its real speed, use audio `.WAV` files, and record.
 
-The chapter ends with the most important use of the ACR: loading Altair 4K BASIC 3.1 as people
-loaded it in 1976, with nothing in ROM, nothing on a disk, a bootstrap that you enter by hand,
-and a tape.
+The **Sol-20** has its own cassette interface, with two decks and motor control that the guest
+can use. Everything in this chapter also works on the Sol's decks, with the unit names
+`sol0:tape1` and `sol0:tape2`. The `sol` section of the Boards chapter gives the differences.
+
+## Load Altair 4K BASIC 3.1 by hand
+
+An Altair owner did this every time that they wanted to use BASIC. There was nothing in ROM and
+no disk. Type the commands in the folder where you unzipped the package.
+
+1. Start the built-in `basic4k` machine. It has an 88-ACR, and its sense switches are set for a
+   cassette load:
+
+   ```
+   $ altairsim basic4k
+   ```
+
+2. Put the cassette in:
+
+   ```
+   altairsim> MOUNT acr0:tape "examples/basic/4K BASIC Ver 3-1.tap"
+   ```
+
+3. Enter the bootstrap:
+
+   ```
+   altairsim> LOAD "examples/basic/LDR4K31.HEX"
+   ```
+
+   The bootstrap is 20 bytes. On a real Altair, you entered it by hand on the front-panel
+   switches, from the listing that MITS printed in its manual. You set eight switches for each
+   byte, and pressed DEPOSIT. `LOAD` puts the same 20 bytes in memory.
+
+4. Run the bootstrap from address zero:
+
+   ```
+   altairsim> RUN 0
+   ```
+
+   The bootstrap reads the tape, BASIC loads into memory, and BASIC starts.
+
+5. Answer the three questions. Press Return for the first two, and type `Y` for the third:
+
+   ```
+   MEMORY SIZE?
+   TERMINAL WIDTH?
+   WANT SIN? Y
+
+   742 BYTES FREE
+
+   ALTAIR BASIC VERSION 3.1
+   [FOUR-K VERSION]
+
+   OK
+   ```
+
+   An empty answer means "all of the memory" and "the default width". `WANT SIN?` asks whether
+   to use some of your 4K for trigonometry.
+
+You are in Altair BASIC, the first product that Microsoft sold. The *Worked examples* chapter
+does the same with one command, `altairsim examples/basic/basic4k.toml`. It also loads BASIC
+1.0, and Disk Extended BASIC from a floppy disk.
+
+**If a tape load stops, and the tape is mounted, check the sense switches first.** The bootstrap
+reads them to find the device to load from. The `basic4k` machine sets `sense = 0x80` on the
+front panel: A15 on, for a cassette load, and all other switches off. With a different setting,
+BASIC waits for bytes from a device that is not there. The `fp` section of the Boards chapter
+describes the switches.
 
 ## The 88-ACR
 
-`acr` is the **MITS 88-ACR**, an Audio Cassette Record and playback interface.
+`acr` is the **MITS 88-ACR**, an Audio Cassette Record and playback interface. It is **an 88-SIO
+channel B with an FSK modem connected to it**, as MITS built it. The guest uses an ordinary
+serial port, and the modem changes the bits into tones.
 
-It is **an 88-SIO channel B with an FSK modem connected to it**. MITS built it this way. The
-guest uses an ordinary serial port, and the modem on the other side changes the bits into tones.
-The default port is **06**: `0x06` is status and control, and `0x07` is data. It runs at **300
-baud**. This is the speed of the tape, and you cannot change it.
+- The default port is **06**. `06` is status and control, and `07` is data.
+- It runs at **300 baud**, the speed of the tape. You cannot change it.
+- It has one unit, **`tape`**, because a cassette recorder has one place for a tape.
 
-It has one unit, **`tape`**, because a cassette recorder has one place for a tape.
+**You cannot `CONNECT` the ACR.** Its line goes to the modem on the board, and the modem goes to
+a cassette deck. There is no connector for a terminal on the back of an 88-ACR. The serial
+chapter describes the boards that take endpoints.
 
-### You cannot `CONNECT` it
+**You put the tape in by hand.** An 88-ACR cannot start, stop or rewind the tape, and the
+machine does not know that a tape is there. For this reason, a machine file has no key for the
+tape. The tape is not hardware. You put it in with `MOUNT`, and a `startup` command can type the
+`MOUNT` for you, as `examples/basic/basic4k.toml` does.
 
-The ACR takes no endpoint. You cannot connect it to your terminal, to a socket or to a real
-serial port, because **the line goes to the modem on the board**. There is no connector on the
-back of an 88-ACR. The signal goes to a cassette deck and nowhere else. **It is a cassette
-interface, not a serial port**, even though it is built from a serial port. The serial chapter
-describes the boards that *do* take endpoints.
+## Use a tape
 
-### You put the tape in by hand
-
-**An 88-ACR cannot start, stop or rewind the tape.** It can only hear what goes past the head.
-The machine does not know that a tape is there.
-
-For this reason, **a machine file has no key for the tape.** The keys of a machine file describe
-the **hardware**: the boards in the backplane, what they decode, and how much memory is on the
-bus. The cassette in the recorder is not hardware. You put it in by hand, and you can change it
-at any time. A `startup` command can type the `MOUNT` for you, as `examples/basic/basic4k.toml`
-does.
-
-**You put the tape in, and you press PLAY.** That is `MOUNT`, and you type it.
-
-## Using a tape
-
-This section describes the one `tape` unit of the 88-ACR. On the Sol's decks, it is the same
-with a different unit name (`sol0:tape1`, `sol0:tape2`). Where the two boards are different, the
-`sol` section of the Boards chapter says so.
-
-### Putting a tape in
+### Put a tape in
 
 ```
 altairsim> MOUNT acr0:tape "examples/basic/4K BASIC Ver 3-1.tap"
 ```
 
-The ACR has one unit, so you do not need to give it:
+The ACR has one unit, so you can leave out the unit and the number:
 
 ```
 altairsim> MOUNT ACR tape.bin
@@ -67,137 +112,112 @@ altairsim> MOUNT ACR tape.bin
 
 A Sol has two decks, so you must name the deck.
 
-Names are not case-sensitive. The disks chapter gives the rules for names, and they apply here
-too.
-
 ### `mode = play | record`
 
 ```
 altairsim> SET acr0:tape mode=record
 ```
 
-**`play` loads from the file, and `record` saves to it.** The setting gives the direction of the
-bytes.
+**`play` loads from the file, and `record` saves to it.** A tape has one head, and it moves in
+one direction at a time, so `mode` has two values only.
 
-A tape has one head, and it moves in one direction at a time. For this reason, `mode` has two
-values only.
+### The tape counter
 
-### Where the head is: the tape counter
-
-`SHOW MOUNTS` and `SHOW <id>` give the position of the head on the tape:
+`SHOW MOUNTS` and `SHOW <id>` give the position of the head:
 
 ```
 altairsim> SHOW MOUNTS
-  acr0:tape  tape  BASIC.WAV  00:15 / 01:28 (17%)  301/2048 bytes
+  UNIT       KIND  HOLDS
+  acr0:tape  tape  4K BASIC Ver 3-1.tap  00:00 / 02:28 (0%)  1/4439 bytes
 ```
 
-The counter is a **time and a percentage**: minutes and seconds into the tape, and how far along
-the tape the head is. For a `.WAV` file, the time is the recording's *own* time. It includes the
-leader and any silent gaps between programs, as a real cassette counter does. For this reason, a
-program that a manual finds at "so many seconds from the start of the tape" is at that second
-here. A byte `.TAP` file has no audio, so the program calculates its time from the baud rate.
-The byte count is also shown.
+The counter gives minutes and seconds into the tape, a percentage, and a byte count. For a
+`.WAV` file, the time is the recording's own time, with the leader and the silent gaps between
+programs, as on a real cassette counter. For this reason, a program that a manual finds "so many
+seconds from the start of the tape" is at that second here. A byte `.TAP` file has no audio, so
+the program calculates its time from the baud rate.
 
-### `WIND`: move the head to a time
-
-A tape unit has a command of its own:
-
-```
-WIND <id>:<unit> <mm:ss | START | END>
-```
-
-You can type `WI`. It moves the head to a time on the tape. On a cassette with several programs,
-you can **reach each program**. Read the counter or a manual for the start of the next program,
-and wind to that time.
-
-```
-altairsim> WIND acr0:tape 2:05
-acr0:tape: wound to 02:05 / 08:40 (24%) -- BASIC.WAV (...)
-```
-
-The position is a time (`mm:ss`, or a number of seconds), or the word `START` or `END`. A time
-after the end goes to the end. On the Sol, you must name the deck, because there are two.
-
-### `REWIND`: wind to the start
-
-`REWIND <id>:<unit>` (`REW`) is the same as `WIND … START`. It is common, so it has its own
-command.
-
-**You need it to load the same tape a second time.** After the guest reads a tape, the head is
-at the end of the tape, and a second read gets nothing.
-
-```
-altairsim> REW acr0:tape
-```
-
-### The live counter
-
-When a tape plays in real time (`rate = real`, below), the counter **counts up on the console
-while the tape loads**, so that you can see the progress of a long tape. It is on by default.
-Turn it off for a machine whose guest writes to the same terminal:
+When a tape plays at its real speed (`rate = real`, below), the counter **counts up on the
+console while the tape loads**. Turn it off for a machine whose guest writes to the same
+terminal:
 
 ```
 altairsim> MOUNT acr0:tape "tape.wav" counter=off
 ```
 
-You can also type `SET acr0:tape counter=off` at any time. When the counter is off, `SHOW` still
-gives the position.
+`SET acr0:tape counter=off` also works. When the counter is off, `SHOW` still gives the
+position.
+
+### `WIND` and `REWIND`: move the head
+
+```
+WIND <id>:<unit> <mm:ss | START | END>
+REWIND <id>:<unit>
+```
+
+`WIND` (`WI`) moves the head to a time: `mm:ss`, a number of seconds, `START` or `END`. On a
+cassette with several programs, read the counter or a manual for the start of the next program,
+and wind to that time:
+
+```
+altairsim> WIND acr0:tape 0:05
+acr0:tape: wound to 00:05 / 02:33 (3%) -- 4K BASIC Ver 3-1.wav (1 of 4439 bytes)
+```
+
+`REWIND` (`REW`) is the same as `WIND … START`. **Use it to load the same tape a second time.**
+After the guest reads a tape, the head is at the end, and a second read gets nothing.
 
 ### `stop`: stop the tape at a time
 
-On a tape with several programs, one program runs straight into the next. The `stop` mark is
-like pressing the **STOP button of the recorder at a counter mark**. Set it to a time, and the
-tape stops there. Set it with `MOUNT`, or with `SET` at any time after that:
+On a tape with several programs, one program runs into the next. The `stop` mark is like
+pressing the **STOP button of the recorder at a counter mark**. Set it with `MOUNT`, or with
+`SET` at any time:
 
 ```
 altairsim> MOUNT acr0:tape "tape.wav" stop=2:05
-altairsim> SET  acr0:tape stop=2:05
+altairsim> SET acr0:tape stop=2:05
 ```
 
-Load program 1, and the line goes silent at 2:05, as at the end of the tape. The loader stops
-there, and does not read into program 2. To continue, move the mark forward or clear it, and
-play again:
+The line goes silent at 2:05, as at the end of the tape, and the loader does not read into the
+next program. To continue, move the mark forward or clear it, and play again:
 
 ```
-altairsim> SET acr0:tape stop=5:30      (the next boundary)
-altairsim> SET acr0:tape stop=off       (play to the physical end)
+altairsim> SET acr0:tape stop=5:30      (the next program ends here)
+altairsim> SET acr0:tape stop=off       (play to the end of the tape)
 ```
 
-The mark is `off` (play to the end) until you set it. `SHOW` shows a set mark as `stop @ 02:05`.
-It stops **playback only**. A recording writes past it. It is also separate from `WIND`. If you
-wind the head past a set mark, the tape stays stopped there, and `SHOW` says why. Move or clear
-the mark to continue.
+The mark is `off` until you set it. `SHOW` shows a mark as `stop @ 02:05`. The mark stops
+**playback only**, and a recording writes past it. If you wind the head past a mark, the tape
+stays stopped there, and `SHOW` says why.
 
-### `rate = full | real`
+## Speed: `rate = full | real`
 
-**The cassette has its own clock, and by default it runs as fast as possible.** With
-`rate = full`, the default, the guest gets each byte as soon as it is ready to read the next
-one. A tape loads in about a second, at any processor speed. This is almost always what you
-want, because you do not need to wait for the recorder.
+**The tape has its own clock, and by default it runs as fast as possible.** With `rate = full`,
+the guest gets each byte as soon as it is ready to read the next one. A cassette that took a
+real Altair about **110 seconds** loads in **about one second**.
 
 ```
 altairsim> SET acr0:tape rate=real
 ```
 
-`rate = real` plays the tape in **real time** at the tape's baud rate, 1200 or 300. A load takes
-as long as it took on the real machine. Use it when the wait is what you want to show, for
-example in a demonstration or a screen recording. It applies to playback only. A recording takes
-as long as the guest takes, with either setting.
+`rate = real` plays the tape at the tape's baud rate, 300 or 1200, and a load takes as long as
+it took on the real machine. Use it when you want to show the wait, for example in a
+demonstration. It applies to playback only. A recording takes as long as the guest takes.
 
 **`rate` is not the processor clock.** The tape and the processor had separate crystals on the
-real hardware, and they are separate here. See *Speed* below. The processor's speed does not
-change the tape's speed. Only `rate` sets how fast a tape plays.
+real hardware, and they are separate here. `SET cpu0 clock_hz=2000000` gives the *processor* the
+speed of the period, so that a game plays at its real speed. It does not change the speed of the
+tape. With `rate = full`, the guest sees no difference at any processor speed, because a polled
+loader only asks for the next byte, and the byte is always ready.
 
 ## Audio tapes: `.WAV`
 
-Most surviving Altair and Sol cassettes are not files of bytes. They are **audio**. Somebody
-played a cassette into a sound card, and saved a `.WAV` file. You can mount one on either board.
+Most surviving Altair and Sol cassettes are **audio**. Somebody played a cassette into a sound
+card, and saved a `.WAV` file. You can mount one on either board.
 
 **The package has two**, in `examples/basic/`: `4K BASIC Ver 3-1.wav` and `BASIC Ver 1-0.wav`.
-They are the two cassette BASICs of that folder, as 88-ACR audio, not as decoded bytes. Each one
-has a machine file beside it, `basic4k-wav.toml` and `basic1-wav.toml`, that mounts it and
-boots. `4K BASIC Ver 3-1.wav` is a 300-baud FSK cassette of 4K BASIC. In the `basic` example
-folder, you can type this:
+They are the two cassette BASICs of that folder, as 88-ACR audio. The machine files
+`basic4k-wav.toml` and `basic1-wav.toml` mount them and boot. In the `basic` folder, type:
 
 ```
 altairsim> MOUNT acr0:tape "4K BASIC Ver 3-1.wav"
@@ -205,32 +225,24 @@ acr0:tape: mounted 4K BASIC Ver 3-1.wav
 4K BASIC Ver 3-1.wav: fsk300, 4439 bytes, 0 framing errors (100.0% of frames intact)
 ```
 
-Everything else is the same as for a `.TAP` file. The program decodes the recording **one time,
-when you mount it**, and never while the machine runs. After that, `SHOW`'s byte count, `WIND`
-and `REWIND` work as they do for a `.TAP`. The audio adds one thing, a *real* clock. The tape
-counter gives the recording's own minutes and seconds, with the gaps and the leader. A byte tape
-can only estimate these. The guest cannot see any difference.
+The program decodes the recording **one time, when you mount it**, and never while the machine
+runs. After that, a `.WAV` works as a `.TAP` does. The counter gives the real minutes and
+seconds of the recording, and the guest sees no difference.
 
-**Read the second line of the mount output.** A mount always says what it found, and the number
-of framing errors is important. A tape that decodes at 60% is noise, not a program. The mount
-tells you this before the loader fails. The program refuses a decode below 90%.
+**Read the second line of the mount output.** It gives the number of framing errors. A tape that
+decodes at 60% is noise, not a program, and the program refuses a decode below 90%. The
+percentage counts only the frames whose start and stop bits were in the correct place. A worn
+recording can keep its framing and still give wrong bytes. If a tape mounts well and the program
+still does not run, the recording is probably worn.
 
-**The percentage counts framing only.** It counts the frames whose start and stop bits were in
-the correct place. It cannot tell you that the eight bits between them are the bits that were
-recorded. A worn or badly copied recording can keep its framing and still give the loader wrong
-bytes. A high percentage means only that the decoder stayed in step. If a tape mounts well and
-the program still does not run, the recording is probably worn.
+**The start of the file decides the format, never its name.** A `.TAP` file that somebody
+renamed `.WAV` is still read as bytes. A recording renamed `.TAP` is still decoded as audio.
 
-**The program decides the format from the start of the file, never from its name.** A `.TAP`
-file that somebody renamed `.WAV` is still read as bytes, and a recording renamed `.TAP` is
-still decoded as audio.
+### `extract`: one `.TAP` file for each program
 
-### `extract`: split a WAV into one `.TAP` file for each program
-
-A cassette WAV often holds several programs, one after another, with a few seconds of silence
-between them. **`extract` writes each program to its own `.TAP` file.** You can then keep, mount
-or load one program at a time, and you do not have to wind through the whole tape. Ask for it
-with `MOUNT`:
+A cassette often holds several programs, with a few seconds of silence between them. **`extract`
+writes each program to its own `.TAP` file**, so that you can mount or load one program at a
+time:
 
 ```
 altairsim> MOUNT acr0:tape "games.wav" extract
@@ -240,314 +252,131 @@ acr0:tape: mounted games.wav
 2 programs extracted
 ```
 
-The files go **beside the WAV**, with names from it: `games.wav` gives `games-1.tap`,
-`games-2.tap` and so on, numbered from 1. A tape with one program gives `games.tap`, with no
-number. Each line gives the name and size of a file. `extract=<base>` sets the names yourself
-(`extract=disk1` gives `disk1-1.tap` and so on). `extract` only **reads** the tape and
-**writes** the files. Nothing in the machine changes.
+The files go **beside the WAV**, numbered from 1. A tape with one program gives `games.tap`,
+with no number. `extract=<base>` sets the names, for example `extract=disk1` gives
+`disk1-1.tap`. `extract` reads the tape and writes the files. Nothing in the machine changes.
 
-The same thing is also a command, so that you can split a WAV that is already in the deck
-without mounting it again:
+To split a WAV that is already in the deck, use the `EXTRACT` command:
 
 ```
-altairsim> EXTRACT acr0:tape          (on the Sol, name the deck: EXTRACT sol0:tape1)
+altairsim> EXTRACT acr0:tape
 ```
 
-You can extract only a `.WAV`. A `.TAP` is already bytes, and has no gaps to split on. The
-program splits at one second or more of silence. That is much longer than any gap *inside* a
-program, so the programs separate cleanly, and no program is cut in half.
+You can extract only a `.WAV`. The program splits at one second or more of silence. That is much
+longer than any gap inside a program, so no program is cut in half.
 
-### A board refuses audio that it could not really hear
+### A board refuses audio that it cannot hear
 
-The package has the same 4K BASIC in a modulation that the 88-ACR *cannot* read:
-`4K BASIC (Kansas City).wav`, beside the FSK file. With it, you can see the board refuse a tape
-that the real board could not hear:
+The package has the same 4K BASIC in a modulation that the 88-ACR *cannot* read,
+`4K BASIC (Kansas City).wav`. The board refuses it:
 
 ```
 altairsim> MOUNT acr0:tape "4K BASIC (Kansas City).wav"
 acr0: 4K BASIC (Kansas City).wav: this board's modem cannot hear that tape -- it carries 2400 Hz / 1200 Hz, and this board reads fsk300
 ```
 
-Not all published Altair cassette audio uses the modulation of the 88-ACR:
+Cassette audio of the period uses different tones:
 
-- The ACR uses **2400/1850 Hz FSK**.
-- Many archive tapes are **Kansas City**, **2400/1200 Hz**. The two formats have the same 2400
-  Hz mark tone, but different space tones, 1850 Hz and 1200 Hz.
-- The Sol's own CUTS tapes are one octave lower, **1200/600 Hz**, at 1200 baud.
+- The 88-ACR uses **2400/1850 Hz FSK**.
+- Many archive tapes are **Kansas City**, **2400/1200 Hz**.
+- The Sol's CUTS tapes are one octave lower, **1200/600 Hz**, at 1200 baud.
 
-The decoder here measures the tones on the tape, so it *could* read all of them. A real 88-ACR
-could not. Its decoder is a PLL centered at 2125 Hz, with a range of about ±100 Hz, and a 1200
-Hz space tone is far outside that range. A real board does not read that tape badly. It reads
-**nothing**.
+The decoder of the program could read all of them, but a real 88-ACR could not. Its decoder is a
+PLL centered at 2125 Hz, with a range of about ±100 Hz. A 1200 Hz tone is far outside that
+range, so the real board reads **nothing** from that tape. If the program decoded the tape
+anyway, it would give the guest data that no 88-ACR could produce. For this reason, the board
+tells you what the tape is, and you use a machine that can read it.
 
-If the program decoded the tape anyway, it would give your guest data that no 88-ACR could
-produce. For this reason, the board tells you what the tape is, and you use a machine that can
-read it.
+**The frequencies in the message are a measurement.** On a worn recording, a value can be one
+octave wrong. The message means *"this is not my format, and this is about what is there"*.
 
-**The frequencies in that message are a measurement, not the specification of the tape.** The
-decoder uses only the points where the signal crosses zero. On a clean copy, the two readings
-are at the nominal tones, here 2400 and 1200 Hz. On a worn or badly shaped recording, one
-interval can read as a whole cycle or as half of one, and the value can be one octave wrong. The
-message means *"this is not my format, and this is about what is there"*.
+## Record a tape
 
-### Recording back out to a `.WAV`
-
-Put the recorder in `record`. When the tape stops, the program changes the recording back into
-audio and writes it over the file, in the format and at the sample rate that it had when you
-mounted it:
+Set the recorder to `record`, and run the guest. When the tape stops, the program writes the
+recording to the file:
 
 ```
 altairsim> SET acr0:tape mode=record
 altairsim> RUN 0                        (the guest records)
-altairsim> SET acr0:tape mode=play      (...and the WAV is written here)
+altairsim> SET acr0:tape mode=play      (the program writes the file here)
 ```
 
-**You can also make a blank tape with `MOUNT … CREATE`.** A blank file has no recording to
-examine, so its *name* decides what it becomes. A `.wav` name makes a blank **audio** tape that
-records a real WAV that you can play. Any other name makes a blank **byte** tape.
+The tape stops when you set `mode=play`, `UNMOUNT`, `WIND`, `REWIND` or `QUIT`. On a Sol, the
+guest can also stop the motor. The program writes the whole file again each time.
+
+**A recording writes over the file.** A mounted `.WAV` is recorded in the format and at the
+sample rate that the program found when it decoded the file. Record on a *copy* if you want to
+keep the original.
+
+### A blank tape: `MOUNT … CREATE`
 
 ```
-altairsim> MOUNT acr0:tape new.wav CREATE mode=record    (a fresh FSK-300 audio cassette)
-altairsim> MOUNT acr0:tape new.tap CREATE mode=record    (a fresh byte cassette)
+altairsim> MOUNT acr0:tape new.wav CREATE mode=record
+altairsim> MOUNT acr0:tape new.tap CREATE mode=record
 ```
 
-The mount line tells you which one you got: `new.wav: blank fsk300 tape, ready to record`, or
-`new.tap: blank raw byte tape`. You need `mode=record`, because the deck starts in PLAY, and a
-tape moves in one direction at a time. The mode lets the tape *record*. It does not make the
-tape audio. The name does that. The guest can then write to the tape, for example with `CSAVE`
-in BASIC. When the tape stops, the program writes the recording. `UNMOUNT` and `QUIT` also stop
-the tape. Without `CREATE`, `MOUNT` needs a file that already exists, so a name with a typing
-mistake is an error, not a blank tape.
+A blank file has nothing to examine, so its **name** decides what it becomes. A `.wav` name
+makes a blank **audio** tape. Any other name makes a blank **byte** tape. The mount line tells
+you which one you got:
 
-**You can also record over a WAV that you mounted.** The program then uses the format and the
-sample rate that it found when it decoded the file. The recording writes over the file, so use a
-*copy* unless you want to lose the original.
+```
+new.wav: blank fsk300 tape, ready to record
+new.tap: blank raw byte tape
+```
 
-**For a file that already exists, the start of the file decides, never the name.** A `.wav` file
-that is not really a WAV (not RIFF/WAVE) is read as bytes, and a recording then puts *bytes* in
-it, not audio. It looks as if it worked, but nothing can play it. This applies only to a file
-that already exists. A blank file from `CREATE` has nothing to examine, so its name decides, as
-above. If you wanted audio and the mount line says `raw`, this is what happened.
+Give `mode=record`, because the deck starts in PLAY. The guest can then write to the tape, for
+example with `CSAVE` in BASIC.
 
-A stop writes the recording. `UNMOUNT` and every `WIND` (with `REWIND`) are also stops. The
-Sol's decks have one more stop, which the ACR does not have: the guest turns the motor off. The
-`sol` section of the Boards chapter describes it.
+**A file that already exists is different.** Its start decides, never its name. A `.wav` file
+that is not really a WAV is read as bytes, and a recording then puts bytes in it, not audio.
+Nothing can play it. If you wanted audio and the mount line says `raw`, this is what happened.
 
-The program writes the whole file again each time. It cannot change only a part, because where
-the audio of a byte starts depends on every byte before it.
+### The leader, the tone and the level
 
-**The timing is the one thing that a round trip loses.** A byte image holds no times, so the
-program that writes the audio must add the leader that a real tape needs. Two properties do
-this, in seconds:
+A byte image holds no times, so the program adds the leader that a real tape needs when it
+writes audio. These properties of the tape unit shape the audio:
 
-| Property | 88-ACR | Where the number comes from |
+| Property | 88-ACR default | What it does |
 |---|---|---|
-| `leader` | `15` | the MITS manual's *at least ~15 s of steady tone* |
-| `trailer` | `5` | §8's *at least 5 s between batches* |
+| `leader` | `15` | Seconds of steady tone before the data. The MITS manual asks for about 15 s |
+| `trailer` | `5` | Seconds of tone after the data. The MITS manual asks for 5 s between programs |
+| `waveform` | `square` | `square` is the tone of the real modem, fuller and louder. `sine` is smoother and quieter. Both decode to the same bytes |
+| `level` | `36` | The recording level, in percent of full scale. This is the level of a real tape. A much higher level overloads the input of a real deck |
 
-The Sol's decks have a shorter leader and trailer by default, measured from a real tape. The
-`sol` section of the Boards chapter gives the numbers.
+Set `leader` or `trailer` to `0` to make the file as small as possible. The archive `.wav` files
+are cut in this way, and for this reason they do not load on real hardware. Even at `0`, the
+program writes sixteen bit times of tone at each end, because the loader finds a start bit by
+its edge.
 
-Set either one to `0` to cut the file down to its data. The published archive `.wav` files are
-cut in this way, and for this reason they do not load on real hardware. Even at `0`, the program
-puts sixteen bit times of tone at each end. The loader finds a start bit by its **edge**, so a
-tape that started with the start bit would lose its first byte.
+The Sol's decks have shorter defaults, and one more property, `rc`. The `sol` section of the
+Boards chapter gives them.
 
-**You can shape the tone as the real hardware did, or smooth it.** The `waveform` property sets
-the shape of the tone when the program writes audio:
+**A tape with several files comes back as one continuous recording.** The bytes do not mark
+where one file ends, so the gaps between programs are not written back.
 
-| Property | Default | Choices | What it does |
-|---|---|---|---|
-| `waveform` | `square` | `square` \| `sine` | `square` is what the real modem lays down — a fuller, louder tone that sounds like a genuine cassette dub. `sine` is a smoother, quieter tone. |
+None of this applies to a `.TAP` file.
 
-`waveform` changes only how the recording **sounds**. A tape written either way decodes to the
-same bytes. `square` is the default, because it is nearer to a real recorder.
+## `format`: choose the format yourself
 
-**The recording level decides whether the tape reads back cleanly.**
-
-| Property | 88-ACR | What it does |
-|---|---|---|
-| `level` | `36` | Recording level, in percent of full scale. This is the level of a real tape. A much higher level overloads the input of a real deck, and the tape then fails after its header |
-
-`level` is not only a question of sound. A tape written at the level of a real tape is made to
-load on the hardware, not only to read back here. The Sol's CUTS modem needs one more property,
-`rc`, to shape the edges of its lower tone. The `sol` section of the Boards chapter describes
-it.
-
-**A tape with several files comes back as one continuous recording.** The decoded bytes do not
-mark where one file ends, so the gaps that an operator left between programs are not written
-back.
-
-Recording to a `.TAP` file works as before, and none of this applies to it.
-
-### `format`: when you must choose the format yourself
-
-Each tape unit has a `format` property. `auto` is the default, and it is almost always correct.
+Each tape unit has a `format` property. The default, `auto`, is almost always correct.
 
 ```
 altairsim> SET acr0:tape format=raw
 altairsim> SHOW acr0
 ```
 
-`SET` names the unit. `SHOW` names the **board**, and lists every unit of the board with its
-properties. There is no `SHOW <id>:<unit>`.
-
 | Value | What it does |
 |---|---|
-| `auto` | Sniff for RIFF magic; demodulate a recording, read anything else as bytes |
-| `raw` | Read the file's own bytes **even if it is a WAV** — how you inspect a tape that decodes badly |
-| a modulation | Force one: `fsk300` on the ACR, `cuts1200` or `kcs300` on the Sol |
+| `auto` | Decode a WAV file as audio. Read any other file as bytes |
+| `raw` | Read the bytes of the file, **also for a WAV**. Use it to look at a tape that decodes badly |
+| a modulation | Decode with this modulation: `fsk300` on the ACR, `cuts1200` or `kcs300` on the Sol |
 
 `format` selects how the program *reads* the file. It never changes the hardware. If you tell an
-88-ACR to decode `cuts1200`, it refuses, as it does when it detects that format itself. The
-board has the modem that it has. The read-only `detected` property gives the format of the
-mounted tape.
+88-ACR to decode `cuts1200`, it refuses. The read-only `detected` property gives the format of
+the mounted tape.
 
-`format` also selects the modulation of a **blank** tape from `MOUNT … CREATE`. There is no
-other setting for it. A `.wav` name records with the board's own modem (`fsk300` on the ACR).
-`format=fsk300`, or on the Sol `format=cuts1200` or `kcs300`, selects one by name. An empty file
-has nothing to examine, so `format` or the `.wav` name is the only choice.
+`format` also selects the modulation of a **blank** tape from `MOUNT … CREATE`. A `.wav` name
+records with the board's own modem, and `format` selects a different one by name.
 
-`format` takes effect at the **next** `MOUNT`, because the program decodes a tape one time, when
-you put it in.
-
-## Loading Altair 4K BASIC 3.1: the steps
-
-This is what an Altair owner did every time that they wanted to use BASIC, because there was no
-place to keep it.
-
-**1. Start the machine.** From the package folder, start the built-in `basic4k` machine. It has
-the 88-ACR, and its sense switches are set for a cassette load:
-
-```
-$ altairsim basic4k
-```
-
-**2. Put the cassette in.**
-
-```
-altairsim> MOUNT acr0:tape "examples/basic/4K BASIC Ver 3-1.tap"
-```
-
-**3. Enter the bootstrap.**
-
-```
-altairsim> LOAD "examples/basic/LDR4K31.HEX"
-```
-
-The bootstrap is about twenty bytes. **On a real Altair, you entered it by hand on the
-front-panel switches.** You set eight switches for each byte, pressed DEPOSIT, and did it again,
-twenty times. If a bit was wrong, the tape did not load. MITS printed the listing in the manual,
-and you entered it with your fingers. `LOAD` does that job, and nothing more. It puts the same
-twenty bytes in memory.
-
-**4. Run it from address zero.**
-
-```
-altairsim> RUN 0
-```
-
-The bootstrap starts the ACR. The tones come off the tape, BASIC loads into memory, and it
-starts itself.
-
-BASIC then asks three questions:
-
-```
-MEMORY SIZE?
-TERMINAL WIDTH?
-WANT SIN? Y
-
-742 BYTES FREE
-
-ALTAIR BASIC VERSION 3.1
-[FOUR-K VERSION]
-
-OK
-```
-
-An empty answer to the first two means "all of it" and "the default". `WANT SIN?` asks whether
-you want to use some of your 4K for trigonometry. Type `Y`. You then have 742 bytes free and a
-working `SIN`.
-
-You are in Altair BASIC. This was the first product that Microsoft sold.
-
-To do all of this with one command, use the machine file in the package:
-
-```
-$ altairsim examples/basic/basic4k.toml
-```
-
-That machine file types the commands for you. It has no special powers. You could type every
-line in it.
-
-### The sense switches are important
-
-The `basic4k` machine sets **`sense = 0x80`** on the front panel, and the setting is needed.
-
-The bootstrap reads the sense switches to find **the device to load from**. Its own printed
-header says: *"Set A15 on (cassette load), all other switches off."* A15 on, and no other
-switch, is `0x80`. If the setting is wrong, BASIC loads from **the wrong device**. It then waits
-for bytes that never come, from a teletype that is not there.
-
-If a tape load stops, and you are sure that the tape is mounted, **check the sense switches
-first.** The `fp` section of the Boards chapter describes them.
-
-### Speed: the tape and the processor have separate clocks
-
-**The machine runs as fast as possible by default, and so does the tape.** A cassette that took
-a real Altair about **110 seconds** loads in **about one second**. The two have separate clocks,
-as on the hardware. The processor's speed is `clock_hz` on the processor board. The tape's speed
-is `rate` on the deck (above). Neither one changes the other.
-
-`SET cpu0 clock_hz=2000000` gives the *processor* the speed of the period, so that a game plays
-at its real speed. `SET acr0:tape rate=real` is a separate setting that makes the *load* take
-its real time. With `rate = full`, the guest cannot see a difference at any processor speed,
-because a polled loader only asks for the next byte, and the byte is always ready.
-
-## Altair Disk Extended BASIC 4.1
-
-The other BASIC in the package does not use tape. Altair Disk Extended BASIC 4.1 is on an 8"
-floppy disk. It has what a cassette cannot give you: files, a directory, and a `SAVE` that takes
-a name.
-
-```
-$ cd examples/diskbasic
-$ altairsim diskbasic.toml
-```
-
-It asks five questions before it starts, and **the second question is the one that stops
-people**:
-
-```
-MEMORY SIZE? 
-LINEPRINTER? C
-HIGHEST DISK NUMBER? 0
-HOW MANY FILES? 
-HOW MANY RANDOM FILES? 
-
-37033 BYTES FREE
-ALTAIR BASIC REV. 4.1
-[DISK EXTENDED VERSION]
-COPYRIGHT 1977 BY MITS INC.
-OK
-```
-
-For `MEMORY SIZE?`, press Return to use all of it. `HIGHEST DISK NUMBER?` is `0`, which means
-one drive, numbered from zero. For the last two, press Return.
-
-**`LINEPRINTER?` accepts only `C`, `O` or `Q`.** If you give a blank line or `N`, it asks again.
-It gives no error and no hint. A machine that asks the same question again after every answer
-looks as if it has stopped, but it has not. The program expects you to have its manual open. `C`
-is the 88-C700 line printer. It is a correct answer here even though this machine has no printer
-board. The answer only tells BASIC where `LPRINT` goes, and nothing is sent until you use
-`LPRINT`.
-
-After that, it is BASIC:
-
-```
-OK
-PRINT 2+2
- 4 
-```
-
-The disk is mounted read/write, as on a real machine, so `SAVE` writes to it.
+`format` takes effect at the **next** `MOUNT`, because the program decodes a tape when you put
+it in. `SET` names the unit, and `SHOW` names the board. There is no `SHOW <id>:<unit>`.

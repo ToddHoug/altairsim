@@ -366,7 +366,7 @@ strip7out = false
 crlf      = false
 echo      = false
 bell      = true
-bsdel     = "off"
+bsdel     = "bs"
 ```
 
 `[console]` is **not a `[[board]]`**, and it is not in the backplane. It describes *the terminal
