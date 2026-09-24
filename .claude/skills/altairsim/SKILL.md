@@ -17,7 +17,7 @@ boards fitted — but parked, so nothing blocks before you have control. You boo
 One `run` per guest command, matching the prompt each time:
 
 ```
-run {from: 0xFF00, until: "A>"}                 # boot CP/M via the DBL PROM at FF00
+run {from: 65280, until: "A>"}                  # boot CP/M via the DBL PROM at FF00 (65280)
 run {input: "DIR\r", until: "A>"}               # a command, and what it printed back
 run {input: "ASM FOO\r", until: "A>", timeout_ms: 120000}
 ```

@@ -52,8 +52,12 @@ that the 2SIO's baud rate is a jumper, and that the format jumpers are on the 88
 not on the 6850. *Moving files in and out* now says that a relative `hostdir` starts from the
 machine's folder whether you type it or write it in the file, and its `LOAD R` sample matches the
 current `R.HEX`. *Worked examples* now shows the real `DIR` listings of the CP/M and hard disks,
-and says that `rate=real`, not the processor clock, makes a tape load at its real speed. *The MCP server* now gives `from` as a decimal number,
-as JSON needs, and its `--mirror` example names a machine that exists. *Troubleshooting* now gives `rate=real` for a slow tape load,
+and says that `rate=real`, not the processor clock, makes a tape load at its real speed. *The MCP server* chapter is now written for the person who
+sets up an assistant: setup first, then a first session with the `ai-mcp` example, watching with
+`--mirror`, and running a project. The protocol details for someone who writes their own client
+are now in `DRIVING-WITH-AI.md`, which also explains how to stop a `run` early and what `status`
+reports. `DRIVING-WITH-AI.md`, the `altairsim` skill and the `ai-mcp` example now give `from` as a
+decimal number (`65280` for `FF00`), because JSON has no hex. *Troubleshooting* now gives `rate=real` for a slow tape load,
 and `REGS`, not `SHOW REG`, for the registers. The *Glossary* adds **guest** and **machine file**, and its
 **endpoint** entry points to the complete list in the serial chapter.
 
