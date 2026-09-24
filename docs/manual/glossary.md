@@ -57,10 +57,11 @@ puts one bit in one cycle (a "1") or in a half cycle (a "0"). Its slower 300-bau
 City, 2400/1200 Hz. The Sol's UART does both, and the guest selects one with bit D5 of
 `OUT 0FAh`.
 
-**DBL**: Disk Boot Loader. The boot PROM of the MITS floppy disk controller, at `FF00`. It loads
-the boot loader from the disk, and the boot loader loads CP/M. **There is no `BOOT` command on
-an Altair.** You set the address switches to `FF00`, press EXAMINE to load them into the program
-counter, and then press RUN. DBL is the program that then runs.
+**DBL**: Disk Boot Loader. The boot PROM of the MITS floppy disk controller, at `FF00`. It reads
+the program at the start of track 0 into memory, and jumps to it. On a CP/M disk, that program
+loads CP/M. **There is no `BOOT` command on an Altair.** You set the address switches to `FF00`,
+press EXAMINE to load them into the program counter, and then press RUN. DBL is the program that
+then runs.
 
 **decode**: What a board does when it recognizes an address as its own, and answers. A board
 that does not decode an address stays silent, and another board can answer. Which board decodes
