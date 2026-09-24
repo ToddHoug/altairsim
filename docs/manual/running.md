@@ -17,12 +17,8 @@ On **Windows**, the program is `altairsim.exe`:
 
 You can run the program from any folder. Put its folder on your `PATH`, and type `altairsim`.
 
-`X.Y.Z` is the version of your release. A program built between two releases adds the commit
-that it was built from, for example `AltairSim X.Y.Z-37-gcc64cca`.
-
-The `altairsim>` prompt is **the monitor**. The machine has memory, a processor, a console board
-and a floppy disk controller in it. The machine has power, but it is stopped. No program runs
-until you start one.
+The `altairsim>` prompt is **the monitor**. The machine has power, but it is stopped. No program
+runs until you start one.
 
 ## macOS: the first run
 
@@ -59,7 +55,8 @@ case-sensitive. This manual writes commands in capitals because they are easier 
 ## Which machine you get
 
 When you run `altairsim` with no arguments, you get the machine called `default`. It is a 56K
-Altair with a console, a floppy disk controller and a boot PROM.
+Altair with a console, a floppy disk controller and a boot PROM. If the folder that you are in
+has a file called `altairsim.toml`, you get that machine instead.
 
 To get a different machine, give its name or its file:
 

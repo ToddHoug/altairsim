@@ -32,14 +32,16 @@ The User Manual is being rewritten in the same shorter, simpler sentences as *Th
 Debugger* as the documents that describe the monitor's commands. *What is in the package* now
 says where the Developer Guide is (with the source, not on the release page), and it describes
 the version line as the program prints it today. *Running it* now shows the Windows command,
-and it says that `-x BOARDS` loads a machine to look at it, not that it boots one. In the
+and it says that `-x BOARDS` loads a machine to look at it, not that it boots one. It also says
+that a folder with an `altairsim.toml` in it gives you that machine, not `default`. In the
 *Quick start*, the command to write-protect the CP/M disk works now, and the `DIR` listing
 shows every file that is on the disk. The *Quick start* is now numbered steps, shows the whole
 boot output, and tells you how to leave BASIC (`SYSTEM`). *Machines* now lists the `--mirror` option, and so does the cheatsheet.
 `altairsim --help` and the manual now write the command line as `altairsim [machine]
 [options]`, with the machine first. Both orders still work. *The machine file* now lists the
 `[terminal]` table and the `history` and `log` console keys, and its `base` example is the real
-CP/M example file. *Boards* now describes how the PMMI modem dials and answers over TCP
+CP/M example file. That example now opens the chapter, before the reference. The chapter now
+says that a decimal `#16` must be in quotes in a machine file, because `#` starts a comment. *Boards* now describes how the PMMI modem dials and answers over TCP
 (`dial=`, `answer=`, `telnet`), and `SHOW BOARD pmmi` no longer says that it cannot. The
 chapter's board list now includes `gsio`, `io4`, `16fdc` and `64fdc`, and its SBC, 88-SIO and
 ExpandoRAM II sections describe what those boards do today. It now has a section for the Cromemco 16FDC and 64FDC, and the

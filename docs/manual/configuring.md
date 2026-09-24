@@ -1,9 +1,8 @@
 # The machine file
 
-A machine file is **TOML**. It lists the boards in the backplane, the settings of each board,
-and the commands to run after the power comes on. A machine file does nothing else.
-
-This chapter is the full description of the format.
+A machine file is a **TOML** file that describes a machine. It lists the boards in the
+backplane, the settings of each board, and the commands to run after the power comes on. This
+chapter describes the format in full.
 
 ## What TOML is
 
@@ -18,59 +17,57 @@ without a manual. These rules are enough to read every example in this chapter:
 - **A `[[table]]`, with double brackets, repeats.** Each `[[board]]` starts one more board.
 - **A nested table such as `[board.unit.x]` belongs to the block above it**, by its name. The
   indentation in these examples only makes them easier to read.
-- **`#` starts a comment** that continues to the end of the line. A comment that starts with
-  **`#>`** is a *note*, which the program prints when it loads the file. See below.
+- **`#` starts a comment** that continues to the end of the line.
 
-That is all the syntax. The rest of this chapter tells you which keys go where.
+## The file that you will write
 
-## The first thing to know
+Most machine files start from a machine that already exists, and they give only what is
+different. This is `examples/cpm/cpm22-buffered.toml` without its comments:
+
+```toml
+[machine]
+name = "cpm22-buffered"
+base = "default"
+startup = ["RUN FF00"]
+
+[console]
+bsdel = "bs"
+
+[[board]]
+id = "dsk0"
+
+  [[board.drive]]
+  unit  = 0
+  mount = "cpm22b23-56k.dsk"
+```
+
+The `default` machine already has everything that a 56K CP/M machine needs. It has a front
+panel, an 8080, a 2SIO console, a floppy disk controller, 56K of RAM and the boot PROM at
+`FF00`. This file adds three things: the disk in drive 0, the `RUN FF00` command, and the
+Backspace setting that CP/M expects.
+
+The `[[board]]` has no `type`, because `dsk0` is already in the machine, and the file changes
+it. With `type = "dcdd"`, the file would remove the controller of the base and add a new one
+with the default settings. Leave the `type` out.
+
+## Two rules
 
 **A machine file can do what you can type, and nothing more.** It cannot boot a disk, because
-there is no `BOOT` command. It can *type `RUN FF00` for you*, which is what the operator did.
+there is no `BOOT` command. It can type `RUN FF00` for you, which is what the operator did.
+Every key on a board is a property that `SET` changes at the monitor, and every property is a
+key that you can write in the file. The board reference at the back of this manual lists every
+property of every board.
 
-Every board setting in a machine file is a setting that you can make with `SET` at the prompt.
-Every `SET` that you make at the prompt is a key that you can write in the file. **The
-properties of a board are its TOML keys.** The board reference at the back of this manual lists
-every property of every board.
-
-## Nothing is ignored
-
-**An unknown table or key is an error, and the program tells you which one.** The machine does
-not load.
+**An unknown table or key is an error, and the machine does not load.** The program tells you
+which key it did not know:
 
 ```
 mine.toml: unknown [machine] key 'widget'
 mine.toml: [[board]] cpu0: cpu0 has no property 'frobnicate'. Known: clock_hz idle achieved_hz
 ```
 
-A setting with a typing mistake never looks as if it worked. You find the mistake when you load
-the file, not later while you look for a fault in the machine.
-
-## Notes for the operator: `#>`
-
-An ordinary `#` comment is for the person who *reads the file*. A comment that starts with
-**`#>`** is for the person who *loads it*. The program prints its text when the machine loads,
-after the `loaded …` line and before the `startup` commands run. Use it to tell the operator how
-to use the machine.
-
-```toml
-#> Boots CP/M 2.2 from drive A.
-#> Type DIR at the A> prompt, and DIR B: for the blank second disk.
-
-[machine]
-name = "cpm22"
-base = "default"
-startup = ["RUN FF00"]
-```
-
-- **Each `#>` line prints as one line.** You can write as many as you want, together or in
-  different places in the file. They print in the order of the file.
-- **A `#>` with no text prints a blank line**, so that you can make short paragraphs.
-- **A `#>` can follow a setting** on the same line: `name = "cpm22"  #> the buffered variant`.
-- **Under `--mcp`, the notes go to stderr.** Stdout carries only the MCP messages there, but you
-  still see the notes in the terminal.
-- A note is still a comment. It **sets nothing**, and `CONFIG SAVE` does not write it. To keep a
-  note, keep it in the file that you wrote by hand.
+For this reason, a setting with a typing mistake never looks as if it worked. You find the
+mistake when you load the file.
 
 ## The tables
 
@@ -81,8 +78,8 @@ startup = ["RUN FF00"]
 | `[board.unit.<name>]` | one unit *on* the board above it, for example a serial channel or a tape deck |
 | `[[board.region]]` | a memory region on a `memory` board |
 | `[[board.drive]]` | a drive on a disk controller |
-| `[console]` | **your terminal.** It is not a board. See below |
-| `[display]` | **your video window.** It is not a board. See below |
+| `[console]` | **your terminal.** It is not a board |
+| `[display]` | **your video window.** It is not a board |
 | `[terminal]` | the built-in terminal window. The serial chapter describes it |
 
 ## `[machine]`: three keys
@@ -97,26 +94,23 @@ startup = ["RUN FF00"]
 ### `name`
 
 The name of the machine. `SHOW MACHINE` prints it, and the title bar of the video window shows
-it. `SET MACHINE name=` changes it at the prompt.
+it. `SET MACHINE name=` changes it at the monitor.
 
 ### `base`: start from a machine, and write what is different
 
 ```toml
-base = "default"          # a built-in
+base = "default"               # a built-in machine
 base = "../cpm22/cpm22.toml"   # or a file
 ```
 
 The program reads the value with **the same rule as the command line**. A value that contains a
-`/` or ends in `.toml` is a file. Any other value is a built-in name. The machines chapter gives
-the rule. A file path is relative to *this* file.
-
-Two rules tell you where to put `base`:
+`/` or ends in `.toml` is a file. Any other value is the name of a built-in machine. The
+machines chapter gives the rule. A file path is relative to the file that names it.
 
 - **The program reads `base` before every other key**, in any order in the file.
 - **`base` must come before the first `[[board]]`.** A file cannot change a backplane and then
   start from a different one.
-
-A `base` can itself have a `base`, **up to 8 levels deep**.
+- **A base can have its own `base`, up to 8 levels deep.**
 
 With `base`, a machine file contains **only what is different** from its base. You do not copy
 every board, so a change to the base reaches every file that uses it.
@@ -128,10 +122,10 @@ startup = ["RUN FF00"]
 ```
 
 `startup` is a list of **ordinary monitor commands**. The program runs them in order after it
-builds the machine, and it shows each one. This is the `startup>` line in the quick start.
+builds the machine, and it shows each one on a `startup>` line.
 
-**A path in a `startup` command is relative to the machine file**, the same as every other
-relative path. A `startup` line and the same command that you type find the same file.
+A path in a `startup` command is relative to the machine file, the same as every other relative
+path. A `startup` line and the same command that you type find the same file.
 
 ### What `[machine]` does not accept
 
@@ -167,8 +161,8 @@ already use its `id`?
 | **no** `type` + an `id` | **MODIFY** the board |
 | `remove = true` + an `id` | **REMOVE** the board |
 
-**Every `[[board]]` needs an `id`.** You use the `id` to name the board at the prompt, and a
-later file uses it to name the board here.
+**Every `[[board]]` needs an `id`.** You use the `id` to name the board at the monitor, and a
+file that uses this one as its base uses the `id` to name the board.
 
 ### ADD: `type` + a new id
 
@@ -192,15 +186,14 @@ port = 0x20
 
 If the base had a board called `sio0`, the program removes it and adds a new `2sio` in its
 place. **All the settings that the base made on that board are lost**, also the ones that you
-did not write. You get the defaults of the type, and the settings that you write here.
-
-Usually you do not want this. You want to modify the board:
+did not write. You get the defaults of the type, and the settings that you write here. Usually
+you want to modify the board instead.
 
 ### MODIFY: no `type`
 
 ```toml
 [[board]]
-id   = "cpu0"
+id       = "cpu0"
 clock_hz = 2000000
 ```
 
@@ -215,35 +208,28 @@ id     = "acr0"
 remove = true
 ```
 
-The program removes the board from the backplane. Its ports are no longer decoded. No other
+The program removes the board from the backplane, and its ports are no longer decoded. No other
 entry in the file can name it.
 
-### The error that finds a copied block
+### The same id two times in one file
 
-**`type` + an id that *the same file* already declared is an error.** It is not a replace. In
-one file, two boards with the same id are almost always a block that you copied and did not
-rename. The file does not load, and the error tells you the id.
+**A `type` with an id that the same file already used is an error.** It is not a replace. Two
+boards with the same id in one file are almost always a block that you copied and did not
+rename. The file does not load, and the error names the id.
 
-Across files, the rule is different. An id from your *base* is a board that you got from the
-base, and you can replace it.
+An id from your *base* is different. It is a board that you got from the base, and you can
+replace it.
 
 ## Every other key on a `[[board]]` is a property
 
-`type`, `id` and `remove` are the only keys that the file loader reads. **The loader gives every
-other key to the board.**
+`type`, `id` and `remove` tell the program which board the entry is. **Every other key goes to
+the board**, and the board accepts it or rejects it by name:
 
 ```toml
 [[board]]
 type = "2sio"
 id   = "sio0"
-port = 0x10          # the 2sio knows what a port is. The config layer does not.
-```
-
-The loader knows nothing about ports, baud rates, sense switches or drives. It gives the key to
-the board, and the board accepts the key or rejects it by name:
-
-```
-mine.toml: [[board]] cpu0: cpu0 has no property 'frobnicate'. Known: clock_hz idle achieved_hz
+port = 0x10
 ```
 
 **The board reference at the back of this manual lists the keys of every board.** The boards
@@ -251,7 +237,7 @@ chapter tells you what each board is.
 
 ## `[board.unit.<name>]`: settings for one unit
 
-Some boards have more than one independent part. An 88-2SIO is **two 6850 ACIAs**. Unit `a` and
+Some boards have more than one independent part. An 88-2SIO has **two 6850 ACIAs**. Unit `a` and
 unit `b` each have their own baud rate, their own interrupt setting and their own connection, so
 each one has its own table:
 
@@ -259,20 +245,19 @@ each one has its own table:
 [[board]]
 type = "2sio"
 id   = "sio0"
-port = 0x10                    # the BOARD's property -- both chips live at this base
+port = 0x10                    # a property of the board. Both units use this base port.
 
   [board.unit.a]
-  baud    = 9600               # channel A's property
+  baud    = 9600               # a property of unit a
   connect = "console"
 
   [board.unit.b]
-  baud    = 1200               # channel B is a different chip. It does not care.
+  baud    = 1200               # unit b has its own setting
   connect = "socket:2323"
 ```
 
-A key in `[board.unit.a]` is the same key that `SET sio0:a baud=9600` sets at the prompt.
-
-The board reference tells you which boards have units, and the keys of each unit.
+A key in `[board.unit.a]` is the same key that `SET sio0:a baud=9600` sets at the monitor. The
+board reference tells you which boards have units, and the keys of each unit.
 
 ## `[[board.region]]`: memory
 
@@ -286,14 +271,14 @@ id   = "mem0"
 
   [[board.region]]
   type = "ram"
-  at   = 0x0000            # HEX -- it is an address
-  size = "56K"             # DECIMAL -- it is a count
+  at   = 0x0000            # HEX: it is an address
+  size = "56K"             # DECIMAL: it is a count
 
   [[board.region]]
   type  = "rom"
   at    = 0xFF00
   size  = 256
-  mount = "turnmon.bin"    # relative to THIS FILE
+  mount = "turnmon.bin"    # relative to this file
 ```
 
 | Key | |
@@ -321,8 +306,8 @@ A disk controller has drives, and a drive holds a disk image.
 id = "dsk0"
 
   [[board.drive]]
-  unit     = 0             # DECIMAL -- it is a drive number
-  mount    = "cpm.dsk"     # relative to THIS FILE
+  unit     = 0             # DECIMAL: it is a drive number
+  mount    = "cpm.dsk"     # relative to this file
   readonly = false
 ```
 
@@ -330,8 +315,8 @@ id = "dsk0"
 |---|---|
 | `unit` | the drive number. **Decimal** |
 | `mount` | the image file |
-| `readonly` | refuse every write at the controller, so that the file cannot change. The disks chapter tells you more. `writeprotect` is the same key. You can write either one |
-| `media` | set the disk format, and do not detect it from the image |
+| `readonly` | refuse every write at the controller, so that the file cannot change. The disks chapter tells you more. `writeprotect` is the same key |
+| `media` | the disk format. Use it when the controller cannot detect the format from the image |
 | `create` | make an empty file if the file is not there, and then mount it. This is `MOUNT … CREATE` in the file |
 
 The controller usually detects the format from the image. Use `media` when it cannot, for
@@ -349,33 +334,32 @@ The machine file uses the same number rule as the monitor. *The Monitor* gives t
 decimal.**
 
 ```toml
-port  = 10        # 0x10 -- a port is on the wire, so it is HEX. This is SIXTEEN.
-at    = 0xFF00    # an address
-sense = 80        # 0x80
-baud  = 9600      # a rate  -- DECIMAL
-size  = 56        # a count -- DECIMAL
+port  = 10        # a port is on the bus, so it is HEX. This is port sixteen.
+at    = 0xFF00    # an address: hex
+sense = 80        # the sense switches: hex, 0x80
+baud  = 9600      # a rate: DECIMAL
+size  = 256       # a count: DECIMAL
 ```
 
-**`port = 10` is port sixteen.** This rule surprises people. A port is on the bus, so it is hex,
-and every listing from 1976 put the 2SIO at 10. In your own files, you can make the base clear
-with a marker:
+**`port = 10` is port sixteen.** A port is on the bus, so it is hex, and every listing from 1976
+put the 2SIO at 10. To make the base clear in your own files, use a marker:
 
 - `0x10`, `$10` or `10h` for hex
 - `0o20` or `20q` for octal
 - `0b10000` for binary
-- `#16` for decimal
+- `"#16"` for decimal. The quotes are necessary, because `#` starts a TOML comment
 - a `K` or `M` suffix, which is always a decimal count
 
-To read and print in octal, set `[console] base = octal` (see below). This changes the base, not
-the rule. When you `SET` a port, the program shows it in hex, for example `port=0x20`, whatever
-form you typed.
+To read and print in octal, set `base = "octal"` in `[console]`. This changes the base, not the
+rule. `SHOW` prints a port in hex with a `0x` marker, for example `port 0x20`, whatever form you
+wrote.
 
 ## `[console]`: your terminal, which is not a board
 
 ```toml
 [console]
-stop      = 0x05      # the STOP key: back to the monitor. Ctrl-E (attn= also works)
-base      = hex       # hex | octal -- how you read/write addresses, ports, bytes
+stop      = 0x05      # the STOP key, Ctrl-E. attn= also works
+base      = "hex"     # hex or octal: how you read and write addresses, ports and bytes
 upper     = false
 strip7in  = false
 strip7out = false
@@ -409,10 +393,10 @@ setting that clears bit 7, because a line can carry XMODEM, and a line that clea
 carry a file. For example, to fix the garbled `MEMORY SIZ?` prompt of MITS BASIC, set
 `strip7out` on the console. Do not set `data_bits = 7` on the board.
 
-When you connect a board's unit to something other than the console, these settings no longer
-apply to it. Examples are `CONNECT sio0:a socket:2323` and a real serial port. The other end
-gets the bytes as the guest wrote them, with all eight bits. The serial chapter tells you why,
-and what to set instead.
+When you connect a unit to something other than the console, these settings do not apply to it.
+Examples are `CONNECT sio0:a socket:2323` and a real serial port. The other end gets the bytes
+as the guest wrote them, with all eight bits. The serial chapter tells you why, and what to set
+instead.
 
 ## `[display]`: your video window, which is not a board
 
@@ -433,34 +417,57 @@ The size of a window is different. Each video board opens its own window, so its
 | Key | |
 |---|---|
 | `focus` | whether the video window comes to the front and gets the keyboard when it opens. Default `false` |
-| `keyboard` | whether the keys that you type in the window go to the machine's console: `console` (default) or `none` (display only). See below |
-| `crt` | show the picture as on the original monitor, with a soft glow and a 4:3 shape, and not as sharp square pixels. Default `false`. See below |
+| `keyboard` | whether the keys that you type in the window go to the machine's console: `console` (default) or `none` (display only) |
+| `crt` | show the picture as on the original monitor, with a soft glow and a 4:3 shape, and not as sharp square pixels. Default `false` |
 
-With `focus = false`, the default, the terminal keeps the keyboard. The window opens behind your
-other windows, and when the machine stops you can type at `altairsim>` at once. You can also
-click in the window and type there. Your keys then go to the same console as the terminal's
-keys.
+**`focus`.** With `focus = false`, the default, the terminal keeps the keyboard. The window
+opens behind your other windows, and when the machine stops, you can type at `altairsim>` at
+once. You can also click in the window and type there. Your keys then go to the same console as
+the keys of the terminal. With `focus = true`, the window comes to the front when it opens, and
+it keeps the keyboard when the machine stops. Use this for a **Sol-20**, where the window *is*
+the console.
 
-With `focus = true`, the window comes to the front when it opens, and it keeps the keyboard when
-the machine stops. Use this for a **Sol-20**, where the window *is* the console.
+**`keyboard`** decides whether a video window is a keyboard at all. With `console`, the default,
+the keys that you type in the window go to the console. This is correct for a **Sol-20**. Set
+`none` for a board that only shows a picture, such as a **Dazzler**. The window still shows the
+picture and still comes to the front, but its keys do **not** go to the console. They control a
+joystick, if the machine has a `d7a`. Only `Ctrl-E` works in the window, to stop the machine and
+give you the monitor.
 
-`keyboard` decides whether a video window is a keyboard at all. This is different from focus.
-With `console`, the default, the keys that you type in the window go to the console. This is
-correct for a **Sol-20**. Set `none` for a board that only shows a picture, such as a
-**Dazzler**. The window still shows the picture and still comes to the front, but its keys do
-**not** go to the console. They control a joystick, if the machine has a `d7a`. Only `Ctrl-E`
-works in the window, to stop the machine and give you the monitor. For this reason, the keys
-that you type in a Dazzler game window do not go to the CP/M prompt.
+**`crt`** changes how the window shows the picture. It does not change what the machine draws.
+With `crt = false`, the default, each pixel is a sharp square, scaled by a whole number. With
+`crt = true`, the window looks like a monitor of the period. The picture is stretched to a 4:3
+shape, and the rows are softened into each other. A VDM-1 draws 512×208 and a VDB draws
+640×240. Neither picture was square, because the tube stretched it to 4:3. Type
+`SET DISPLAY crt=on` or `crt=off` at the monitor, and the open window changes at once. With
+`crt = true`, a window with a `width` is that many pixels wide.
 
-`crt` changes how the window shows the picture. It does not change what the machine draws. With
-`crt = false`, the default, each pixel is a sharp square, scaled by a whole number. With `crt =
-true`, the window looks like a monitor of the period. The picture is stretched to a 4:3 shape,
-and the rows are softened into each other. A VDM-1 draws 512×208 and a VDB draws 640×240.
-Neither picture was square, because the tube stretched it to 4:3. Type `SET DISPLAY crt=on` or
-`crt=off` at the monitor to change it, and the open window changes at once. With `crt = true`, a
-window with a `width` is that many pixels wide.
+## Notes for the operator: `#>`
 
-## A complete machine file
+An ordinary `#` comment is for the person who *reads the file*. A comment that starts with
+**`#>`** is for the person who *loads it*. The program prints its text when the machine loads,
+before the `startup` commands run. Use it to tell the operator how to use the machine.
+
+```toml
+#> Boots CP/M 2.2 from drive A.
+#> Type DIR at the A> prompt, and DIR B: for the blank second disk.
+
+[machine]
+name = "cpm22"
+base = "default"
+startup = ["RUN FF00"]
+```
+
+- **Each `#>` line prints as one line.** You can write as many as you want, together or in
+  different places in the file. They print in the order of the file.
+- **A `#>` with no text prints a blank line**, so that you can make short paragraphs.
+- **A `#>` can follow a setting** on the same line: `name = "cpm22"  #> the buffered variant`.
+- **Under `--mcp`, the notes go to stderr.** Stdout carries only the MCP messages there, but you
+  still see the notes in the terminal.
+- **A note sets nothing, and `CONFIG SAVE` does not write it.** To keep a note, keep it in the
+  file that you wrote by hand.
+
+## A machine with no base
 
 This small file has every part that a machine needs, and it loads. It has no `base`, so every
 board is an ADD:
@@ -475,17 +482,17 @@ id   = "fp0"
 sense = 0x00
 
 [[board]]
-type     = "8080"          # the CPU is a board. The crystal is on it.
+type     = "8080"          # the processor is a board. The crystal is on it.
 id       = "cpu0"
-clock_hz = 0               # 0 = flat out. This is the default.
+clock_hz = 0               # 0 is as fast as possible. This is the default.
 
 [[board]]
 type = "2sio"              # the console board
 id   = "sio0"
-port = 10                  # HEX. Port SIXTEEN.
+port = 10                  # HEX: port sixteen
 
   [board.unit.a]
-  baud    = 9600           # DECIMAL. Nine thousand six hundred.
+  baud    = 9600           # DECIMAL: nine thousand six hundred
   connect = "console"
 
 [[board]]
@@ -501,38 +508,7 @@ id   = "mem0"
 strip7out = true
 ```
 
-## A file with a `base`: the kind that you will write
-
-This is `examples/cpm/cpm22-buffered.toml` without its comments:
-
-```toml
-[machine]
-name = "cpm22-buffered"
-base = "default"
-startup = ["RUN FF00"]
-
-[console]
-bsdel = "bs"
-
-[[board]]
-id = "dsk0"
-
-  [[board.drive]]
-  unit  = 0
-  mount = "cpm22b23-56k.dsk"
-```
-
-The `default` machine already has everything that a 56K CP/M machine needs. It has a front
-panel, an 8080, a 2SIO console, a floppy disk controller, 56K of RAM and the boot PROM at
-`FF00`. This file adds only three things: the disk in drive 0, the `RUN FF00` command, and the
-Backspace setting that CP/M expects.
-
-The `[[board]]` has no `type`, because `dsk0` is already there, and the file modifies it. With
-`type = "dcdd"`, the file would remove the base's controller and add a new one with the default
-settings. The machine would still work, and you would not see the difference. Leave the `type`
-out.
-
-## Saving and loading at the prompt
+## Saving and loading at the monitor
 
 ```
 altairsim> SET MACHINE name=mine
@@ -542,22 +518,18 @@ altairsim> CONFIG LOAD mine.toml
 
 **`CONFIG SAVE` writes the machine that you are running now.** It writes every board and every
 property, with every change that you made with `SET`. When you load the file, you get the same
-machine. Give the machine a name with `SET MACHINE name=` before you save it. The machines
-chapter tells you more about the name.
+machine. Give the machine a name with `SET MACHINE name=` before you save it.
 
-**`CONFIG LOAD` replaces the machine that you have.** It does the same as a machine file on the
-command line. You cannot undo it, except with a file that you saved. It also **loads all of the
-file or nothing**. The program builds the new machine first. If the file does not load, you keep
-the machine that you had.
+**`CONFIG LOAD` replaces the machine that you have**, the same as a machine file on the command
+line. You cannot undo it, except with a file that you saved. It **loads all of the file or
+nothing**. The program builds the new machine first. If the file does not load, you keep the
+machine that you had.
 
-This is the fastest way to write a machine file. Build the machine at the prompt with `BOARDS
-ADD` and `SET`, and save it. After that, edit the file down to the parts that you need, or give
-it a `base` and delete the rest. The machines chapter shows these steps under "From an empty
-backplane to a machine file".
+To write a machine file fast, build the machine at the monitor with `BOARDS ADD` and `SET`, and
+save it. The machines chapter shows the steps, under "From an empty backplane to a machine
+file".
 
-The `startup` list is the one part of the file that is not a board. It holds the commands that
-the machine runs when it loads, for example `MOUNT` a disk, `LOAD` a loader, and `RUN`. You can
-build it at the prompt with `STARTUP`:
+`STARTUP` builds the `startup` list at the monitor:
 
 ```
 altairsim> STARTUP ADD MOUNT dsk0:drive0 "CP-M 2.2.dsk"
@@ -570,4 +542,4 @@ altairsim> STARTUP
 `STARTUP ADD` adds a line as you typed it, with its quotes and spaces, because a startup entry
 is a command line. `STARTUP REMOVE <n>` removes one line, and `STARTUP CLEAR` removes them all.
 `CONFIG SAVE` writes the list as `startup = [...]`, so the file boots the machine in the way
-that you tested at the prompt.
+that you tested at the monitor.
