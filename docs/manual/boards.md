@@ -542,7 +542,7 @@ The board does not decode the dial pulses of the guest into a telephone number. 
 property gives the number. The board also raises no interrupts.
 
 `SHOW pmmi0` shows the live character format, baud rate, UART flags and modem lines, with the
-base address. To try the board, add it to `default`. `BOARDS ADD pmmi` adds it at `C0`.
+base address. To try the board, add it to `default`. `BOARDS ADD pmmi pmmi0` adds it at `C0`.
 
 ---
 
@@ -1154,110 +1154,117 @@ operating system.
 
 ## Interrupts and the clock
 
-Vectored interrupts and a real-time clock, on one board.
+Vectored interrupts and real-time clocks.
 
 ## `virtc` — MITS 88-VI/RTC
 
-Two things on one board, which is why it has an awkward name.
+Two things on one board.
 
-**Vectored interrupts.** Eight lines, **VI0 through VI7**. A device is strapped to a line; when it
-interrupts, **level *n* becomes `RST n`** — the processor jumps to `8×n` and the right handler runs
-without anybody having to poll anything. **VI0 is the highest priority**, and the board enforces
-that: a lower level cannot interrupt a higher one that is being serviced.
+**Vectored interrupts.** The board has eight lines, **VI0 to VI7**. You strap a device to a
+line. When the device interrupts, **level *n* becomes `RST n`**. The processor jumps to `8×n`,
+and the correct handler runs, with no polling. **VI0 has the highest priority**, and the board
+enforces it: a lower level cannot interrupt a higher level while the higher level is being
+handled.
 
-This is what turns a machine that busy-waits into a machine that gets on with something else. Every
-board with an interrupt strap in its properties — the serial boards, the floppy controllers — is
-strapped to one of these lines, or to `int`, or to nothing at all.
+With interrupts, the machine can do other work and does not have to wait in a loop. Every board
+with an interrupt strap in its properties, such as the serial boards and the floppy controllers,
+is strapped to one of these lines, to `int`, or to nothing.
 
-**A real-time clock**, on the same board: a periodic interrupt off the 60 Hz line or off the system
-clock, divided down.
+**A real-time clock**, on the same board. It gives a periodic interrupt from the 60 Hz power
+line, or from the system clock divided down. The `rtc_source` jumper selects which.
 
-One port at `FE`, and it is **write-only**. There is nothing to read back. Interrupt boards are the
-easiest thing in a machine to get subtly wrong, and this one is worth reading the reference for
-before you strap anything to it.
+The board has one port, at `FE`, and it is **write-only**. You cannot read anything back.
+Interrupt boards are easy to set up wrong, so read the reference for this board before you strap
+anything to it.
 
-`ps2int` is the machine that shows it working — with a MITS Programming System II tape **you
-supply**, since none is in the package. Its cassette deck comes up empty.
+The `ps2int` machine shows the board in use, with a MITS Programming System II tape **that you
+supply**. The package has no such tape, so its cassette deck starts empty.
 
 ## `ss1` — CompuPro System Support 1
 
-A **multifunction** board: on the real card, one 16-port block holds a serial channel, an
-interval timer, two interrupt controllers, a battery-backed **real-time clock/calendar**, and a
-socket for a math coprocessor. This board is its **clock**, its **serial channel**, its **interval
-timer** and its **dual interrupt controllers** — everything but the (empty) math-chip socket.
+A **multifunction** board. On the real board, one block of 16 ports holds a serial channel, an
+interval timer, two interrupt controllers, a battery-backed **real-time clock and calendar**,
+and a socket for a math coprocessor. This board models the **clock**, the **serial channel**,
+the **interval timer** and the **two interrupt controllers**. The math socket is empty.
 
-The clock is the OKI MSM5832. It comes up reading **your host's own date and time**, so a guest
-program that reads it gets the real wall clock for free. A guest can also **set** it, and once set
-it is battery-backed — the time survives a RESET, exactly as the real chip's battery does. The
-block sits at base **`50H`** by default (the CompuPro convention), movable with the `base` property.
+The clock is an OKI MSM5832. It starts with **the date and time of your computer**, so a guest
+program that reads it gets the real time. A guest can also **set** it. After that, the clock
+keeps the setting, and the time is kept through a RESET, as the battery on the real chip did.
+The block is at base **`50H`** by default, the CompuPro convention. The `base` property moves
+it.
 
-The serial channel is a **2651 UART** at `5C`–`5F`. It is a spare serial port — a guest programs
-its rate, frame and RS-232 handshaking through the mode and command registers — that you point at
-something with `CONNECT ss1:serial <endpoint>`. Its `baud`, `interrupt` and `connect` are unit
-settings, shown under `SHOW ss1`.
+The serial channel is a **2651 UART** at `5C`–`5F`. It is a spare serial port. A guest sets its
+rate, its frame and its RS-232 handshake through the mode and command registers. You connect it
+with `CONNECT ss1:serial <endpoint>`. Its `baud`, `interrupt` and `connect` are unit settings,
+which `SHOW ss1` shows.
 
-The interval timer is an **Intel 8253** at `54`–`57`: three independent 16-bit counters a guest
-can program as timers or square-wave/rate generators. The counters tick at 2 MHz. Their outputs
-feed the interrupt controllers. `SHOW ss1` prints a live `timer` line with each counter's mode,
-count and output.
+The interval timer is an **Intel 8253** at `54`–`57`. It has three independent 16-bit counters,
+which a guest can use as timers or as square-wave and rate generators. The counters count at 2
+MHz, and their outputs go to the interrupt controllers. `SHOW ss1` prints a live `timer` line
+with the mode, count and output of each counter.
 
-The interrupt system is two **Intel 8259A** controllers at `50`–`53`, cascaded master and slave.
-The master watches the eight vectored-interrupt lines of the bus and drives the CPU's interrupt
-pin; the slave gathers the on-board sources — the three timer outputs and the UART's transmit- and
-receive-ready signals — and feeds them up through the master. A guest programs them the usual
-8259A way (the ICW/OCW words), unmasks the sources it wants, and on an interrupt the controller
-hands the CPU a `CALL` to the vector for the winning source. `SHOW ss1` prints a live `pic` line
-with each controller's request, in-service and mask registers. Because the master is the machine's
-interrupt priority encoder, do not also fit an `88vi` — the two would fight over the acknowledge.
+The interrupt system is two **Intel 8259A** controllers at `50`–`53`, cascaded as master and
+slave:
 
-`compupro` is the machine that fits one: a stock Altair with the System Support 1 added, its
-console still on the 2SIO. The clock lives at `5A` (command) / `5B` (data); the digit map, the
-read/set sequences and the register layouts are in the board's reference.
+- The master watches the eight vectored interrupt lines of the bus, and drives the processor's
+  interrupt pin.
+- The slave collects the sources on the board, which are the three timer outputs and the UART's
+  transmit-ready and receive-ready signals. It sends them to the master.
+
+A guest sets them up in the usual 8259A way, with the ICW and OCW words, and unmasks the sources
+that it wants. On an interrupt, the controller gives the processor a `CALL` to the vector of the
+source with the highest priority. `SHOW ss1` prints a live `pic` line with the request,
+in-service and mask registers of each controller. The master is the interrupt priority encoder
+of the machine, so do not also add a `virtc`. The two boards would both answer the interrupt
+acknowledge.
+
+The `compupro` machine has one: a stock Altair with the System Support 1 added, and its console
+still on the 2SIO. The clock is at `5A` (command) and `5B` (data). The board reference gives the
+digit map, the read and set sequences and the register layouts.
 
 ---
 
 ## `rtc100` — SciTronics RTC-100
 
-A **battery-backed calendar clock**, and nothing else. SciTronics sold it in 1980 for a machine
-that had no idea what day it was: an OKI MSM5832 clock chip — the same chip the System Support 1
-carries — behind a 6821 parallel interface, on four consecutive ports.
+A **battery-backed calendar clock**, and nothing else. SciTronics sold it in 1980 for machines
+that did not know the date. It has an OKI MSM5832 clock chip, the same chip as on the System
+Support 1, behind a 6821 parallel interface, on four ports in a row.
 
-It comes up reading **your host's own date and time**, so a guest gets the real wall clock for
-free, and a guest that sets it keeps that setting across a RESET and a power cycle, the way the
-card's lithium cell kept it. `SHOW rtc100` prints a live `time` line with what the clock is
-showing and how far it has been set from host time.
+It starts with **the date and time of your computer**, so a guest gets the real time. When a
+guest sets it, the clock keeps that setting through a RESET and a power cycle, as the lithium
+cell of the real board did. `SHOW <id>` prints a live `time` line with the time on the clock and
+how far it is from the time of your computer.
 
-The base address is the card's PORT switch, and it **must be a multiple of 4** — the switch
-decodes only the upper six address bits, and the bottom two pick which of the four ports you are
-talking to. The default here is `F0`. A guest reads the clock one BCD digit at a time: write the
-digit's number to the first port, read the digit back **in the top half of the byte**, which is
-why period drivers for this card all end by masking and rotating.
+The base address is the PORT switch of the board, and it **must be a multiple of 4**. The switch
+decodes only the top six address bits, and the bottom two bits select one of the four ports. The
+default is `F0`. A guest reads the clock one BCD digit at a time. It writes the number of the
+digit to the first port, and reads the digit back **in the top half of the byte**. For this
+reason, the period drivers for this board all mask and rotate the byte at the end.
 
-It can also **interrupt once a second**, which is how the card was meant to drive a background
-clock display. Set `interrupt` to `int` and it pulls the machine's interrupt line; `restart`
-picks which `RST` it feeds the processor (0–7, the card's own INT switch — the manual warns that
-0 and 7 are commonly spoken for). With `interrupt` at `none` it never interrupts, and it still
-keeps perfect time.
+It can also **interrupt once a second**, to drive a clock display in the background. Set
+`interrupt` to `int`, and the board pulls the interrupt line of the machine. `restart` selects
+the `RST` that it gives the processor (0 to 7, the INT switch of the board). The manual of the
+board says that 0 and 7 are often used by other things. With `interrupt` set to `none`, the
+board never interrupts, and it still keeps the correct time.
 
 ---
 
 ## The whole machine
 
-The front panel, and the turnkey board that stands in for it.
+The front panel, and the turnkey board that replaces it.
 
 ## `fp` — the front panel
 
-The sense switches. The panel is **a board**, because on a real Altair it was one — it
-plugged into the bus like everything else, and a machine without it is a machine you cannot toggle
-a bootstrap into.
+The sense switches. The panel is **a board**, because it was one on a real Altair. It plugged
+into the bus like the other boards. Without it, you cannot toggle a bootstrap into the machine.
 
 ### The SENSE switches, at port `FF`
 
-The eight switches on the left of the address bank, `SA8`–`SA15`. **`IN FFH` reads them.** They are
-**read-only**: an `OUT FF` is not this board's business and goes nowhere at all.
+The sense switches are the eight switches on the left of the address switches, `SA8` to `SA15`.
+**`IN FFH` reads them.** They are **read-only**. An `OUT FF` does nothing on this board.
 
-`SA15` is the **top** bit of the byte the program reads and `SA8` is the bottom, so the switches
-line up left to right the way they sit on the panel:
+`SA15` is the **top** bit of the byte, and `SA8` is the bottom bit. The bits are in the same
+order, left to right, as the switches on the panel:
 
 ```
 switch   SA15  SA14  SA13  SA12  SA11  SA10   SA9   SA8
@@ -1265,12 +1272,12 @@ bit         7     6     5     4     3     2     1     0
 value    0x80  0x40  0x20  0x10  0x08  0x04  0x02  0x01
 ```
 
-That is what makes a period boot procedure followable. "Raise A15 and A11" is `0x80` plus `0x08`
-— or, written so it looks like the panel, `0b10001000`.
+This makes a period boot procedure easy to follow. "Raise A15 and A11" is `0x80` plus `0x08`, or
+`0b10001000` when you write it to look like the panel.
 
-**They are not decoration.** Period bootstraps read the sense switches to decide **what to boot
-from** — which device, at which port, at which speed. That is why every tape machine in this package
-sets one:
+**The switches are important.** Period bootstraps read the sense switches to decide **what to
+boot from**: which device, at which port, and at which speed. For this reason, every tape
+machine in this package sets them:
 
 ```
 sense = 0x80        # basic4k: load from the 88-SIO at port 00
@@ -1279,54 +1286,52 @@ sense = 0x8E        # ps2:     the 2SIO, and interrupts off
 sense = 0b10001110  #          again, one digit per switch
 ```
 
-Binary is nothing special to this board — `0b` works anywhere a number does, at the prompt and in
-a machine file alike, and the *Monitor* document's number rule has the whole list of prefixes. It is
-just that eight switches would rather be eight digits than two hex ones. Whichever way you write
-it, `SHOW fp` reads the byte back in hex.
+`0b` is not special to this board. It works for any number, at the prompt and in a machine file.
+*The Monitor* gives the full list of prefixes. Binary is easier to read for eight switches.
+However you write the value, `SHOW fp0` shows it in hex.
 
-Get it wrong and the loader sits there reading a device that is not there. It will not tell you.
-It has no way to.
+If you set the switches wrong, the loader reads a device that is not there, and it gives no
+error.
 
-`sense` is a **board property**, because the switches are on the panel. There is no machine-level
-`sense`, and asking for one is an error that says so.
+`sense` is a **board property**, because the switches are on the panel. There is no `sense` for
+the machine, and the program gives an error if you try to set one.
 
 ---
 
-## `turnkey` — the MITS 8800bt, on one card
+## `turnkey` — the MITS 8800bt, on one board
 
-The 8800b "turnkey" system had **no front panel**. One board — the Systems Turnkey Module —
-did the panel's job and more: it carried the boot PROM, the terminal serial port, the sense
-switches, and a circuit that booted the machine the moment you switched it on. This board is
-that card, so a `turnkey` machine has **no `fp` and no separate `2sio`** — all three live here.
-`altairsim turnkey` is the bare machine. Give it a disk and one of the two boot loaders below
-— `start = "FF00"` for the floppy, `FC00` for the hard disk — and CP/M comes up the moment it
-powers on.
+The 8800b "turnkey" system had **no front panel**. One board, the Systems Turnkey Module, did
+the work of the panel and more. It had the boot PROM, the serial port for the terminal, the
+sense switches, and a circuit that booted the machine when you turned it on. This board is that
+board, so a `turnkey` machine has **no `fp` and no separate `2sio`**. All three are on this
+board. `altairsim turnkey` is the plain machine. Give it a disk and one of the two boot loaders
+below (`start = "FF00"` for the floppy disk, `FC00` for the hard disk), and CP/M starts when the
+machine turns on.
 
 ### It boots itself
 
-There is no front panel to toggle a bootstrap in from, so the card has an **Auto-Start**
-circuit. `RUN 0000` starts the processor at address 0, and the card jams a `JMP` onto the bus
-so the first thing that runs is the boot PROM — exactly what pressing the panel's START switch
-did. The `start` property is the START ADDR switches: `FF00` runs the floppy loader, `FC00` the
-hard-disk loader. A `startup = ["RUN 0000"]` in the machine file makes it happen at launch.
+There is no front panel to toggle in a bootstrap, so the board has an **Auto-Start** circuit.
+`RUN 0000` starts the processor at address 0, and the board puts a `JMP` on the bus, so that the
+boot PROM runs first. This is what the START switch on the panel did. The `start` property is
+the START ADDR switches: `FF00` runs the floppy loader, and `FC00` runs the hard-disk loader.
+With `startup = ["RUN 0000"]` in the machine file, this happens when the program starts.
 
 ### The boot PROM gets out of the way
 
-The PROM sits at `FC00`–`FFFF` and **shadows the RAM underneath it for reads** — until the
-first `IN` from port `FE` or `FF`, when it switches itself out and the machine has the **full
-64 KB** of RAM. That is why this machine has 64K where a front-panel Altair stops at 56K: the
-PROM is not permanently taking up the top of memory, it is a boot device that steps aside. The
-same `IN FF` that reads the sense switches is what triggers it — which is exactly how period
-software (Altair BASIC, the CP/M loaders) frees the whole 64K without knowing the trick.
+The PROM is at `FC00`–`FFFF`. **A read there gets the PROM, not the RAM under it,** until the
+first `IN` from port `FE` or `FF`. The PROM then switches itself off, and the machine has the
+**full 64 KB** of RAM. For this reason, this machine has 64K, and a front-panel Altair has 56K.
+The PROM does not use the top of memory all the time. It is a boot device that gets out of the
+way. The same `IN FF` that reads the sense switches switches it off. Period software, such as
+Altair BASIC and the CP/M loaders, gets the full 64K in this way without knowing about it.
 
 ### The console and the sense switches
 
-The serial console is the `tty` unit, at port `10h`, and it behaves like the A channel of a
-`2sio` — so the same software drives it. The sense switches answer port `FF`, as on the front
-panel. Because this card owns `FF`, **do not put an `fp` in a `turnkey` machine**: they would
-both try to answer the port.
+The serial console is the `tty` unit, at port `10h`. It works like channel A of a `2sio`, so the
+same software drives it. The sense switches are at port `FF`, as on the front panel. This board
+uses `FF`, so **do not put an `fp` in a `turnkey` machine**. Both boards would answer the port.
 
-The PROM sockets are a list, like a memory card's regions:
+The PROM sockets are a list, like the regions of a memory board:
 
 ```
 [[board.socket]]
@@ -1338,97 +1343,107 @@ mount = "builtin:hdbl"
 
 ## Host integration
 
-Not period hardware — a board that bridges to your host.
+A board that connects the machine to your computer. It is not period hardware.
 
-## `hostbridge` — ours, not a period card
+## `hostbridge` — our own board, not a period board
 
-**This card never existed.** It is the one thing in the machine that is not history, and the manual
-says so plainly rather than letting you discover it in a museum catalogue.
+**This board never existed.** It is the one part of the machine that is not history, and this
+manual says so.
 
-It moves **files between the guest and your host**, in both directions, and it is **sandboxed**: the
-guest sees one directory you choose and **cannot escape it**. Not by `..`, not by an absolute
-path, not at all. That is a hard requirement, not a setting with a default.
+It moves **files between the guest and your computer**, in both directions. It is **sandboxed**.
+The guest sees one folder that you choose, and **it cannot leave that folder**. It cannot use
+`..` or an absolute path to leave it. This is a fixed rule, not a setting.
 
-Default port `B0`. **Nothing of the utilities is in the board.** `R`, `W` and `HDIR` are
-ordinary CP/M `.COM` programs — they live on a disk, they run at the `A>` prompt, and they
-talk to the board through its two ports exactly as any other CP/M program would. What is
-unusual is only where they came from: they were assembled *inside the machine*, by the
-machine's own assembler, from 8080 source that ships with it. So they are readable code
-rather than a magic trick the simulator performs on your behalf.
+The default port is `B0`. **The utilities are not in the board.** `R`, `W` and `HDIR` are
+ordinary CP/M `.COM` programs. They are on a disk, they run at the `A>` prompt, and they use the
+two ports of the board, as any other CP/M program could. They were assembled *in the machine*,
+with the machine's own assembler, from 8080 source that ships with the package. You can read
+their code.
 
-The file-transfer chapter is where this board is explained. It is the fastest way to get your own
-code into CP/M, and it beats XMODEM by a distance — but XMODEM works too, over an ordinary serial
-line, exactly as it did.
+The file-transfer chapter describes this board. It is the fastest way to get your own code into
+CP/M. XMODEM also works, over an ordinary serial line, as it did on real machines.
 
 ---
 
 ## PROM programmers
 
-A board here does not run software — it *burns* it. You load a period EPROM-programmer routine,
-point it at the board, and the bytes it "programs" pile up in a socket you can then save to a file.
+A board that does not run software, but *programs* it into a chip. You load a period EPROM
+programmer routine and run it. The bytes that it programs go into a socket, and you can save the
+socket to a file.
 
 ## `pb1` — SSM PB1
 
-The **SSM PB1** (Solid State Music) is a 2708/2716 EPROM programmer. It puts a **4K window** in
-memory (default `D000`) for its two sockets — **U22** holds a 2708 (1K), **U23** a 2716 (2K) — and
-one **control port** (default `10`). The burn is done by *software*: an `OUT` to the control port
-arms the board and picks the chip (write `01` for the 2708, `02` for the 2716), and from then on
-every byte the guest **writes into the window** is programmed into the socketed chip. A **read** of
-the window disarms the board again — which is exactly how the period routines finish and turn the
-LED off.
+The **SSM PB1** (Solid State Music) is a 2708 and 2716 EPROM programmer. It has a **4K window**
+in memory (default `D000`) for its two sockets: **U22** holds a 2708 (1K), and **U23** holds a
+2716 (2K). It has one **control port** (default `10`). **The default machine has its 2SIO at
+`10` too**, so move one of the two boards when you add a `pb1`.
 
-Two things follow from "programming is a write, disarming is a read", and they are worth knowing
-before you chase a bug:
+Software programs the chip:
 
-- **A socket starts erased** — every byte `FF` — and **programming can only clear bits to 0**, never
-  set them, just like a real EPROM. So burn a *blank* chip; a second burn over the first only ANDs.
-- The burn lives in the board, not on the host. To keep it, **`SAVE` it to a file** (below). A
-  power-cycle re-reads the sockets from their mounts, so an unsaved burn is gone.
+1. An `OUT` to the control port arms the board and selects the chip. Write `01` for the 2708, or
+   `02` for the 2716.
+2. After that, every byte that the guest **writes into the window** is programmed into the chip.
+3. A **read** of the window disarms the board again. The period routines end in this way, and it
+   turns the LED off.
 
-### Burning an EPROM, and making a hex file
+"Programming is a write, and disarming is a read" has two results:
 
-This is the whole point of the board (and the answer to "do I need a burner board, or is a bus
-write enough?" — you need the board, because you want to run the *software*). The example under
-`examples/pb1` is a stock Altair with a `pb1` in it, plus SSM's own burner routines from the PB1
-manual: `PROG2708.HEX` (a 2708) and `PROG2716.HEX` (a 2716). Each copies bytes from `4000` into
-the socket. So put the data you want to burn at `4000`, run the burner, and save the result:
+- **A socket starts erased**, with every byte `FF`. **Programming can only clear bits to 0.** It
+  cannot set them, as on a real EPROM. Program a *blank* chip. A second program over the first
+  gives the AND of the two.
+- The program is in the board, not on your computer. To keep it, **`SAVE` it to a file**
+  (below). A power cycle reads the sockets again from their mounts, so a program that you did
+  not save is lost.
+
+### Programming an EPROM, and making a hex file
+
+You need this board, not only a write to memory, because you want to run the period *software*.
+The PB1 manual has SSM's programmer routines, one for the 2708 and one for the 2716. Each
+routine copies bytes from `4000` into the socket. The 2708 routine starts at `0100`. The package
+does not include these routines. Enter one from the manual, or `LOAD` it from a hex file of your
+own. After that, put the data at `4000`, run the routine, and save the result:
 
 ```
-cd examples/pb1
-altairsim pb1.toml
-FILL 4000-43FF E5                ; the 1K you want to burn (or LOAD your own data there)
-LOAD PROG2708.HEX                ; the SSM 2708 burner
-BREAK F021                       ; where the burner "returns to the monitor"
-RUN 100                          ; run it: it arms the board and burns the 2708
-SAVE eprom.hex D000-D3FF         ; the burned chip, as an Intel HEX file on your host
+altairsim> FILL 4000-43FF E5
+altairsim> LOAD PROG2708.HEX
+altairsim> BREAK F021
+altairsim> RUN 100
+altairsim> SAVE eprom.hex D000-D3FF
 ```
 
-The `BREAK F021` is there because SSM's routine ends by jumping to its own system monitor, which
-this machine does not carry — the breakpoint catches that jump once the burn is done. `SAVE` then
-reads the socket window back off the bus and writes it out — the socket reads like any other memory
-once it is programmed — so `eprom.hex` is an ordinary Intel HEX image of the chip you burned, ready
-to hand to another tool or `LOAD` back later. Your own burner works the same way: put your data in
-RAM, `OUT 10,01` (or `,02` for a 2716), write it into the window, and `SAVE`.
+- `FILL` puts the 1K that you want to program at `4000`. You can also `LOAD` your own data
+  there.
+- `LOAD PROG2708.HEX` loads the 2708 routine.
+- `BREAK F021` is needed because SSM's routine ends with a jump to SSM's own system monitor, at
+  `F021`. This machine does not have that monitor. The breakpoint stops the machine at that
+  jump, after the chip is programmed.
+- `RUN 100` runs the routine. It arms the board and programs the 2708.
+- `SAVE` reads the socket window from the bus and writes it to a file. After it is programmed,
+  the socket reads like other memory. `eprom.hex` is an ordinary Intel HEX image of the chip.
+  You can give it to another tool, or `LOAD` it again later.
 
-The board also has an optional **on-board EPROM area** (the real card's U11–U14): read-only chips
-you mount above `8000` with `[[board.prom]]` (`at` + `mount`), handy as the *source* for copying one
-EPROM to another.
+Your own routine works in the same way. It writes `01` to port `10` (or `02` for a 2716), and
+then writes the data into the window. After it runs, `SAVE` the window.
+
+The board also has an optional **EPROM area on the board** (U11 to U14 on the real board). These
+are read-only chips that you mount above `8000` with `[[board.prom]]` (`at` and `mount`). Use
+them as the *source* when you copy one EPROM to another.
 
 ---
 
 ## Working with the backplane at the prompt
 
-Everything a machine file can do to a board, you can do by hand.
+You can do everything by hand that a machine file does to a board.
 
 | Command | |
 |---|---|
 | `BOARDS` | what is in the backplane |
-| `SHOW BOARDS` | the board types you can add, one line each |
-| `SHOW BOARD <type>` | one type's description and its settings (add `UNITS` for just the units) |
-| `BOARDS ADD <type> <id>` | fit a board |
-| `BOARDS REMOVE <id>` | pull one out |
-| `SHOW <id>` | one installed board's settings, with the legal values |
-| `SET <id> <key>=<value>` | change one |
+| `SHOW BOARDS` | the board types that you can add, one line each |
+| `SHOW BOARD <type>` | the description and settings of one type (add `UNITS` for only the units) |
+| `BOARDS ADD <type> <id>` | add a board |
+| `BOARDS REMOVE <id>` | remove a board |
+| `SHOW <id>` | the settings of one board in the machine, with the values that it accepts |
+| `SET <id> <key>=<value>` | change one setting |
 
 ```
 altairsim> BOARDS ADD virtc vi0
@@ -1436,23 +1451,22 @@ altairsim> SET vi0 rtc_source=line
 altairsim> SHOW vi0
 ```
 
-**The keys are the same keys.** `SET cpu0 clock_hz=2000000` at the prompt and `clock_hz = 2000000`
-in a machine file are the same property reached two ways — there is no separate config schema, which
-is the whole reason the board reference at the back can be exhaustive.
+**The keys at the prompt are the keys in a machine file.** `SET cpu0 clock_hz=2000000` at the
+prompt and `clock_hz = 2000000` in a machine file set the same property.
 
-And when you have the machine you want:
+When you have the machine that you want, type:
 
 ```
 altairsim> CONFIG SAVE mine.toml
 ```
 
-writes it out, and it round-trips.
+This writes the machine to a file, and the file loads back as the same machine.
 
-### Looking a board type over before you fit it
+### Look at a board type before you add it
 
-`SHOW BOARD <type>` reads the *catalog*. It builds one of that board, describes it, lists
-its settings, and throws it away — nothing is added to the backplane. A disk controller,
-for instance, ends by naming the units it carries:
+`SHOW BOARD <type>` reads the *catalog*. It makes one board of that type, describes it, lists
+its settings, and removes it again. Nothing is added to the backplane. For a disk controller,
+the last lines name its units:
 
 ```
 altairsim> SHOW BOARD dcdd
@@ -1462,8 +1476,8 @@ altairsim> SHOW BOARD dcdd
   SHOW BOARD dcdd UNITS for their properties.
 ```
 
-Add `UNITS` and you get just the units — each under a heading that names its **kind** and,
-after it, the **verb that fills it**:
+Add `UNITS` to see only the units. Each unit has a heading with its **kind**, and after the
+kind, the **command that fills it**:
 
 ```
 altairsim> SHOW BOARD sol units
@@ -1477,29 +1491,36 @@ altairsim> SHOW BOARD sol units
   ...
 ```
 
-A **serial** unit is an endpoint, so you `CONNECT` it (to `console`, a socket, a real
-port). A **disk**, **rom** or **tape** unit holds an image, so you `MOUNT` a file into it.
-A **cpu** unit is soldered on — neither — and shows only its kind. The heading tells you
-which verb a unit takes without your having to fit the board and find out.
+- A **serial** unit is an endpoint, so you `CONNECT` it, to `console`, a socket or a real port.
+- A **disk**, **rom** or **tape** unit holds an image, so you `MOUNT` a file in it.
+- A **cpu** unit is fixed on the board. It takes neither command, and the heading shows only its
+  kind.
 
-Where a unit is filled from a *machine file* rather than by hand, `UNITS` shows the TOML
-table and its keys instead — `[[board.drive]]` for a disk controller, with its `mount`,
-`readonly` and `media` keys — so the file form is as discoverable as the prompt form.
+The heading tells you which command a unit takes, before you add the board.
+
+When a *machine file* fills a unit, `UNITS` shows the TOML table and its keys instead. For a
+disk controller, this is `[[board.drive]]` with its `mount`, `readonly` and `media` keys. You
+can find the file form as easily as the prompt form.
 
 ## Contention
 
-Two boards decoding the same port is **contention**, and it is a real thing that real backplanes
-did. Both boards answer, both drive the data bus, and what the processor reads is neither.
+When two boards decode the same port, that is **contention**, and it happened on real backplanes
+too. Both boards answer and both drive the data bus, so the processor reads the wrong value.
 
-The simulator does not stop you. It does something more useful — **it tells you**:
+The simulator does not stop you from doing this. **It tells you about it.** For example, add an
+`mds` to a machine that already has a `dcdd`:
 
 ```
+altairsim> BOARDS ADD mds mds0
+mds0: mds added
 altairsim> SHOW BUS CONTENTION
+  port 08 OUT driven by dsk0 mds0
+  port 09 OUT driven by dsk0 mds0
+  port 0A OUT driven by dsk0 mds0
 ```
 
-which names the port and names both boards. Fit an `mds` in a machine that already has a `dcdd` and
-this is what you will see, and it is a great deal more helpful than a guest that has mysteriously
-gone mad.
+The output names each port and both boards. That is easier than a guest that fails for no reason
+that you can see.
 
-Being able to build a machine that does not work is not a defect. **It is the point** — this is a
-bench for developing hardware, and hardware that cannot be wired up wrong cannot be wired up at all.
+You can build a machine that does not work, on purpose. This is a bench for developing hardware,
+and a wrong setup is part of that work. The program shows you what is wrong.

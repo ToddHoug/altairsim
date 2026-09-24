@@ -43,7 +43,8 @@ CP/M example file. *Boards* now describes how the PMMI modem dials and answers o
 chapter's board list now includes `gsio`, `io4`, `16fdc` and `64fdc`, and its SBC, 88-SIO and
 ExpandoRAM II sections describe what those boards do today. It now has a section for the Cromemco 16FDC and 64FDC, and the
 sections for disk controllers whose example is not in the package now say that you supply the
-disk image.
+disk image. The `pb1` section no longer depends on an example that is not in the package, and it says
+that its default control port is the same as the 2SIO's.
 
 ### SHOW BOARDS fits on a screen
 
