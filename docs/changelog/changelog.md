@@ -28,8 +28,10 @@ lists the channels in the order that the program shows them.
 ### The User Manual reads more plainly
 
 The User Manual is being rewritten in the same shorter, simpler sentences as *The Monitor* and
-*The Debugger*, one chapter at a time. The first chapter, *What altairsim is*, is done. It now
-names *The Monitor* and *The Debugger* as the documents that describe the monitor's commands.
+*The Debugger*, one chapter at a time. *What altairsim is* now names *The Monitor* and *The
+Debugger* as the documents that describe the monitor's commands. *What is in the package* now
+says where the Developer Guide is (with the source, not on the release page), and it describes
+the version line as the program prints it today.
 
 ### SHOW BOARDS fits on a screen
 
