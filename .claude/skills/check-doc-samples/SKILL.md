@@ -56,10 +56,10 @@ with no output, has nothing to check.
 
 ```sh
 S=.claude/skills/check-doc-samples/check-block.sh
-$S docs/debugger/debugging.md 128 default
-$S docs/debugger/debugging.md 762 altmon "BREAK FBA5" "RUN F800" DISASM
-$S docs/debugger/debugging.md 337 bankmem "DEPOSIT 100 ED B0 CB 27 18 FE 10 FC DD 7E 05"
-DIR=roms/ALTMON $S docs/debugger/debugging.md 383 altmon
+$S docs/debugger/debugging.md 147 default
+$S docs/debugger/debugging.md 857 altmon "BREAK FBA5" "RUN F800" DISASM
+$S docs/debugger/debugging.md 389 bankmem "DEPOSIT 100 ED B0 CB 27 18 FE 10 FC DD 7E 05"
+DIR=roms/ALTMON $S docs/debugger/debugging.md 437 altmon
 ```
 
 The arguments are the doc, the line of the opening fence, the machine, and then the setup
