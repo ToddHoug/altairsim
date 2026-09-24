@@ -1,33 +1,31 @@
 # Moving files in and out
 
-You will want to get a file into CP/M, and you will want to get one back out. There is a board
-for it.
+You will want to get a file into CP/M, and to get a file back out. There is a board for this.
 
-## The Host Bridge is ours, and it is not a period card
+## The Host Bridge is our own board, not a period board
 
-Say it plainly: **MITS never made this.** No S-100 vendor made this. The `hostbridge` board is
-**our own**, invented for this simulator, and it exists because the alternative — a modem
-protocol over a simulated serial port at 300 baud — is a slow, fiddly answer to a question
-that only exists because the machine is simulated in the first place.
+**MITS never made this board.** No S-100 maker made it. The `hostbridge` board is **our own**,
+made for this simulator. The other way to move a file is a modem protocol over a simulated
+serial port at 300 baud. That is slow and difficult, and it is needed only because the machine
+is simulated.
 
-Everything else in this program is a board somebody could buy in 1977. This one is not, and
-you should know which is which. It sits in the manual next to the real cards, and it is the
-only one wearing a different badge.
+Every other board in this program is a real product that somebody sold. This one is not, and you
+should know which boards are which. It is in the manual with the real boards, and it is the only
+one that was never sold.
 
-It is in the **`default` machine**, so unless you have written a machine file that leaves it
-out, **you already have it.**
+It is in the **`default` machine**. Unless you wrote a machine file that leaves it out, **you
+already have it.**
 
-Default port **B0**: `BASE+0` is command/status, `BASE+1` is data.
+The default port is **B0**. `BASE+0` is command and status, and `BASE+1` is data.
 
-## The three utilities, and where they live
+## The three utilities, and where they are
 
-The utilities are **on the disk**, not in the board. They are ordinary CP/M `.COM` files, and
-they were assembled inside the machine, by the machine's own assembler, from source that ships
-with it.
+The utilities are **on the disk**, not in the board. They are ordinary CP/M `.COM` files. They
+were assembled in the machine, with the machine's own assembler, from source that ships with it.
 
-Which means a disk can be missing them, and some are — a minidisk image you supplied is one,
-and so is a disk you formatted yourself. *Getting the utilities onto a disk that hasn't got
-them*, below, is how you fix that.
+For this reason, a disk can be without them. A minidisk image that you supply is one example,
+and a disk that you formatted yourself is another. *Getting the utilities onto a disk that does
+not have them*, below, tells you what to do.
 
 | | |
 |---|---|
@@ -47,16 +45,16 @@ A>HDIR
 A>HDIR *.ASM
 ```
 
-`HDIR` lists one file per line — size, date and name — much as `ls -l` or `DIR` would. The
-size is a byte count, or `<DIR>` for a directory (which also keeps its trailing `/`, the one
-mark that says whether `R` can read it). The list is sorted, and the count at the end is the
-host directory's, which can run to far more than a CP/M disk holds.
+`HDIR` lists one file on each line, with its size, date and name, like `ls -l` or `DIR`. The
+size is a number of bytes, or `<DIR>` for a folder. A folder also keeps its `/` at the end,
+which shows that `R` cannot read it as a file. The list is sorted. The count at the end is the
+number of files in the host folder, which can be much more than a CP/M disk holds.
 
-**`HDIR` always prints the TRUE host names** — the real ones, with their real case and their
-real length, not the 8.3 names CP/M is going to see them as. That is the point of it. When
-you cannot work out what to call a file, ask `HDIR` what it is actually called.
+**`HDIR` always prints the TRUE host names**, with their real case and their real length. It
+does not print the 8.3 names that CP/M will see. That is the purpose of `HDIR`. When you cannot
+find the name of a file, ask `HDIR`.
 
-### `R` — host to CP/M
+### `R`: host to CP/M
 
 ```
 A>R README.TXT
@@ -65,11 +63,11 @@ A>R SRC/FOO.ASM
 A>R SRC/FOO.ASM WORK.ASM
 ```
 
-Wildcards work. Subdirectories work — and **both `/` and `\` are accepted on every host**,
-because you should not have to remember which machine you are sitting at. A second argument
-names the file on the CP/M side and overrides the automatic mapping.
+Wildcards work. Folders work, and **`/` and `\` both work on every host**, so you do not have to
+remember which computer you use. A second argument gives the name of the file on the CP/M side,
+instead of the automatic name.
 
-### `W` — CP/M to host
+### `W`: CP/M to host
 
 ```
 A>W GAME.COM
@@ -77,67 +75,61 @@ A>W GAME.COM game.com
 A>W NOTES.TXT notes.txt T
 ```
 
-## `W` defaults to **B**, and that is the important sentence
+## `W` uses **B** by default
 
-**Binary is the default.** `W` writes **every byte of every record, exactly** — nothing is
-inspected, nothing is stripped, nothing is guessed. A `.COM` file survives the trip and runs.
+**Binary is the default.** `W` writes **every byte of every record**. It examines nothing,
+removes nothing and guesses nothing. A `.COM` file arrives unchanged, and it runs.
 
-The cost is visible and it is honest: **a text file arrives with up to 127 trailing `^Z`
-bytes** on the end, because CP/M stores files in 128-byte records and pads the last one, and
-`W` in binary mode does not presume to know which of those bytes you meant. Your editor will
-show them. Trim them, or ask for `T`.
+There is a cost, and you can see it. **A text file arrives with up to 127 extra `Ctrl-Z` bytes**
+at its end. CP/M stores files in 128-byte records and fills the last record. In binary mode, `W`
+does not know which of those bytes you wanted, so it writes them all. Your editor shows them.
+Remove them, or use `T`.
 
-**`T` (text) stops at the first `^Z`.** You get clean text, exactly as long as it should be.
+**`T` (text) stops at the first `Ctrl-Z`.** You get clean text, at the correct length.
 
-And now the trap, which is the reason `T` is not the default: **a binary file containing byte
-`1Ah` comes back TRUNCATED.** Byte `1Ah` is `^Z`. It is a perfectly ordinary byte in a `.COM`
-file — it is `LDAX D` — and in text mode the transfer stops dead at the first one, silently,
-and hands you a file that is the right name and the wrong length.
-
-Some emulators default to text and keep a list of extensions to exempt. **That silently
-truncates files** the day you transfer something whose extension is not on the list, and you
-find out weeks later. We would rather hand you a text file with some padding on it than hand
-you half a program and call it done.
+This is why `T` is not the default: **a binary file that contains the byte `1Ah` comes back
+TRUNCATED.** Byte `1Ah` is `Ctrl-Z`. It is an ordinary byte in a `.COM` file (the `LDAX D`
+instruction). In text mode, the transfer stops at the first one, without a message, and you get
+a file with the correct name and the wrong length. A text file with some extra bytes is better
+than half a program that looks complete.
 
 | Mode | What it does | Costs you |
 |---|---|---|
-| **`B`** (default) | Every byte, exactly. | Up to 127 `^Z` bytes on a text file. |
-| `T` | Stops at the first `^Z`. | **Truncates any binary containing `1Ah`.** |
+| **`B`** (default) | Every byte. | Up to 127 `Ctrl-Z` bytes on a text file. |
+| `T` | Stops at the first `Ctrl-Z`. | **Truncates any binary containing `1Ah`.** |
 
 ## The sandbox
 
-The board has a **`hostdir`** property. It is the host directory the guest can see, and it is
-the **only** host directory the guest can see.
+The board has a **`hostdir`** property. It is the host folder that the guest can see, and it is
+the **only** host folder that the guest can see.
 
 ```
 altairsim> SET hb0 hostdir=/tmp/xfer
 ```
 
-Empty — which is the default — means **the directory you ran `altairsim` from.**
+When `hostdir` is empty, the default, it is **the folder that you started `altairsim` from.**
 
 ### Where a relative `hostdir` points
 
-`hostdir` is a path, so it obeys the path rule from *Machines* — **both halves of it**, and this
-is the one place the difference has teeth, because this path is a fence and the other end of it
-is a CP/M program.
+`hostdir` is a path, so it follows the path rule in the machines chapter. A relative `hostdir`
+starts from the machine's folder, whether you type it or a machine file gives it:
 
 ```
-altairsim> SET hb0 hostdir=xfer          # you typed it -> ./xfer, from YOUR shell
+altairsim> SET hb0 hostdir=xfer          # the xfer folder beside the machine file
 ```
 
 ```toml
 [[board]]
 id      = "hb0"
-hostdir = "xfer"                          # the file wrote it -> the xfer beside THIS FILE
+hostdir = "xfer"                          # the same xfer folder
 ```
 
-Both say `xfer`. They are **different directories**, and each is the one its author could see —
-which is the same rule that decides where `mount = "cpm.dsk"` looks. The machine file's `xfer`
-travels with the machine file, so an example directory you copy to your desktop still has its
-own transfer folder.
+Both mean the same folder. It moves with the machine file, so an example folder that you copy to
+another place still has its own transfer folder. For a built-in machine, which has no folder, a
+relative `hostdir` starts from the folder that you started the program from.
 
-**You never have to work it out.** The written value and the resolved one are both printed, and
-the resolved one is the fence:
+**You do not have to work it out.** `SHOW hb0` prints the value as written and the folder that
+it resolves to. The resolved folder is the limit:
 
 ```
 altairsim> SHOW hb0
@@ -148,214 +140,204 @@ altairsim> SHOW hb0
   readonly         false            true|false
 ```
 
-`hostdir` is what was **written**. `hostdir_root` is where the fence **actually is** — read-only,
-because it is a fact about this run rather than a setting, and it is never written back into a
-machine file.
+`hostdir` is what was **written**. `hostdir_root` is where the limit **really is**. It is
+read-only, because it is a fact about this run, not a setting, and the program never writes it
+into a machine file.
 
-`SHOW PATHS` prints the same root beside the other two bases. If `R` cannot find a file you are
-certain you put in `xfer`, that is the line to read: there is very likely a second `xfer`, and
-the guest is standing in the other one.
+`SHOW PATHS` prints the same folder, beside the base directory. If `R` cannot find a file that
+you are sure you put in `xfer`, read that line to see which folder the guest uses.
 
-### …and what that means for `R` and `W`
+### What the path rule means for `R` and `W`
 
 The path rule stops at the board. **It does not reach the guest, and `R` and `W` never see it.**
 
-At the `A>` prompt you are not typing a host path at all — you are typing a **name**, and the
-board resolves it inside `hostdir_root` and nowhere else:
+At the `A>` prompt, you do not type a host path. You type a **name**, and the board finds it in
+`hostdir_root`, and nowhere else:
 
 ```
 A>R FOO.ASM          <- hostdir_root/FOO.ASM. Never your cwd, never the machine file's
 A>W RESULT.TXT       <- hostdir_root/RESULT.TXT
 ```
 
-So the path rule reaches `R` and `W` **exactly once**: it decides which directory `hostdir`
-named, back when someone wrote it. After that the guest has one directory and no way to say
-anything about any other — `..`, an absolute path and a drive letter are all refused at the
-board, as below.
+The path rule affects `R` and `W` **one time only**. It decides which folder `hostdir` names.
+After that, the guest has one folder, and it cannot name any other folder. The board refuses
+`..`, an absolute path and a drive letter, as below.
 
-This is worth stating plainly because the two mechanisms look alike and are not:
+The two mechanisms look alike, but they are different:
 
 | | decides | confines |
 |---|---|---|
-| **the path rule** | where a path *written by a human* points | nothing at all |
+| **the path rule** | where a path that you or a machine file gives points | nothing at all |
 | **`hostdir`** | nothing you type | **everything the guest can reach** |
 
-This is the *only* fence in the simulator, and it is worth not confusing with the path rule in
-*Machines*. That rule decides where a path written in a machine file points, and it confines
-nothing at all. This one decides how far the **guest** can reach, and confines everything. A
-machine file may mount a disk from anywhere on your system; the CP/M program running off that
-disk still sees only `hostdir`.
+This is the *only* limit in the simulator. A machine file can mount a disk from any place on
+your computer, but the CP/M program that runs from that disk still sees only `hostdir`.
 
-**The guest cannot escape it.** All of the following are refused, at the board, before anything
-touches your filesystem:
+**The guest cannot leave it.** The board refuses all of these, before anything touches your
+files:
 
 - an absolute path
 - a drive letter
 - any `..` component
-- a symlink that resolves outside the root
+- a symbolic link that points outside the root
 
-This is a **deliberate, hard boundary**, not a best-effort filter. The guest is running
-software from 1977 that you found on the internet, and the answer to "what if it is hostile"
-should not be "well, it probably isn't."
+This is a **fixed limit on purpose**, not a filter that does its best. The guest runs software
+from 1977 that you found on the internet. You should not have to trust it.
 
-`readonly` makes it a one-way street:
+`readonly` lets files go one way only:
 
 ```
 altairsim> SET hb0 readonly=on
 ```
 
-Files come **out of** the host. Nothing goes back in. `W` fails.
+Files come **out of** the host. Nothing goes back in, and `W` fails.
 
-## And it means the guest can write your working directory
+## The guest can write to your working folder
 
-Here is the other half of that, and it does not get buried:
+This is the other half of the rule, and you must know it:
 
-**By default, guest software can read and write the directory you ran `altairsim` from.**
+**By default, software in the guest can read and write the folder that you started `altairsim`
+from.**
 
-That is a real capability and it is on unless you turn it off. It is a **deliberate trade**,
-not an oversight: `R FOO.ASM` working the instant you unzip the package, with no setup, is
-worth a great deal, and the directory you are standing in is the directory you almost always
-meant. But it is your directory, with your files in it, and a CP/M program you did not write
-can reach them.
+This is on unless you turn it off. It is a **decision**, not a mistake. `R FOO.ASM` works as
+soon as you unzip the package, with no setup, and the folder that you are in is usually the
+folder that you want. However, it is your folder, with your files in it, and a CP/M program that
+you did not write can reach them.
 
-If that is not what you want, point `hostdir` somewhere else, or set `readonly=on`. Both are
-one line.
+If you do not want this, point `hostdir` at a different folder, or set `readonly=on`. Each one
+is one command.
 
 ## Names: 8.3, and how a host name becomes one
 
-CP/M has eight characters and an extension of three, and your host does not. So the board maps:
+CP/M names have eight characters and an extension of three, and host names do not. The board
+changes a host name in these steps:
 
-1. **uppercase** the host name,
-2. truncate the base to **8**,
-3. truncate the extension to **3**,
-4. **drop illegal characters.**
+1. It changes the host name to **upper case**.
+2. It cuts the name to **8** characters.
+3. It cuts the extension to **3** characters.
+4. It **removes characters that CP/M does not allow.**
 
 ```
 my-notes(2).txt   →   MYNOTES2.TXT
 ```
 
-A **second argument overrides the whole business**, and when the mapping produces something
-you do not like, that is what it is for:
+**A second argument sets the whole name.** Use it when you do not like the result of the steps:
 
 ```
 A>R my-notes(2).txt NOTES.TXT
 ```
 
-And again: `HDIR` prints the **true** host names, so you can always find out what you are
-actually asking for.
+`HDIR` prints the **true** host names, so you can always see the name that you ask for.
 
 ## Case, and why the board does not guess
 
-**The CP/M command line folds everything to upper case.** This is not something we do; it is
-what the CCP does, before your program ever sees the line. By the time `R` runs, `R
-readme.txt` and `R README.TXT` are **the same command**. The information is gone.
+**The CP/M command line changes everything to upper case.** The CCP does this, before your
+program sees the line. When `R` runs, `R readme.txt` and `R README.TXT` are **the same
+command**. The case is lost.
 
-So the board compensates, in this order:
+For this reason, the board does these steps, in this order:
 
-1. **Exact match wins.** If there is a file called exactly what you asked for, that is the
-   file.
-2. **Otherwise, fold case and look again.** `README.TXT` will find `readme.txt`.
-3. **If several files match, it REFUSES.**
+1. **An exact match wins.** If a file has exactly the name that you asked for, the board uses
+   that file.
+2. **Otherwise, it ignores case and looks again.** `README.TXT` finds `readme.txt`.
+3. **If more than one file matches, it REFUSES.**
 
-Step 3 is the one that matters. If your directory holds `readme.txt` and `README.TXT` and
-`ReadMe.Txt`, the board does not pick one, does not pick the newest, and does not pick the
-first. **It tells you it cannot tell**, and stops. A file transfer that guesses wrong and
-tells you it succeeded is worse than one that fails.
+Step 3 is the important one. If your folder has `readme.txt`, `README.TXT` and `ReadMe.Txt`, the
+board does not choose one. It does not choose the newest, and it does not choose the first. **It
+tells you that it cannot decide**, and it stops. A file transfer that guesses wrong and says
+that it worked is worse than one that fails.
 
-## Getting the utilities onto a disk that hasn't got them
+## Getting the utilities onto a disk that does not have them
 
-There is an obvious hole in everything above: **`R` is how you get a file onto a disk, and `R`
-is a file on the disk.** Boot something that has not got it — a minidisk image you supplied, or
-a fresh disk you made yourself — and you cannot use the board to fetch the program that drives
-the board.
+There is a problem with all of the above: **you use `R` to get a file onto a disk, and `R` is a
+file on the disk.** If you boot a disk without it, such as a minidisk image that you supplied or
+a new disk that you made, you cannot use the board to get the program that uses the board.
 
-You break the loop through **the console**, which is the one channel that exists before any
-file-transfer utility does. You type the program in. Not literally: you paste it.
+You solve this with **the console**, which works before any file-transfer program does. You
+enter the program through the console. You do not type it. You paste it.
 
-**You cannot paste `R.COM`.** It is binary, and a console is a text device — the first `1Ah`
-in it would end the paste, and the bytes above `7Fh` would not survive the trip at all. So you
-paste the **`R.HEX`** that `LOAD` was going to turn into `R.COM` anyway. It is Intel HEX:
-colons, hex digits and line ends, about 4.8 KB of them, and every byte of it is printable.
+**You cannot paste `R.COM`.** It is binary, and a console carries text. The first `1Ah` in it
+would end the paste, and the bytes above `7Fh` would not arrive correctly. For this reason, you
+paste **`R.HEX`**, the file that `LOAD` changes into `R.COM`. It is Intel HEX: colons, hex
+digits and line ends, about 5.2 KB of them, and every byte can be printed.
 
-**It ships with the package.** The utilities are in `hostbridge/` — the 8080 sources, the
-`.HEX`, and the assembled `.COM`, all together. The CP/M disk that ships in `examples/cpm`
-already has `R.COM`, `W.COM` and `HDIR.COM` on it, which is why this section is about the other
-kind of disk — a fresh one, or a minidisk image you brought yourself. For the paste below, open
-`hostbridge/R.HEX`.
+**It ships with the package.** The utilities are in `hostbridge/`, with the 8080 sources, the
+`.HEX` files and the assembled `.COM` files. The CP/M disk in `examples/cpm` already has
+`R.COM`, `W.COM` and `HDIR.COM`. For this reason, this section is about the other kind of disk:
+a new disk, or a minidisk image that you brought. For the paste below, open `hostbridge/R.HEX`.
 
-**1. Tell PIP to write a file from the console.**
+1. **Tell PIP to write a file from the console.**
 
-```
-A>PIP R.HEX=CON:
-```
+   ```
+   A>PIP R.HEX=CON:
+   ```
 
-PIP is now copying what you type into `R.HEX`, and it will keep doing so until you tell it to
-stop.
+   PIP now copies what you type into `R.HEX`, until you tell it to stop.
 
-**2. Paste the whole of `R.HEX` into the terminal.**
+2. **Paste all of `R.HEX` into the terminal.** Open `R.HEX` on your computer, select all of it,
+   and paste it into the window where `altairsim` runs. PIP shows each line as it arrives, about
+   117 lines. That shows you that the guest receives it.
 
-Open the `R.HEX` you fetched on your host, select all of it, and paste it into the window where
-`altairsim` is running. It echoes as it goes — 108 lines of it — because PIP echoes console
-input, and that echo is your confirmation the guest is really receiving it.
+3. **End it with `Ctrl-Z`.**
 
-**3. End it with `^Z`.**
+   ```
+   ^Z
+   A>
+   ```
 
-```
-^Z
-A>
-```
+   `Ctrl-Z` is CP/M's end-of-file mark on the console, and it closes the file. You are at the
+   `A>` prompt, and `R.HEX` is on the disk.
 
-Ctrl-Z is CP/M's end-of-file on a console, and it is what closes the file. You are back at the
-`A>` prompt and `R.HEX` is on the disk.
+4. **Change the HEX file into a program.**
 
-**4. Turn the HEX into a program.**
+   ```
+   A>LOAD R
 
-```
-A>LOAD R
+   FIRST ADDRESS 0100
+   LAST  ADDRESS 083E
+   BYTES READ    073F
+   RECORDS WRITTEN 0F
+   ```
 
-FIRST ADDRESS 0100
-LAST  ADDRESS 07A0
-BYTES READ    06A1
-RECORDS WRITTEN 0E
-```
+   `LOAD` reads `R.HEX` and writes `R.COM`. It adds the `.HEX` itself, so `LOAD R` is the whole
+   command. Check `FIRST ADDRESS 0100`. A CP/M program starts at `100h`. If that line shows a
+   different value, the paste lost something.
 
-`LOAD` reads `R.HEX` and writes `R.COM`. It assumes the `.HEX`, so `LOAD R` is the whole
-command. `FIRST ADDRESS 0100` is the number to glance at: a CP/M program starts at `100h`, and
-if that line says anything else the paste lost something.
+5. **Use `R`, and you do not need to paste again.**
 
-**5. Use it, and never paste again.**
+   ```
+   A>R W.COM
+   A>R HDIR.COM
+   ```
 
-```
-A>R W.COM
-A>R HDIR.COM
-```
+   `R.COM` now exists, so the other two utilities come across the board as ordinary binary
+   files, with no HEX, no `LOAD` and no paste. `hostdir` must point at the folder that holds
+   them. On a built-in machine, such as `minidisk`, that you started in the package folder,
+   type:
 
-That is the payoff. `R.COM` exists now, so the other two utilities come across the board as
-ordinary binaries — no HEX, no `LOAD`, no pasting — provided `hostdir` points at the directory
-they are in:
+   ```
+   altairsim> SET hb0 hostdir=hostbridge
+   ```
 
-```
-altairsim> SET hb0 hostdir=hostbridge
-```
+   For a machine file in another folder, give the path from that folder, or a full path.
 
-### Two things that would bite you on real hardware and do not bite you here
+### Two problems of the real hardware that do not happen here
 
-**Nothing is dropped, however fast you paste.** On a real Altair, shoving 4.8 KB at a 300-baud
-serial card with no flow control is exactly how you overrun the UART and lose characters in the
-middle of a HEX record. Here you cannot: the simulated 6850 and 1602 both pace arrivals at the
-line rate but **only take a byte when the receive register is free**, so the byte waits on the
-host side rather than being lost. A paste of any size arrives intact. (This is a deliberate
-departure from the hardware, and the serial chapter says so — an overrun is data loss the host
-transport genuinely does not have.)
+**No character is lost, however fast you paste.** On a real Altair, 5 KB sent to a 300-baud
+serial board with no flow control overruns the UART, and characters are lost in the middle of a
+HEX record. That cannot happen here. The simulated 6850 and 1602 UARTs deliver bytes at the line
+rate, but **they take a byte only when the receive register is free**. The next byte waits on
+the host side, and nothing is lost. A paste of any size arrives complete. This is different from
+the hardware on purpose, because the host connection does not lose data.
 
-**And a bad paste tells you.** Every Intel HEX record carries a checksum, and `LOAD` checks it.
-A corrupted line is an error, not a program that runs almost correctly.
+**A bad paste tells you.** Every Intel HEX record has a checksum, and `LOAD` checks it. A
+damaged line gives an error. It does not give a program that almost works.
 
-### The same route builds them from source
+### Build them from source in the same way
 
-Pasting `R.HEX` gets you the program. Pasting `R.ASM` gets you the program *and* the ability to
-change it — the disk's own `ASM.COM` assembles it, and `LOAD` finishes the job exactly as
-above:
+When you paste `R.HEX`, you get the program. When you paste `R.ASM`, you get the program *and*
+the source, so that you can change it. The disk's own `ASM.COM` assembles it, and `LOAD`
+finishes the job as above:
 
 ```
 A>PIP R.ASM=CON:
@@ -364,25 +346,22 @@ A>ASM R
 A>LOAD R
 ```
 
-That is not a different technique, only a longer paste — about 28 KB instead of 4.8 — and it is
-how the `.COM` files that ship on the `hostbridge` disk were built in the first place. If you only
-want to *run* the utility, paste the HEX; it is six times shorter and needs no assembler on the
-disk.
+It is the same method with a longer paste, about 34 KB instead of 5.2 KB. The `.COM` files in
+`hostbridge/` were built in this way. If you only want to *run* the utility, paste the HEX file.
+It is about six times shorter, and it needs no assembler on the disk.
 
-## Why one `R.COM` works on every disk you will ever build
+## Why one `R.COM` works on every disk
 
-**Every file operation goes through CP/M's BDOS.** Not the BIOS. Not a disk parameter block.
-Not an assumption about how many sectors are on a track or where the directory lives.
+**Every file operation goes through CP/M's BDOS.** It does not use the BIOS or a disk parameter
+block. It makes no assumption about how many sectors are on a track, or where the directory is.
 
-`R` and `W` open, read, write and close through the same BDOS calls any CP/M program uses, and
-the BDOS is the thing that knows about your disk. Which means the same `R.COM`, unmodified,
-runs on:
+`R` and `W` open, read, write and close files with the same BDOS calls as any CP/M program, and
+the BDOS knows about your disk. For this reason, the same `R.COM`, with no changes, runs on:
 
-- the 8″ floppy controller,
-- the 8 MB disk,
-- the minidisk,
-- and **any BIOS anybody writes later**, for a controller that does not exist yet.
+- the 8″ floppy controller
+- the 8 MB disk
+- the minidisk
+- **any BIOS that anybody writes later**, for a controller that does not exist yet
 
-That was the design goal. The board is not a period card, but the software that drives it is a
-perfectly well-behaved CP/M program, and it will still work on the machine you have not built
-yet.
+That was the goal of the design. The board is not a period board, but the software that uses it
+is an ordinary CP/M program, and it will work on a machine that you have not built yet.
