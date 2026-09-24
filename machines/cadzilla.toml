@@ -28,14 +28,25 @@
 #
 # It needs a host Display. With SDL3 present the picture shows in a window titled after the
 # board; in a headless build the machine runs identically and draws nothing.
+#
+# THE REST OF THE MACHINE is our own development bench, not period software's: the same
+# front panel, disk controller (empty) and host bridge as `default.toml`, so cadzilla can be
+# developed and tested alongside a realistic supporting complement -- moving a test program in
+# with the host bridge, say, or exercising the board next to a disk controller that also
+# decodes I/O -- without dragging in DBL or a boot disk this board has no use for.
 
 [machine]
 name = "cadzilla"
 
 [[board]]
+type  = "fp"
+id    = "fp0"
+sense = 0x00
+
+[[board]]
 type     = "8080"
 id       = "cpu0"
-clock_hz = 2000000
+clock_hz = 0                  # flat out (the default); SET cpu0 clock_hz=2000000 for 2 MHz
 
 # A console, so the machine is one you can talk to: the board is a DISPLAY, not a keyboard.
 [[board]]
@@ -59,12 +70,32 @@ id   = "cad0"
 port = 0x70
 mode = "640x480"
 
+# THE FLOPPY CONTROLLER -- an 88-DCDD at 0x08, four drives, no disks: the same honest empty
+# default as `default.toml`. Nothing in this machine boots from it; it is here so the bench
+# has a realistic disk controller decoding I/O alongside cadzilla's own ports.
+[[board]]
+type   = "dcdd"
+id     = "dsk0"
+port   = 08
+drives = 4
+
+# THE HOST BRIDGE, at port B0 -- moves a file in or out of a running guest (`R`/`W`/`HDIR`
+# from `cpm/hostbridge/*.ASM`, or just useful for staging a test program). See
+# `machines/default.toml` for the whole story; `hostdir = ""` is the shell's working directory.
+[[board]]
+type    = "hostbridge"
+id      = "hb0"
+port    = B0
+hostdir = ""
+
 [[board]]
 type = "memory"
 id   = "mem0"
-fill = "random"
+fill = "random"               # real static RAM does not come up zeroed
 
   [[board.region]]
   type = "ram"
   at   = 0000
-  size = "64K"
+  size = "56K"                # 0000-DFFF, matching `default.toml` -- no boot PROM here,
+                               # but the same headroom for one and for the memory-mapped I/O
+                               # a real machine put above it
