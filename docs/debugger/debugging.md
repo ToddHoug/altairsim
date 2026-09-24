@@ -1,46 +1,53 @@
-# Debugging
+# The debugger
 
-This is the document the simulator exists for.
+This document tells you what to do in the monitor when a guest does not work correctly. It is
+the companion to *The Monitor*. *The Monitor* describes the `altairsim>` prompt, where you
+start, stop and change the machine. If the `altairsim>` prompt is new to you, read *The
+Monitor* first.
 
-It is the companion to *The Monitor*: that document introduces the `altairsim>` prompt — how
-you start, stop and reconfigure the machine — and this one covers what you do at that prompt
-when something has gone wrong. Both stand beside the *User Manual*, which describes the
-emulated hardware. `altairsim` simulates the MITS Altair 8800 and the S-100 bus; if the
-`altairsim>` prompt is new to you, read *The Monitor* first.
+Both documents are companions to the *User Manual*, which describes the simulated hardware.
+`altairsim` simulates the MITS Altair 8800 and its S-100 bus.
 
-Running old software is the easy half. The hard half is being able to see what a machine is
-actually *doing* — which board answered, what went out on the bus, why the interrupt never
-arrived — and that is what the commands here are for. Not every monitor command is one of
-them — these are the ones you reach for when something has gone wrong.
+A simulator must run old software. It must also show you what the machine does: which board
+answered, what went out on the bus, and why an interrupt did not arrive. The commands in this
+document show you these things. They are the main reason that `altairsim` exists. Use them
+when something goes wrong.
 
-## Where the processor is — `REGS`
+## Where the processor is: `REGS`
 
-`REGS` prints the whole processor on one line. The flags come first — carry, zero, minus,
-even parity, interdigit carry — then the register pairs, the stack pointer, the
-interrupt-enable flip-flop, and the program counter. The last column is **the instruction the
-processor is about to execute**, already disassembled.
+`REGS` shows all of the processor on one line. The flags come first: carry, zero, minus, even
+parity and interdigit carry. Next come the register pairs, the stack pointer, the
+interrupt-enable flip-flop and the program counter. The last column is **the next instruction
+that the processor will execute**, in disassembled form.
 
-You get this line free every time the machine stops, so most of the time you never type
-`REGS` at all.
+Each time the machine stops, the monitor shows this line. For this reason, you seldom need to
+type `REGS`.
 
 ```
 altairsim> REGS
 C0Z1M0E1I0 A=00 BC=007F DE=CA01 HL=BC0E SP=BC37 IE=1 PC=CA9C  CALL CA78
 ```
 
-Each register is labelled the way you would name it to `SET REG` — the pairs `BC`/`DE`/`HL`, the
-stack pointer `SP`, the program counter `PC` — so what you read is what you type back.
+Each register has the name that you use with `SET REG`: the pairs `BC`, `DE` and `HL`, the
+stack pointer `SP` and the program counter `PC`. The name that you read is the name that you
+type.
 
-The line follows the CPU in the machine, so it shows exactly the registers that processor has. A
-Z80 has more to show — extra flags (`S`, `P`, `H`, `N` beside the shared `C` and `Z`), the whole
-alternate register bank and its own flags, the `IX` and `IY` index registers, and the interrupt
-vector and mode `I`/`IM` — too many to sit on one line, so it wraps to two. The **first** line
-carries the registers it shares with the 8080 — the flags, `A`, the pairs, `SP`, `PC` — with the
-interrupt-enable flip-flop shown as `IFF1` (the Z80's own name for it, where the 8080 says `IE`),
-and the instruction the `PC` points at, decoded in the Z80's own mnemonics. The **second** line is
-everything the Z80 adds — the shadow flags, the alternate bank `A'`/`BC'`/`DE'`/`HL'` (a prime
-marks each), then `IX`, `IY`, the interrupt vector `I`, the mode `IM`, and `IFF2` (the shadow of
-the `IFF1` on the first line):
+The line shows the registers of the processor in the machine. A Z80 has more registers than an
+8080, so on a Z80 the line wraps to two lines. The Z80 adds:
+
+- the flags `S`, `P`, `H` and `N`, beside the `C` and `Z` that both processors have
+- the alternate register bank, with its own flags
+- the index registers `IX` and `IY`
+- the interrupt vector `I` and the interrupt mode `IM`
+
+The **first** line has the registers that the Z80 shares with the 8080: the flags, `A`, the
+pairs, `SP` and `PC`. The interrupt-enable flip-flop shows as `IFF1`, which is the Z80 name for
+the 8080's `IE`. The line ends with the instruction at `PC`, in Z80 mnemonics.
+
+The **second** line has the registers that only the Z80 has. These are the alternate flags, and
+the alternate bank `A'`, `BC'`, `DE'` and `HL'` (a prime marks each one). After these
+come `IX`, `IY`, the interrupt vector `I`, the mode `IM`, and `IFF2`. `IFF2` is the copy that the Z80 keeps of
+`IFF1`.
 
 ```
 altairsim> REGS            (on a Z80 machine)
@@ -48,82 +55,94 @@ C0Z0S0P0H0N0 A=00 BC=0000 DE=0000 HL=0000 SP=0000 IFF1=0 PC=0000  CALL PE,9A78
 C0Z0S0P0H0N0 A'00 BC'0000 DE'0000 HL'0000 IX=0000 IY=0000 I=00 IM=00 IFF2=0
 ```
 
-Flags are registers, and you may set them:
+The flags are registers, and you can set them:
 
 ```
 SET REG A=3F
 SET REG CY=1
 ```
 
-## Stepping — `STEP`, `NEXT`
+## Stepping: `STEP`, `NEXT`
 
-`STEP` runs **real bus cycles through the real instruction decode**. It is not an interpreter
-running alongside the machine — it *is* the machine, moved forward by one instruction. It
-prints one line per instruction — the machine *after* that instruction ran, with the one the
-PC has now reached — so `STEP 3` shows three lines, one for each step. Past thirty-two it runs
-quietly and tells you where it ended up.
+`STEP` runs **real bus cycles through the real instruction decoder**. It moves the machine
+forward by one instruction. It is the same machine that `RUN` runs, not a separate
+interpreter.
+
+`STEP` shows one line for each instruction. The line shows the machine *after* the instruction
+ran, and the next instruction at `PC`. For example, `STEP 3` shows three lines. For a count
+of more than thirty-two, `STEP` shows no lines while it runs. When it stops, it tells you where
+the machine is.
 
 ```
 STEP        one instruction
-STEP 20     twenty of them (a count, so it is decimal)
+STEP 20     twenty instructions (a count, so it is decimal)
 ```
 
-**`NEXT` steps *over* a subroutine.** At a `CALL` or `RST`, `STEP` walks you down into the
-callee — every instruction it runs, and everything it in turn calls. Often you do not care: the
-routine works, and you want the *next* instruction in the code you are reading, not a tour of a
-print routine. `NEXT` gives you that. On a `CALL` or `RST` it runs the callee at full speed and
-stops the instant it returns; on anything else it is just a single step. It does exactly what
-you would do by hand — sets a breakpoint at the return address and runs to it — so the callee is
-live while it runs: it can read the console, and `^E` (STOP) or `^C` stops it if it never comes
-back. A breakpoint that fires *inside* the callee stops you there, as it should.
+**`NEXT` steps *over* a subroutine.** At a `CALL` or an `RST`, `STEP` goes into the subroutine.
+It shows each instruction of the subroutine, and each instruction of the subroutines that it
+calls. Often you know that the subroutine works, and you want the *next* instruction in the
+code that you read. `NEXT` gives you that instruction.
+
+At a `CALL` or an `RST`, `NEXT` runs the subroutine without a stop at each instruction, and
+stops when the subroutine returns. At any other instruction, `NEXT` does one step. `NEXT` sets a
+breakpoint at the return address and runs to it, as you would do by hand. The subroutine runs
+as it does after `RUN`, at the speed that `clock_hz` sets, and it can read the console.
+If it does not return, press `Ctrl-E` or `Ctrl-C` to stop it. A breakpoint *inside* the
+subroutine stops the machine there.
 
 ```
-NEXT        over the CALL/RST at PC, else one instruction
-N           the same -- it owns the letter, because you type it constantly
+NEXT        step over the CALL or RST at PC, or do one step
+N           the same (N is NEXT, because you type it often)
 ```
 
-## Breakpoints — `BREAK`, `NOBREAK`
+## Breakpoints: `BREAK`, `NOBREAK`
 
-There are three kinds, and only the first is about the processor at all.
+There are three types of breakpoint:
 
-**`BREAK MEM` and `BREAK IO` watch bus cycles, not instructions.** That is a much stronger
-thing, and it is the reason to prefer them. A memory watch will catch a DMA transfer that no
-instruction on the CPU ever performed, and it will work unchanged on any processor you put in
-the machine, because it is watching the backplane rather than the program.
+- An **address breakpoint** (`BREAK <addr>`) watches the processor. It stops the machine when
+  `PC` gets to the address.
+- A **cycle breakpoint** (`BREAK MEM` or `BREAK IO`) watches the bus cycles, not the
+  instructions.
+- A **tape breakpoint** (`BREAK TAPE STOP`) watches a cassette deck.
 
-If you are chasing a byte that keeps getting clobbered, `BREAK MEM W <addr>` will find who is
-doing it, whatever is doing it.
+**Use a cycle breakpoint when you can.** A memory cycle breakpoint also finds a DMA transfer,
+which no instruction does. It works in the same way on each processor, because it watches the
+backplane and not the program. If a byte changes and you do not know why, use `BREAK MEM W
+<addr>`. It finds the instruction or the board that writes the byte.
 
-A cycle watch stops *before* the access, with the PC on the instruction that was about to make
-it — nothing executed, no port read, no byte written, every register as it stood. It is the same
-place a plain `BREAK <addr>` stops, so `RUN` or `STEP` runs that instruction fresh. (The one
-exception is a cycle a *DMA* board drove: that has no CPU instruction to hold back, so it stops at
-the instruction boundary after the transfer instead.)
+A cycle breakpoint stops the machine *before* the access. `PC` is on the instruction that was
+about to make the access. That instruction has not run: no port was read, no byte was written,
+and the registers have not changed. This is the same place where an address breakpoint stops.
+For this reason, `RUN` or `STEP` then runs the instruction from its start.
 
-**`BREAK TAPE STOP` watches a device, not the program at all.** It stops the machine the
-moment a cassette deck reaches auto-stop — the instant the tape parks itself after a load has
-finished feeding. That is exactly when you want to look at what landed, and you get there
-without having to know the loader's end address: arm it, run, and the machine halts inside the
-loader the moment the tape stops.
+There is one exception. A cycle from a *DMA* board has no instruction to stop before. The
+machine stops at the end of the instruction during which the transfer occurred.
+
+**A tape breakpoint watches a device, not the program.** It stops the machine when a cassette
+deck stops the tape by itself at the end of a load. At that time, you usually want to look at
+the data that the load wrote to memory. You do not need to know the end address of the loader.
+Set the breakpoint and run the machine. The machine stops inside the loader when the tape
+stops.
 
 ```
-BREAK FF13            stop when the PC gets there
-BREAK 2C00-2CFF       ...or anywhere in a range
+BREAK FF13            stop when PC gets to FF13
+BREAK 2C00-2CFF       ...or to any address in a range
 BREAK MEM W 100       stop when ANYTHING writes to 0100
 BREAK IO  R 10        stop on an IN from port 10
-BREAK TAPE STOP       stop when a cassette deck auto-stops after a load
-BREAK                 list them
-NOBREAK 2             clear one (the id is a plain decimal, not a bus address)
-NOBREAK               clear them all
+BREAK TAPE STOP       stop when a cassette deck stops the tape after a load
+BREAK                 list the breakpoints
+NOBREAK 2             remove breakpoint 2 (the id is decimal, not a bus address)
+NOBREAK               remove all breakpoints
 ```
 
-Breakpoint ids are handed out in order — 1, 2, 3 — and restart at 1 once no
-breakpoints are left, whether you cleared them all with `NOBREAK` or removed the
-last one by id. Removing a breakpoint from the middle does not renumber the rest,
-so an id is not the running count of live breakpoints.
+The monitor gives breakpoints the ids 1, 2, 3 and so on, in order. When no breakpoints are
+left, the next id is 1 again. This is true if you removed them all with `NOBREAK`, and if you
+removed the last one by its id. The other ids do not change when you remove a breakpoint.
+For this reason, an id is not a count of the breakpoints that are set.
 
-**When one fires, it says which, where, and what the machine was doing.** A plain address
-breakpoint stops with the PC *on* the instruction it names — nothing there has run yet:
+**When a breakpoint stops the machine, the monitor tells you which breakpoint, where, and the
+state of the machine.** An address breakpoint stops with `PC` *on* the instruction at the
+address. That instruction has not run yet.
 
 ```
 altairsim> BREAK 2C00
@@ -134,11 +153,14 @@ breakpoint 1 (pc     2C00) -- stopped at 2C00
 C0Z1M0E1I1 A=C9 BC=0000 DE=2CEB HL=FFFE SP=0000 IE=0 PC=2C00  DI
 ```
 
-The header names the breakpoint that fired and where the machine stopped, then how far it ran
-since `RUN`, then the register line `REGS` would print — flags, registers, `PC` (the program
-counter), and the instruction about to run. A cycle watch reads the same way, but *stopped at* is the instruction
-that made the access, not the watched address — so it hands you the culprit. Here a write to
-`2C00` is caught with the PC on the `STAX D` that wrote it:
+The first line of the report names the breakpoint and the address where the machine stopped.
+The second line tells how many instructions and T-states ran after `RUN`. The third line is the
+line that `REGS` shows.
+
+A cycle breakpoint gives the same report, with one difference. For a cycle breakpoint, *stopped
+at* is the address of the instruction that made the access, not the watched address. The report gives you
+the instruction that made the access. In this example, the breakpoint finds a write to `2C00`.
+`PC` is on the `STAX D` that writes the byte:
 
 ```
 altairsim> BREAK MEM W 2C00
@@ -149,14 +171,21 @@ breakpoint 1 (mem w  2C00) -- stopped at FF09
 C0Z0M0E0I0 A=F3 BC=00EB DE=2C00 HL=FF13 SP=0000 IE=0 PC=FF09  STAX D
 ```
 
-**An address breakpoint can carry a condition.** `BREAK <addr> IF <expr>` stops only when the
-expression is true — the registers, tested the moment the PC reaches the address. It is what you
-reach for when a breakpoint fires ten thousand times before the once you care about: put the
-distinguishing state in the condition and let the machine run until it holds.
+### Conditions: `IF`
 
-A bare word that names a register *is* that register, so a literal needs a leading zero — `0A`
-is ten, `A` is the accumulator. `==` `!=` `<` `>` `<=` `>=` compare, `&&` `||` combine, `&` `|`
-mask, and parentheses group.
+**An address breakpoint can have a condition.** `BREAK <addr> IF <expr>` stops the machine only
+when the expression is true. The monitor tests the registers when `PC` gets to the address. Use
+a condition when a breakpoint occurs many times before the time that you want. Write the state
+that you want in the condition, and let the machine run until the condition is true.
+
+In a condition, a word that is the name of a register means that register. For this reason, a
+number that starts with a letter needs a zero before it. `0A` is ten, and `A` is the
+accumulator. The operators are:
+
+- `==` `!=` `<` `>` `<=` `>=` compare two values
+- `&&` and `||` join two conditions
+- `&` and `|` mask bits
+- parentheses group
 
 ```
 BREAK 100 IF A==0
@@ -164,53 +193,58 @@ BREAK 100 IF HL==8000 && Z==1
 BREAK 100 IF (A&0F)==0        only when the low nibble is zero
 ```
 
-**A cycle watch can carry a condition too.** `BREAK MEM W 100 IF <expr>` or `BREAK IO R 10 IF
-<expr>` stops only on the access whose registers satisfy the condition — so you can wait for the
-*one* write to a shared buffer that happens while a particular counter holds, or the read of a
-status port taken with a specific unit selected. The registers `IF` tests here are the ones the
-instruction ran *with* — its inputs, as they stood the moment it began — the same state a
-`BREAK <addr> IF` at that instruction would see.
+**A cycle breakpoint can also have a condition.** `BREAK MEM W 100 IF <expr>` and `BREAK IO R
+10 IF <expr>` stop only on an access where the registers make the condition true. For example,
+you can stop on the one write to a buffer that occurs when a counter has a given value. You
+can also stop on the read of a status port when a given unit is selected.
+
+For a cycle breakpoint, `IF` tests the registers as they were when the instruction started.
+These are the same registers that `BREAK <addr> IF` at that instruction tests.
 
 ```
-BREAK MEM W 100 IF B==0      the write to 0100 taken with B already zero
-BREAK IO R 10 IF C==1        the IN from port 10 while unit 1 is selected
+BREAK MEM W 100 IF B==0      the write to 0100 when B is zero
+BREAK IO R 10 IF C==1        the IN from port 10 when unit 1 is selected
 ```
 
-**`LOADS` tests what an `IN` read.** An `IF` on a port read sees the registers *before* the
-instruction, so it cannot ask about the byte the `IN` just fetched — that byte is not in any
-register yet. `BREAK IO R <port> LOADS <expr>` is the other half: it judges the condition *after*
-the instruction retires, so the register the `IN` loaded holds its new value. It is how you stop on
-the *content* of a port rather than the fact of a read — the status bit that finally came up, the
-byte that was out of range.
+### Tests on the byte that an `IN` read: `LOADS`
+
+`IF` on a port read tests the registers *before* the instruction. For this reason, it cannot
+test the byte that the `IN` reads, because that byte is not in a register yet.
+
+`BREAK IO R <port> LOADS <expr>` tests the condition *after* the instruction is complete. At
+that time, the register that the `IN` loaded holds the new value. Use `LOADS` to stop on the
+*value* that a port gives, and not only on the read. For example, stop when a status bit
+becomes 1, or when a byte is out of range.
 
 ```
-BREAK IO R 10 LOADS A>7F     stop when the IN from port 10 reads a high byte
-BREAK IO R 08 LOADS (A&80)!=0   ...when bit 7 of the status port is finally set
+BREAK IO R 10 LOADS A>7F        stop when the IN from port 10 reads a byte above 7F
+BREAK IO R 08 LOADS (A&80)!=0   ...when bit 7 of the status port becomes 1
 ```
 
-`IF` and `LOADS` are the same expression read at opposite ends of the instruction: `BREAK IO R 10
-IF A==5` is about the `A` that went *in*, `BREAK IO R 10 LOADS A==5` about the `A` that came *out*.
-`LOADS` belongs to a port read — a write and a memory cycle load no register — so it is only
-accepted on `BREAK IO R`.
+`IF` and `LOADS` use the same expressions. `IF` tests the start of the instruction, and `LOADS`
+tests the end. `BREAK IO R 10 IF A==5` tests the `A` that went *into* the instruction. `BREAK
+IO R 10 LOADS A==5` tests the `A` that came *out*. Only a port read loads a register, so the
+monitor accepts `LOADS` only on `BREAK IO R`.
 
-## Reading a block of memory — `DUMP`
+## Reading a block of memory: `DUMP`
 
-`DUMP` is how you read a lot of memory at once. A bare `DUMP <addr>` runs to the **end of its
-page**, and a bare `DUMP` carries on from there — so however you first landed, the rows stay
-page-aligned and the columns never move under your eye.
+Use `DUMP` to read much memory at one time. `DUMP <addr>` shows memory from the address to the
+**end of its page**. A `DUMP` with no address continues from there. For this reason, the rows
+always start at a page boundary, and the columns stay in the same place.
 
-It only *looks*. Nothing is consumed and no bus cycle is run.
+`DUMP` only reads memory. It runs no bus cycle, so it changes nothing.
 
 ```
-DUMP 100          0100-01FF: a whole page
+DUMP 100          0100-01FF: a full page
 DUMP              the next page
-DUMP FF00-FF0F    exactly that range
-DUMP 100/20       0100-011F  (a length, and it is part of the address, so it is hex)
-DUMP 0 WIDTH=8    eight bytes to a line (a count: decimal)
+DUMP FF00-FF0F    the range FF00 to FF0F
+DUMP 100/20       0100-011F (a length is part of the address, so it is hex)
+DUMP 0 WIDTH=8    eight bytes on each line (a count, so it is decimal)
 ```
 
-Each row is the address, then the bytes in hex, then the same bytes as text — a byte that is not
-a printable character shows as `.`. Here is the default machine's DBL boot PROM at `FF00`:
+Each row shows the address, then the bytes in hex, then the same bytes as text. A byte that is
+not a printable character shows as `.`. This is the DBL boot PROM of the default machine, at
+`FF00`:
 
 ```
 altairsim> DUMP FF00-FF3F
@@ -220,78 +254,94 @@ FF20  D3 10 DB FF E6 10 0F 0F  C6 10 D3 10 31 79 2D AF  ............1y-.
 FF30  D3 08 DB 08 E6 08 C2 1C  2C 3E 04 D3 09 C3 38 2C  ........,>....8,
 ```
 
-This is code, so the text column is mostly `.` — it earns its keep on a buffer of strings, where
-you can read the message straight out of the right-hand column.
+This memory holds code, so the text column shows mostly `.`. The text column is useful for a
+buffer of strings. You can read the message in the right-hand column.
 
-## One byte at a time — `EXAMINE`, `DEPOSIT`, `EDIT`
+## One byte at a time: `EXAMINE`, `DEPOSIT`, `EDIT`
 
-These are **the front panel's switches**, and they behave like them. `EXAMINE` shows a
-single byte — hex, ASCII, and its bits. It also jams the address into the program counter,
-exactly as the switch does, so `EXAMINE <addr>` follows the byte with the register line and
-the disassembled instruction the PC now points at — what the next `STEP` will run. A bare
-`EXAMINE` steps to the next byte, quietly, which is the panel's EXAMINE NEXT.
+These commands are **the switches of the front panel**, and they operate as the switches do.
+`EXAMINE` shows one byte in hex, in ASCII and as bits. It also puts the address in the program
+counter, as the EXAMINE switch does. For this reason, after the byte, `EXAMINE <addr>` shows the
+register line and the instruction at the new `PC`. That instruction is the one that the next
+`STEP` runs.
 
-`DEPOSIT` runs a **real bus write**. If no board decodes that address, it says so rather than
-pretending to have stored something — which is the difference between a debugger and a
-notepad.
+An `EXAMINE` with no address shows the next byte, without the register line. This
+is EXAMINE NEXT on the front panel.
+
+`DEPOSIT` runs a **real bus write**. If no board decodes the address, `DEPOSIT` tells you so.
+It does not tell you that it stored the byte when no board stored it.
 
 ```
-EXAMINE 2C00      one byte: hex, ASCII, and its bits — then the register line
-                  and the instruction the PC now points at, ready for STEP
-EXAMINE           the next byte, quietly — the panel's EXAMINE NEXT
+EXAMINE 2C00      one byte in hex, ASCII and bits, then the register line
+                  and the instruction at the new PC, ready for STEP
+EXAMINE           the next byte, without the register line (EXAMINE NEXT)
 DEPOSIT 100 C3 00 2C
 ```
 
-`EDIT` is `DEPOSIT` done interactively — the way you patch a run of bytes without retyping the
-address each time. The prompt shows an address and the byte that is there; type a new value and
-Enter writes it and drops to the next byte, a bare Enter leaves the byte untouched and drops to
-the next, and `.` returns you to the monitor. It is the same real bus write, so it warns the
-same way when nothing decodes the address, and `EDIT <addr> ROM` burns a PROM. `EDIT` needs a
-keyboard — at the prompt or down a pipe — so where there is none (an automated `startup` list)
-reach for `DEPOSIT` instead.
+`EDIT` is an interactive `DEPOSIT`. Use it to change a series of bytes, without typing the
+address for each byte. The prompt shows an address and the byte at that address. At the prompt,
+do one of these:
+
+- Type a new value and press Enter. `EDIT` writes the value and goes to the next byte.
+- Press Enter only. `EDIT` does not change the byte, and goes to the next byte.
+- Type `.`. `EDIT` stops, and you are at the monitor prompt again.
+
+`EDIT` runs the same real bus write as `DEPOSIT`. For this reason, it gives the same warning
+when no board decodes the address, and `EDIT <addr> ROM` writes to a PROM. `EDIT` needs you to
+type at it, at the prompt or through a pipe. Where nobody types (for example, in a `startup`
+list), use `DEPOSIT`.
 
 ```
-EDIT 100          0100 C3 3E     type 3E, Enter — written, on to 0101
-                  0101 00        Enter alone — left as 00, on to 0102
-                  0102 2C .      a '.' stops and returns to the monitor
+EDIT 100          0100 C3 3E     type 3E and Enter: EDIT writes 3E and goes to 0101
+                  0101 00        Enter only: the byte stays 00, and EDIT goes to 0102
+                  0102 2C .      '.' stops EDIT and returns to the monitor
 ```
 
-On a machine with a CPU, `EDIT` will also take an **instruction** where a byte would go and
-assemble it in place — `EDIT` is `DISASM` (below) read the other way. Type `IN 10` and it writes
-`DB 10`; the prompt then drops by the instruction's length, not one byte, so a two-byte instruction
-lands the next prompt two on. Operands are numbers in the console base — an `H` or `Q` suffix on the
-number overrides it — and there are no labels: this is a patch assembler, not a toolchain. A bare
-value is still a plain byte, so byte entry is unchanged.
+### Assembling one instruction with `EDIT`
 
-The 8080 and 8085 assemble in full. The Z80 assembles as a convenience — its documented main,
-`CB` and `ED` instructions — but not the `IX`/`IY` indexed forms or the relative jumps `JR` and
-`DJNZ`, which report *not implemented* rather than take a byte. Those two ask for something a
-single prompt cannot supply: an indexed form carries a displacement (and its `IXH`/`IXL`
-half-registers are undocumented besides), and a relative jump encodes a signed offset from the
-address *after* it, so its byte depends on both where you are jumping to and where you are
-jumping from. Deposit those bytes directly, or reach the same place with `JP`. A CPU whose
-encoding is not assembled here at all keeps taking bytes.
+On a machine that has a processor, you can type an **instruction** where `EDIT` expects a byte.
+`EDIT` assembles the instruction at the address. `EDIT` does the opposite of `DISASM` (see
+below). For example, type `IN 10` and `EDIT` writes `DB 10`. The next prompt moves forward by
+the length of the instruction, not by one byte. For a two-byte instruction, the next address is
+two bytes on.
+
+The numbers in an instruction use the console's number base. An `H` or `Q` after a number sets
+its base (hex or octal). `EDIT` does not accept labels, because it assembles one instruction and
+is not a full assembler. A value alone is still one byte, so you type bytes as before.
+
+`EDIT` assembles all 8080 and 8085 instructions. For the Z80, it assembles the documented main
+instructions and the `CB` and `ED` instructions. It does not assemble these Z80 instructions:
+
+- **The `IX` and `IY` indexed forms.** An indexed form has a displacement, and its `IXH` and
+  `IXL` half-registers are undocumented.
+- **The relative jumps `JR` and `DJNZ`.** A relative jump has a signed offset from the address
+  after the jump. Its byte depends on the address that it jumps to and on the address that it
+  jumps from.
+
+For these instructions, `EDIT` shows *not implemented* and does not write a byte. Deposit their
+bytes directly, or use a `JP` to go to the same address. For a processor that `EDIT` cannot
+assemble for, `EDIT` accepts only bytes.
 
 ```
-EDIT 100          0100 C3 IN 10        assembles DB 10, on to 0102
-                  0102 00 LXI H,FF13   assembles 21 13 FF, on to 0105
+EDIT 100          0100 C3 IN 10        assembles DB 10, goes to 0102
+                  0102 00 LXI H,FF13   assembles 21 13 FF, goes to 0105
                   0105 76 .            '.' returns to the monitor
 ```
 
-## Disassembling — `DISASM`
+## Disassembling: `DISASM`
 
-`DISASM` **peeks**: it reads memory without running a bus cycle. That matters, and it is not a
-detail. A `read()` on a serial board *consumes* a byte from its receiver, and a disassembler
-that ate the guest's input while you were looking at it would be a debugger you could not
-trust. Nothing here that only *looks* at memory will disturb it.
+`DISASM` **peeks**. It reads memory without a bus cycle. This is important. A `read()` on a
+serial board *removes* a byte from its receiver. If the disassembler took the guest's input
+while you looked at memory, you could not trust the debugger. The commands that only *look* at
+memory do not change it.
 
 ```
 DISASM FF00       sixteen instructions
-DISASM            carry on
-DISASM 0-2F       exactly that range
+DISASM            continue from the last one
+DISASM 0-2F       the range 0000 to 002F
 ```
 
-A worked example — ALTMON's reset entry at `F800`, the first thing the ROM runs:
+This example is the reset entry of ALTMON at `F800`, the first code that the ROM runs:
 
 ```
 altairsim> DISASM F800-F811
@@ -305,15 +355,15 @@ F80C  31 00 C0  LXI SP,C000
 F80F  CD A5 FB  CALL FBA5
 ```
 
-It resets both 2SIO channels' 6850s (`OUT 10`/`OUT 12`), selects 8N2 (`MVI A,11`), points the
-stack at `C000`, and calls the sign-on routine at `FBA5`. Stopping at `F811` is deliberate: the
-bytes that follow are the sign-on text, and `DISASM` would decode that ASCII as instructions —
-nothing in memory says which bytes are code.
+The code resets the 6850s of both 2SIO channels (`OUT 10` and `OUT 12`). It selects 8N2 (`MVI
+A,11`), sets the stack at `C000`, and calls the sign-on routine at `FBA5`. The range stops at
+`F811` because the bytes after it are the sign-on text. `DISASM` would decode that ASCII as
+instructions, because memory does not show which bytes are code.
 
-**`DISASM` trusts you to start on an opcode, and it cannot check.** Give it an address in the
-*middle* of an instruction and it will decode the operand bytes as if they were opcodes, and the
-listing it prints is fiction. Start the same reset code one byte late, at `F801`, and the `03`
-that was the *operand* of `MVI A,03` becomes an instruction in its own right:
+**Start `DISASM` on the first byte of an instruction.** `DISASM` cannot find where an
+instruction starts. If you start it in the *middle* of an instruction, it decodes the operand
+bytes as opcodes, and the listing is wrong. For example, start the same reset code one byte
+late, at `F801`. The `03` that was the *operand* of `MVI A,03` becomes an instruction:
 
 ```
 altairsim> DISASM F801-F812
@@ -323,16 +373,18 @@ F804  D3 12     OUT 12
 ...
 ```
 
-`INX B` is a phantom — there is no such instruction in this ROM. A disassembler usually re-syncs
-after a byte or two (here `F802` is back on the real code, because `03` happens to be one byte
-long), so a listing can look right a few lines down while its first instruction is nonsense. When
-a `DISASM` reads oddly, check that you started where an instruction *starts*: single-step to the
-address with `STEP`, or begin the range at a label you trust.
+`INX B` is not an instruction in this ROM. A disassembler usually gets back to the real code
+after one or two bytes. In this example, `F802` is correct again, because `03` is a one-byte
+instruction. For this reason, a listing can be correct after a few lines while its first
+instruction is wrong. If a `DISASM` listing looks wrong, make sure that you started at the start
+of an instruction. To find one, use `STEP` to get to the address, or start the range at a label
+that you know is correct.
 
-**`DISASM` decodes for the CPU the machine is running.** The same bytes are different instructions
-on different processors, so `DISASM` reads them through whichever CPU is in the machine — and
-prints in that CPU's own assembly dialect. Put a Z80 in the machine and bytes that are undefined
-on an 8080 become real instructions, in Zilog mnemonics (`LD`, not the 8080's `MVI`/`MOV`):
+**`DISASM` decodes for the processor in the machine.** The same bytes are different
+instructions on different processors. `DISASM` decodes them for the processor in the machine,
+and shows them in the assembly language of that processor. On a Z80, some bytes that are
+undefined on an 8080 are real instructions. `DISASM` shows them in Zilog mnemonics (`LD`, not
+the 8080's `MVI` and `MOV`):
 
 ```
 altairsim> DISASM 100-10A            (on a Z80 machine)
@@ -343,8 +395,9 @@ altairsim> DISASM 100-10A            (on a Z80 machine)
 0108  DD 7E 05  LD A,(IX+05)
 ```
 
-The very same bytes on an 8080 have no `ED`, `CB` or `DD` prefix to give them meaning, so it
-flags each undefined byte (`??=`) and decodes what is left as unrelated 8080 instructions:
+The 8080 has no `ED`, `CB` or `DD` prefix. On an 8080, `DISASM` marks each undefined byte
+(`??=`), and decodes the other bytes as 8080 instructions that have no relation to the Z80
+code:
 
 ```
 altairsim> DISASM 100-10A            (the same bytes, on an 8080 machine)
@@ -358,11 +411,12 @@ altairsim> DISASM 100-10A            (the same bytes, on an 8080 machine)
 010A  05        DCR B
 ```
 
-## Symbols — `SYMBOLS`, `SHOW SYMBOLS`
+## Symbols: `SYMBOLS`, `SHOW SYMBOLS`
 
-Everything so far has spoken in hex. Load an assembler's symbols and you can name things
-instead: `BREAK START` rather than `BREAK 0100`, `DUMP MSG/20`, `EXAMINE BDOS`. A symbol is
-accepted anywhere an address is typed, and in a `BREAK … IF` condition.
+The commands above use hex addresses. If you load the symbols from an assembler, you can use
+names. For example, type `BREAK START` and not `BREAK 0100`, or `DUMP MSG/20`, or `EXAMINE
+BDOS`. You can type a symbol in each place where you can type an address, and in a `BREAK …
+IF` condition.
 
 ```
 SYMBOLS LOAD prog.SYM              a symbol table
@@ -370,15 +424,15 @@ SYMBOLS LOAD ALTMON.PRN            ...or an assembler listing
 BREAK START
 DUMP MSG/20
 BREAK 200 IF HL==STACK
-SHOW SYMBOLS                       all of them
-SHOW SYMBOLS SIO*                  filtered by a glob
-SYMBOLS CLEAR                      forget them
+SHOW SYMBOLS                       all of the symbols
+SHOW SYMBOLS SIO*                  the symbols that match a pattern
+SYMBOLS CLEAR                      remove all symbols
 ```
 
-The same disassembly, with `ALTMON.PRN` loaded, reads symbolically. A symbol is accepted
-wherever a hex address was — so you can name the range — and the output names what it can.
-`DISASM` is the only command whose *output* is symbolic: `DUMP` still prints hex and ASCII, since
-nothing in a data block says which bytes are an address and which are just bytes.
+This is the same disassembly as before, with `ALTMON.PRN` loaded. The range starts at a symbol,
+and the listing shows names where it can. `DISASM` is the only command that shows symbols in
+its *output*. `DUMP` still shows hex and ASCII, because a block of data does not show which
+bytes are addresses.
 
 ```
 altairsim> SYMBOLS LOAD ALTMON.PRN
@@ -395,91 +449,104 @@ F80C  31 00 C0  LXI SP,SPTR
 F80F  CD A5 FB  CALL DSPMSG
 ```
 
-`MONIT` resolves to `F800`, so the range starts where you named it — naming an address is
-*reference*, and that works everywhere an address is typed. Two more things happen on top of it.
-A program **label** heads its own line the way an assembler listing prints it: `MONIT:` sits
-above `F800`, so a jump destination announces itself where it lands. And a 16-bit **operand**
-reads as a name — `CALL FBA5` becomes `CALL DSPMSG`, and `LXI SP,C000` becomes `LXI SP,SPTR`.
+`MONIT` is `F800`, so the range starts at `F800`. A name works as an address in each command.
+The listing also changes in two ways:
 
-The two use the symbol table differently, and the difference is deliberate. A leading label comes
-from **program labels only**: `SPTR` is an **`EQU`** (the listing marks it with an `=`), so it
-never *heads* a line — a constant that merely equals a code address must not masquerade as one,
-the same rule that keeps `0005` from printing a phantom `BDOS:` label. But an operand is a value
-the instruction *points at*, and there an `EQU` that is really an address is exactly what you want
-to read: so `LXI SP,SPTR` names its target even though `SPTR` is an `EQU`, and `CALL 0005` reads
-as `CALL BDOS` for the same reason. A real label wins when a label and an `EQU` share a value.
+- **A program label** is on its own line above its address, as in an assembler listing.
+  `MONIT:` is above `F800`. For this reason, you can see where a jump goes to.
+- **A 16-bit operand** shows as a name. `CALL FBA5` becomes `CALL DSPMSG`, and `LXI SP,C000`
+  becomes `LXI SP,SPTR`.
 
-Only a 16-bit operand is treated as an address. A byte immediate stays a number — an `MVI A,03`
-is not turned into a symbol even if some `EQU` happens to equal three, because two hex digits are
-a count, not an address.
+These two changes use different symbols, for a reason:
 
-> **Try it.** `examples/debugger/` is a 46-byte program built for exactly this — a `.PRN` to
-> `SYMBOLS LOAD`, a `.HEX` to `LOAD`, and a `README` that walks you from a symbolic `DISASM`
-> through single-stepping, breaking on a label, and running it until it prints. Every rule above
-> is something you can watch happen there, including the `EQU`-address operand and the byte that
-> stays a number.
+- **The label line uses program labels only.** `SPTR` is an **`EQU`** (the listing marks it
+  with `=`), so it never shows as a label line. A constant that has the same value as a code
+  address is not a code address. The same rule stops `0005` from showing a false `BDOS:` label.
+- **An operand can use an `EQU`.** An operand is a value that the instruction *points at*. An
+  `EQU` that holds an address is the name that you want to read there. For this reason, `LXI
+  SP,SPTR` shows its target, although `SPTR` is an `EQU`. For the same reason, `CALL 0005`
+  shows as `CALL BDOS`.
+- **A program label is used before an `EQU`** when the two have the same value.
 
-**Two kinds of file, and the toolchains that write them.** A **`.SYM`** is a flat list of
-name = value. Two toolchains write one: Digital Research's `MAC`/`RMAC` assemblers (every
-symbol, read by `SID`), and — with the right switches — Microsoft's **L80** linker. `L80`'s
-`/M` prints a *map* to the console, but `filename/N/Y/E` writes a real **`filename.SYM`**; the
-catch is that an `L80` `.SYM` holds **globals only** (the `PUBLIC` names), so a module's local
-labels and `EQU`s are not in it. For those, use the assembler's listing. A **`.PRN`** or
-**`.LST`** is the
-assembler's own listing — from CP/M `ASM`, Microsoft `M80`, or `MAC` — and it is the richer
-source, because it marks an `EQU` and so can tell a constant apart from a program label: only
-real labels are offered back as addresses, so `0005` never starts printing as `BDOS`.
+Only a 16-bit operand shows as an address. A byte value stays a number. `MVI A,03` does not
+become a symbol, even if an `EQU` has the value three, because a two-digit value is a count and
+not an address.
 
-**Addresses must be absolute.** A relocatable `M80` listing marks its addresses, and loading
-one is refused by the offending line — link it and load the `.SYM`, or assemble to an absolute
-origin. A `.SYM` is written after linking and is absolute already, so it never has this
-problem.
+> **Try it.** `examples/debugger/` is a 46-byte program for these rules. It has a `.PRN` for
+> `SYMBOLS LOAD`, a `.HEX` for `LOAD`, and a `README`. The `README` starts with a `DISASM` that
+> shows symbols. Next, it steps through the program, stops at a label, and runs the program until
+> it prints. You can see each rule above in the example, including the `EQU` operand and the
+> byte value that stays a number.
 
-**Symbols are yours, not the machine's.** Like a breakpoint, the table is the debugger's view,
-not part of any board — it survives `RESET`, `POWER`, and `CONFIG LOAD`, and `SYMBOLS CLEAR` is
-its `NOBREAK`. Loading two files **merges** them (the newest of a clashing name wins, and the
-command says how many were redefined); `SYMBOLS LOAD <file> REPLACE` starts fresh. A machine
-file can name a symbol file in its `startup`, and `CONFIG SAVE` writes the filename back out —
-the file, not the parsed table, exactly as it does for a built-in ROM.
+### The two types of symbol file
 
-**A name beats a hex literal.** If a symbol is spelled like a number — `FACE`, `BEEF` — the
-symbol wins; write `0FACE` (or `$FACE`) to force the number, the same escape that tells the
-register `A` from the number `0A`.
+A **`.SYM`** file is a list of names and values. Two toolchains write one:
 
-## Searching, filling, moving — `SEARCH`, `FILL`, `MOVE`, `COMPARE`
+- The Digital Research `MAC` and `RMAC` assemblers write all the symbols, for `SID`.
+- The Microsoft **L80** linker writes one with the correct switches. `L80`'s `/M` shows a
+  *map* on the console, but `filename/N/Y/E` writes a real **`filename.SYM`**. An `L80` `.SYM`
+  has **only the global names** (the `PUBLIC` names). The local labels and `EQU`s of a module
+  are not in it. For those, use the assembler's listing.
 
-The block operations. `COMPARE` will take a file as its second operand, which is how you check
-what the machine loaded against what you meant to load.
+A **`.PRN`** or **`.LST`** file is the listing from an assembler: CP/M `ASM`, Microsoft `M80`,
+or `MAC`. A listing gives more than a `.SYM` file, because it marks each `EQU`. For this reason,
+the debugger can tell a constant from a program label. Only program labels show as label
+lines, so `0005` does not show as `BDOS:`.
+
+**The addresses must be absolute.** A relocatable `M80` listing marks its addresses, and
+`SYMBOLS LOAD` refuses it and names the line. Link the program and load the `.SYM`, or assemble
+it to an absolute origin. The linker writes a `.SYM` after it links, so the addresses in a
+`.SYM` are always absolute.
+
+### Symbols belong to you, not to the machine
+
+Like a breakpoint, the symbol table is part of the debugger, not part of a board. It stays
+after `RESET`, `POWER` and `CONFIG LOAD`. `SYMBOLS CLEAR` removes the symbols, as `NOBREAK`
+removes the breakpoints.
+
+When you load a second file, `SYMBOLS LOAD` **merges** the two. If a name is in both files, the
+newer value is used, and the command tells you how many names changed. `SYMBOLS LOAD <file>
+REPLACE` removes the old symbols first. A machine file can load a symbol file in its `startup`.
+`CONFIG SAVE` writes the file name back to the machine file, not the symbols. It does the same
+for a built-in ROM.
+
+**A name is used before a hex number.** If a symbol looks like a number, such as `FACE` or
+`BEEF`, the monitor uses the symbol. To type the number, write `0FACE` or `$FACE`. The same
+zero tells the register `A` from the number `0A`.
+
+## Searching, filling, moving: `SEARCH`, `FILL`, `MOVE`, `COMPARE`
+
+These commands operate on blocks of memory. `COMPARE` can use a file as its second operand. Use
+it to compare the data that the machine loaded with the data that you wanted to load.
 
 ```
-SEARCH 0-FFFF C3 00 2C      find those bytes
-SEARCH 0-FFFF "BDOS"        ...or that string
+SEARCH 0-FFFF C3 00 2C      find these bytes
+SEARCH 0-FFFF "BDOS"        ...or this string
 FILL 100-1FF 00
 MOVE 100-1FF 2000
-COMPARE 100-1FF 2000        ...or against a file
+COMPARE 100-1FF 2000        ...or compare with a file
 ```
 
-## Running real bus cycles by hand — `IN`, `OUT`
+## Running real bus cycles by hand: `IN`, `OUT`
 
-These are not simulated reads. **`IN` runs an input cycle on the bus, with every side effect a
-real one would have** — it will consume a character from a UART's receiver, it will advance a
-disk controller's sector counter. That is the point of them: it is how you poke a board the way
-the guest's software would, without writing any guest software.
+`IN` and `OUT` run real bus cycles. **`IN` runs an input cycle on the bus, with each effect
+that a real cycle has.** For example, it removes a character from the receiver of a UART, and
+it moves the sector counter of a disk controller forward. Use `IN` and `OUT` to operate a board
+as the guest does, without writing a guest program.
 
 ```
 IN  10            run a real IN cycle on port 10
 OUT FF 55         run a real OUT cycle
 ```
 
-## Asking without touching — `WHO`
+## Asking without touching: `WHO`
 
-`WHO` asks which **board** *would* answer — the one that decodes the address or port you name,
-reported by its board id. **No cycle is run and nothing is consumed.** It is the question you
-want when `IN 10` gives you `FF` and you cannot tell whether that is data or whether nothing is
-there at all.
+`WHO` tells you which **board** *would* answer an address or a port. It gives the board's id.
+**`WHO` runs no cycle, and it changes nothing.** Use it when `IN 10` gives `FF`, and you do not
+know if `FF` is data or if no board answered.
 
-The console 2SIO decodes port 10, so it answers by name — and reads and writes can land on
-different boards, so `WHO` reports each:
+The console 2SIO decodes port 10, so `WHO` names it. A read and a write can go to different
+boards, so `WHO` shows each one:
 
 ```
 altairsim> WHO IO 10
@@ -487,7 +554,8 @@ port 10 IN:  sio0
 port 10 OUT: sio0
 ```
 
-A port nothing decodes answers `nobody`, and now you know the `FF` was a floating bus, not data:
+For a port that no board decodes, `WHO` shows `nobody`. This tells you that the `FF` was a
+floating bus, not data:
 
 ```
 altairsim> WHO IO 20
@@ -495,10 +563,10 @@ port 20 IN:  nobody (an IN here reads FF)
 port 20 OUT: nobody (an OUT here goes nowhere)
 ```
 
-It reports contention, and it reports `PHANTOM*` — so if two boards are fighting, or if one
-board has switched another one off, `WHO` is where you find out. On the default machine the DBL
-boot ROM lives inside `mem0` at `FF00` and asserts `PHANTOM*` to shadow the RAM beneath it, so a
-read there comes from the ROM while a write falls through to nowhere — and `WHO` flags both:
+`WHO` also shows contention and `PHANTOM*`. Use it to find two boards that decode the same
+address, or a board that disables another board. On the default machine, the DBL boot ROM is
+part of `mem0` at `FF00`. It asserts `PHANTOM*` to disable the RAM below it. For this reason, a
+read at `FF00` comes from the ROM, and no board takes a write. `WHO` shows both:
 
 ```
 altairsim> WHO FF00
@@ -506,141 +574,152 @@ FF00 read  mem0   [PHANTOM* asserted]
 FF00 write nobody -- floats to FF (a write here is simply gone)  [PHANTOM* asserted]
 ```
 
-`WHO <addr>` asks about a memory address; `WHO IO <port>` asks about a port.
+`WHO <addr>` asks about a memory address. `WHO IO <port>` asks about a port.
 
-## Looking at the bus itself — `SHOW BUS`
+## Looking at the bus: `SHOW BUS`
 
-Where `WHO` asks about one address, `SHOW BUS` shows you the whole backplane at once.
+`WHO` asks about one address. `SHOW BUS` shows all of the backplane at one time.
 
-`SHOW BUS IRQ` is the only window onto the interrupt wiring, and interrupt wiring is the part
-of a machine you cannot see. A board strapped to a line that nothing listens to fails in total
-silence — the software just never gets its interrupt, and there is nothing to look at. This
-command is what makes that visible.
+`SHOW BUS IRQ` is the only command that shows the interrupt wiring. You cannot see this wiring
+in any other way. If a board is set to an interrupt line that nothing reads, nothing shows the
+fault. The guest does not get its interrupt, and there is nothing to examine. `SHOW BUS IRQ`
+shows you this fault.
 
-`SHOW BUS CONTENTION` is the one to reach for when a machine you built yourself is misbehaving
-for no reason. Two boards decoding the same port is a real hardware fault, and the simulator
-will not quietly pick a winner for you.
+Use `SHOW BUS CONTENTION` when a machine that you built does not operate correctly and you do
+not know why. Two boards that decode the same port are a real hardware fault. The simulator
+does not choose one of the two boards for you.
 
 ```
-SHOW BUS MAP          who decodes what in memory — and what floats
-SHOW BUS IO           who decodes which ports
-SHOW BUS IRQ          the eight interrupt lines: who is strapped where, who is pulling
-SHOW BUS CONTENTION   where two boards answer the same thing
+SHOW BUS MAP          which board decodes each memory address, and which addresses float
+SHOW BUS IO           which board decodes each port
+SHOW BUS IRQ          the eight interrupt lines: which board is set to each, and which assert
+SHOW BUS CONTENTION   the addresses that two boards answer
 ```
 
-## The machine over time — `TRACE`, `HISTORY`
+## The machine over time: `TRACE`, `HISTORY`
 
-`WHO` and `SHOW BUS` are snapshots — the backplane as it is *now*. `REGS` and `STEP` are the
-machine as it is *now*. `TRACE` and `HISTORY` show you all of that over *time*, which is what you
-want when the bug is not where the machine stopped but somewhere in how it got there.
+`WHO` and `SHOW BUS` show the backplane as it is *now*. `REGS` and `STEP` show the machine as it
+is *now*. `TRACE` and `HISTORY` show the machine over *time*. Use them when the fault is not
+where the machine stopped, but in the instructions before the stop.
 
-**`HISTORY` is a flight recorder.** A fixed-size ring is always filling while the machine runs,
-so when a breakpoint fires — or the machine wanders off into the weeds — the run-up to it is
-*already* recorded. You do not arm it; it is on. A bare `HISTORY` shows the last sixteen
-**instructions**, oldest first; `HISTORY <n>` shows the last *n*. Each line is exactly what
-`STEP` prints — the registers and flags as the machine stood, and the decoded mnemonic it was
-about to run — so the recording reads like a `STEP` you did not have to be there for. The
-mnemonic is decoded from the bytes that *actually ran* at that address, so self-modifying code
-reads truthfully.
+**`HISTORY` records the machine all the time.** While the machine runs, it fills a fixed-size
+buffer with the most recent instructions. When a breakpoint stops the machine, or when the
+guest runs code that it must not run, the instructions before the stop are already recorded.
+You do not need to turn `HISTORY` on.
 
-There is a second recorder underneath, for when the CPU view is not enough: **`HISTORY BUS`** is
-the raw bus cycles — no registers and no mnemonics, just `T-STATE`, `TYPE`, `ADDR` and `DATA`,
-and then **who drove the cycle and who answered it**. The processor drives most cycles, so that
-column reads `cpu`; a **DMA transfer names the board** that stole the bus instead (a DMA move
-originates no instruction, so it shows up here and not in the CPU view). The *answered* column is
-the board that decoded the address — or `--` when nobody did and the read floated to `FF`. So a
-guest poking a port that no board decodes reads `cpu -> --`, and a DMA controller filling a
-framebuffer reads `dazzler -> mem0`. `HISTORY CPU` names the default out loud.
+`HISTORY` shows the last sixteen **instructions**, oldest first. `HISTORY <n>` shows the last
+*n*. This is the **instruction history**. Each line is the same as a `STEP` line: the registers
+and flags as they were, and the instruction that was next. `HISTORY` decodes each instruction
+from the bytes that *ran* at that address. For this reason, it shows code that changed itself
+correctly.
+
+The **bus history** records the bus cycles, for when the instruction history is not enough.
+`HISTORY BUS` shows it. It has no registers and no mnemonics. It has the columns `T-STATE`,
+`TYPE`, `ADDR` and `DATA`, and then **the board that drove the cycle and the board that
+answered it**:
+
+- **The driver.** The processor drives most cycles, so the column shows `cpu`. For a **DMA
+  transfer, the column names the board** that took the bus. A DMA transfer is not an
+  instruction, so it shows in the bus history and not in the instruction history.
+- **The board that answered.** This is the board that decoded the address. The column shows
+  `--` when no board decoded it and the read floated to `FF`.
+
+For example, a guest that reads a port that no board decodes shows `cpu -> --`. A DMA
+controller that fills a frame buffer shows `dazzler -> mem0`. `HISTORY CPU` is the same as
+`HISTORY`.
 
 ```
 HISTORY               the last 16 instructions
 HISTORY 100           the last hundred (a count, so decimal)
-HISTORY BUS           the last 16 bus cycles instead
+HISTORY BUS           the last 16 bus cycles
 HISTORY BUS 100       the last hundred cycles
 ```
 
-**`TRACE` logs every cycle as it happens** — to the console, or to a file. Like the breakpoints
-that watch the bus, it is not a CPU feature: it watches the same stream every board sees, so it
-works unchanged on any processor you put in the machine.
+**`TRACE` records each cycle when it occurs**, on the console or in a file. `TRACE` does not
+watch the processor. It watches the same cycles that each board sees, as a cycle breakpoint
+does. For this reason, it works in the same way on each processor.
 
-A `MASK` narrows the log to the kinds of cycle you name. With no mask every cycle is logged; with
-one, a cycle is kept if it matches *any* kind you listed. There are five:
+A `MASK` limits the trace to the types of cycle that you name. With no mask, `TRACE` records
+all cycles. With a mask, it records a cycle that is one of the types in the list. There are
+five types:
 
-- **`IN`** — an I/O read, an `IN` from a port.
-- **`OUT`** — an I/O write, an `OUT` to a port.
-- **`IRQ`** — an interrupt-acknowledge cycle: the `INTA` the CPU runs to take the interrupting
-  device's instruction off the bus.
-- **`DMA`** — every cycle a granted bus master drove, *whatever its type*. `MASK=DMA` is the whole
-  transfer a board stole the bus for, not just its reads or its writes.
-- **`CONTENTION`** — a cycle more than one board answered: the bus fact that two boards decoded
-  the same address at once (the same fault `SHOW BUS CONTENTION` reports, caught as it happens).
-
-```
-TRACE ON                     every cycle, to the console
-TRACE ON run.log             ...to a file instead
-TRACE ON MASK=IN,OUT         just the port traffic
-TRACE ON MASK=IRQ,DMA        just interrupts and DMA
-TRACE OFF                    stop tracing
-```
-
-### Tracepoints — tracing one part of a program
-
-A whole-program trace is a firehose. A mask narrows it by *category*, but often you do not want
-a category — you want a *place*: this subroutine, and nothing else.
-
-That is a tracepoint. Add `TRACE ON` or `TRACE OFF` to a `BREAK` and it stops being a
-breakpoint: instead of stopping the machine it flips the trace, and the machine runs on. Two of
-them bracket a region.
+- **`IN`**: an I/O read, an `IN` from a port.
+- **`OUT`**: an I/O write, an `OUT` to a port.
+- **`IRQ`**: an interrupt-acknowledge cycle. This is the `INTA` cycle in which the processor
+  reads the instruction of the device that interrupts.
+- **`DMA`**: each cycle that a bus master drove, *of each type*. `MASK=DMA` gives all of a
+  DMA transfer, not only its reads or its writes.
+- **`CONTENTION`**: a cycle that two or more boards answered, because they decode the same
+  address. `SHOW BUS CONTENTION` reports the same fault. `TRACE` records it when it occurs.
 
 ```
-altairsim> BREAK 2C00 TRACE ON     start tracing when PC reaches 2C00
-altairsim> BREAK 2C40 TRACE OFF    ...and stop again at 2C40
+TRACE ON                     each cycle, on the console
+TRACE ON run.log             ...in a file
+TRACE ON MASK=IN,OUT         only the port cycles
+TRACE ON MASK=IRQ,DMA        only interrupts and DMA
+TRACE OFF                    stop the trace
+```
+
+### Tracepoints: tracing one part of a program
+
+A trace of a full program is very long. A mask limits the trace to *types* of cycle. Often
+you want a *place* in the program instead, such as one subroutine.
+
+For this, use a **tracepoint**. Add `TRACE ON` or `TRACE OFF` to a `BREAK`, and it becomes a
+tracepoint. A tracepoint does not stop the machine. It starts or stops the trace, and the
+machine continues. Use two tracepoints to trace a region:
+
+```
+altairsim> BREAK 2C00 TRACE ON     start the trace when PC gets to 2C00
+altairsim> BREAK 2C40 TRACE OFF    ...and stop it at 2C40
 altairsim> RUN FF00
 ```
 
-`TRACE ON` traces the instruction *at* its address; `TRACE OFF` does not. The region is
-`[on, off)` — exactly the half-open range you would write down if someone asked you which
-instructions were in the subroutine.
+A `TRACE ON` tracepoint traces the instruction *at* its address. A `TRACE OFF` tracepoint does
+not. The region is `[on, off)`. This is the half-open range that contains the instructions of
+the subroutine.
 
-A trace toggle works on the bus kinds the same way `IF` now does, and the cycle that triggered it
-is the *first line* of the trace, not the line above it: a trace should show its own reason.
+A tracepoint can also be a cycle breakpoint, as `IF` can. The cycle that starts the trace is
+the *first line* of the trace, not the line before it. For this reason, the trace shows why it
+started.
 
 ```
-altairsim> BREAK MEM W 2000 TRACE ON    trace onward from whatever writes 2000
+altairsim> BREAK MEM W 2000 TRACE ON    start the trace at the cycle that writes 2000
 ```
 
-They compose with `IF`, and they still do not stop:
+A tracepoint can have an `IF` condition, and it still does not stop the machine:
 
 ```
 altairsim> BREAK 200 IF HL==8000 TRACE ON
 ```
 
-**Where the trace goes is `TRACE`'s business, not the tracepoint's.** A tracepoint that has never
-been told anything traces to the console. To send it to a file, configure it first — and this is
-what `TRACE OFF` is for: it stops the tracing but *remembers where it was going*, so a tracepoint
-can pick it up again.
+**`TRACE` sets where the trace goes, not the tracepoint.** A tracepoint traces to the console,
+until you give `TRACE` a file. To send the trace to a file, set up `TRACE` first. `TRACE OFF`
+stops the trace, but *keeps the file and the mask*. A tracepoint then starts the trace again
+with that file and mask.
 
 ```
-altairsim> TRACE ON run.log MASK=DMA    configure it: file, mask — and it starts
-altairsim> TRACE OFF                    stop, but the file and mask are remembered
-altairsim> BREAK 2C00 TRACE ON          arm the region
+altairsim> TRACE ON run.log MASK=DMA    set the file and the mask (this starts the trace)
+altairsim> TRACE OFF                    stop, but keep the file and the mask
+altairsim> BREAK 2C00 TRACE ON          set the region
 altairsim> BREAK 2C40 TRACE OFF
-altairsim> RUN FF00                     run.log gets the DMA cycles, from 2C00 to 2C40, and nothing else
+altairsim> RUN FF00                     run.log gets only the DMA cycles from 2C00 to 2C40
 ```
 
-Tracepoints appear in `BREAK`'s listing with the rest, and their `hits` count the times they
-fired. A tracepoint never hides an ordinary breakpoint at the same address: if both are set, the
-trace flips *and* the machine stops.
+The `BREAK` list shows the tracepoints with the breakpoints. Their `hits` column counts how
+many times each one occurred. A tracepoint and a breakpoint can be at the same address. When
+the machine gets to the address, the trace starts or stops *and* the machine stops.
 
-## What a board is doing — `SET … DEBUG`, `SHOW DEBUG`
+## What a board does: `SET … DEBUG`, `SHOW DEBUG`
 
-`TRACE` and `HISTORY` watch the *bus* — the cycles, addresses and data every board shares.
-Some parts of the machine can also narrate what they are doing in their *own* terms: a floppy
-controller stepping the heads and reading a sector, a serial chip taking a byte, a socket
-answering a call. That is what the **diagnostic channels** are for. Each instrumented part has
-a named channel with a handful of flags, and you switch on the ones you want to hear about.
+`TRACE` and `HISTORY` watch the *bus*: the cycles, addresses and data that all boards share.
+Some parts of the machine can also report what they do, in their *own* terms. For example, a
+floppy controller moves its heads and reads a sector, a serial chip receives a byte, and a
+socket answers a call. These reports come from **diagnostic channels**. Each part that has a
+diagnostic channel has a name for it and a small set of **debug flags**. You turn on the flags
+for the reports that you want.
 
-`SHOW DEBUG` lists every channel there is, its flags, and where the output is going:
+`SHOW DEBUG` lists each diagnostic channel, its debug flags, and where the reports go:
 
 ```
 altairsim> SHOW DEBUG
@@ -650,76 +729,86 @@ debug  (runtime diagnostics -- the sink and flags do not survive CONFIG SAVE)
 
   CHANNEL  FLAGS  (an enabled flag is UPPER-CASE)
   -------  --------------------------------------
-  dsk0     SECTOR seek
-  6850     serial
   socket   connect
+  6850     serial
+  dsk0     SECTOR seek
 
   SET <channel> DEBUG=<flag>[,<flag>]  enables;  NODEBUG=<flag> disables;
   DEBUG=all / DEBUG=none turn every flag on / off.
 ```
 
-A flag printed in capitals is on. Turn one on with `DEBUG=`, off with `NODEBUG=`; both are
-additive, take a comma-separated list, and understand `all` and `none`:
+A debug flag in capital letters is on. `DEBUG=` turns flags on, and `NODEBUG=` turns them off.
+Each one changes only the flags that you name. Each one accepts a list with commas, and the
+words `all` and `none`:
 
 ```
-SET dsk0 DEBUG=sector,seek     narrate both sector reads and head seeks
-SET dsk0 NODEBUG=seek          quiet the seeks, keep the sector reads
-SET dsk0 DEBUG=all             everything this board can say
-SET dsk0 NODEBUG=all           silence it
+SET dsk0 DEBUG=sector,seek     report the sector reads and the head moves
+SET dsk0 NODEBUG=seek          stop the head-move reports, keep the sector reads
+SET dsk0 DEBUG=all             all the reports of this board
+SET dsk0 NODEBUG=all           no reports from this board
 ```
 
-The name in front of `DEBUG` is the channel. Usually it is a board's id — `dsk0` above — but a
-shared chip or the socket layer has one too (`6850`, `socket`), so the same switch reaches parts
-of the machine that are not boards at all. An unknown flag is refused and *nothing* changes: the
-switch is all-or-nothing, so a typo in a list never leaves half of it applied.
+The name before `DEBUG` is the diagnostic channel. Usually it is the id of a board, such as
+`dsk0` above. A shared chip and the socket layer also have diagnostic channels (`6850` and
+`socket`). For this reason, the same command reaches parts of the machine that are not
+boards. If one flag in
+the list is not known, the monitor refuses the command and changes *nothing*. For this reason,
+a typing error in a list does not leave half of the list set.
 
-Every line names its channel and is prefixed with **the PC of the instruction that drove it**,
-so a diagnostic line points straight at the code working the board:
+Each report line starts with **the address of the instruction that operated the board**, and
+then the name of the diagnostic channel. For this reason, a report line shows you the code that
+operates the board:
 
 ```
 2C38  dsk0: sector drive=0 track=0 sector=1
 007F  dsk0: seek drive=0 track=0 -> 1
 ```
 
-At the monitor prompt — with the machine stopped — there is no such instruction, and the column
-reads `----`.
+At the monitor prompt, the machine is stopped and no instruction operates the board. The
+address column then shows `----`.
 
-**Where the output goes is one setting for the whole facility**, aimed with `SET CONSOLE DEBUG=`:
+**All the diagnostic channels send their reports to one place.** Set it with `SET CONSOLE
+DEBUG=`:
 
 ```
 SET CONSOLE DEBUG=stderr       the default
 SET CONSOLE DEBUG=stdout
-SET CONSOLE DEBUG=trace.log    append to a file
+SET CONSOLE DEBUG=trace.log    add to the end of a file
 ```
 
-Tab completes all of it — the channel names after `SET`, `DEBUG`/`NODEBUG` after the channel,
-and the flag values (with `all` and `none`) after the `=`.
+`Tab` completes each part of these commands:
 
-None of this is saved by `CONFIG SAVE`. A diagnostic is something you switch on to watch a
-problem, not a property of the machine, so a config you write while debugging does not carry the
-noise into every later run.
+- the channel name after `SET`
+- `DEBUG` or `NODEBUG` after the channel
+- the debug flags, and `all` and `none`, after the `=`
 
-## A copy of the session — `SET CONSOLE log`
+`CONFIG SAVE` does not save these settings. You turn a diagnostic channel on to watch a
+problem, and it is not part of the machine. For this reason, a machine file that you save
+while you debug does not turn the reports on for each run after it.
 
-`TRACE` records the bus and `DEBUG` records what a board narrates; `SET CONSOLE log` records the
-*terminal* — everything you saw. Guest output and the keys you typed both go to a host file as
-they happen, so you can read a whole session back later, or hand it to someone who was not there.
+## A copy of the session: `SET CONSOLE log`
+
+`TRACE` records the bus, and a diagnostic channel records what a board does. `SET CONSOLE log`
+records the *console*: all that you saw. It writes the guest's output and the keys that you
+typed to a host file, when they occur. You can read the session again later, or give it to a
+person who was not there.
 
 ```
-SET CONSOLE log=session.txt     start copying the session to a file
+SET CONSOLE log=session.txt     start to copy the session to a file
 SET CONSOLE log=off             stop (an empty path does the same)
 ```
 
-The file is opened for *append*: pointing `log` at the same file twice in a session adds to it
-rather than erasing what you already caught. Like `TRACE` and `DEBUG` it is a diagnostic and not
-part of the machine, so `CONFIG SAVE` does not carry it — a config written while you are capturing
-a session does not turn logging on for every later run.
+`log` adds to the end of the file. If you set `log` to the same file two times in a session,
+the second copy goes after the first, and the first stays. The log is a diagnostic tool, like
+`TRACE` and the diagnostic channels, and it is not part of the machine. For this reason,
+`CONFIG SAVE` does not save it. A machine file that you save while you log a session does not
+turn the log on for each run after it.
 
 ## A debugging session
 
-Here is the whole toolset in one short session on the `altmon` machine. ALTMON prints its
-`ALTMON 1.3` banner at reset, and it does it without passing a pointer to its print routine — a
-neat trick worth taking apart. Break at the sign-on routine `FBA5` and run from the reset entry:
+This short session uses the commands above on the `altmon` machine. ALTMON prints its `ALTMON
+1.3` banner at reset. It prints the banner without a pointer to the text, and the session finds
+out how. Set a breakpoint at the sign-on routine `FBA5`, and run from the reset entry:
 
 ```
 altairsim> BREAK FBA5
@@ -731,8 +820,8 @@ breakpoint 1 (pc     FBA5) -- stopped at FBA5
 C0Z0M0E0I1 A=11 BC=0000 DE=0000 HL=F81F SP=BFFE IE=0 PC=FBA5  POP H
 ```
 
-The breakpoint prints the registers for you — no `REGS` needed. The PC is on `POP H`, the first
-instruction of the routine. Disassemble to see the whole thing:
+The breakpoint shows the registers, so you do not need `REGS`. `PC` is on `POP H`, the first
+instruction of the routine. Disassemble the routine:
 
 ```
 altairsim> DISASM
@@ -754,10 +843,16 @@ FBBF  D2 BC FB  JNC FBBC
 FBC2  DB 11     IN 11
 ```
 
-There is the trick: `POP H` takes the routine's *own return address* into `HL`. The message is
-stored inline, right after the `CALL FBA5` — so `HL` now points at it. Then `MOV A,M` fetches a
-character, `CALL FB48` prints it, `ORA M` tests the byte, `INX H` advances, and `JP FBA6` loops.
-Step into it and watch the banner come out a character at a time:
+This is how the routine works. `POP H` puts the routine's *own return address* in `HL`. The
+text is in memory directly after the `CALL FBA5`, so `HL` now points at the text. The loop is:
+
+1. `MOV A,M` gets a character.
+2. `CALL FB48` prints it.
+3. `ORA M` tests the byte.
+4. `INX H` moves to the next byte.
+5. `JP FBA6` goes back to the start of the loop.
+
+Step into the routine, and see the banner come out one character at a time:
 
 ```
 altairsim> STEP 20
@@ -783,122 +878,156 @@ C0Z1M0E1I0 A=00 BC=0000 DE=0000 HL=F813 SP=BFFC IE=0 PC=FB4D  JZ FB49
 C0Z1M0E1I0 A=00 BC=0000 DE=0000 HL=F813 SP=BFFC IE=0 PC=FB49  IN 10
 ```
 
-`POP H` landed `HL` on `F812`, the byte right after the `CALL`, and the first character is `0D` —
-a carriage return. `FB48` is the console-output routine: it polls the 2SIO status (`IN 10`,
-`ANI 02`) until the transmitter is ready, then `OUT 11` sends the byte and returns. Back in the
-loop, `INX H` steps `HL` to `F813` and the next character `0A` (line feed) follows the same path —
-and so on, until a byte with its high bit set marks the end of the string. Twenty steps in, you
-have watched the first two characters of the banner reach the terminal.
+`POP H` set `HL` to `F812`, the byte directly after the `CALL`. The first character is `0D`, a
+carriage return. `FB48` is the console output routine. It reads the 2SIO status (`IN 10` and
+`ANI 02`) until the transmitter is ready. Next, `OUT 11` sends the byte, and the routine
+returns.
 
-## Saving state — `SNAPSHOT`, `RESTORE`
+In the loop, `INX H` moves `HL` to `F813`. The next character, `0A` (line feed), goes
+through the same steps. The loop continues until a byte with its high bit set marks the end of
+the text. After twenty steps, the first two characters of the banner are on the console.
 
-`SNAPSHOT` writes the machine's whole state — the CPU, the clock, and every board's registers,
-RAM and latches — to a file, and `RESTORE` reads it back into a machine of the same shape. So
-you can save the machine at a moment and return to it later.
+## Saving the state: `SNAPSHOT`, `RESTORE`
 
-Mark a spot, change something, and put it back:
+`SNAPSHOT` writes all the state of the machine to a file. This includes the processor, the
+clock, and the registers, RAM and latches of each board. `RESTORE` reads the file back into a
+machine that has the same boards. Use them to save the machine at one moment and go back to
+that moment later.
+
+To save the state, change memory, and get the state back:
+
+1. Type `SNAPSHOT before.snap` to save the state.
+2. Type `DEPOSIT 100 00 00 00 00` to change four bytes.
+3. Type `RESTORE before.snap` to get the state back.
+4. Type `DUMP 100-103`. The four bytes have their old values again.
 
 ```
 altairsim> SNAPSHOT before.snap
 snapshot written to before.snap
-altairsim> DEPOSIT 100 00 00 00 00      trample four bytes
+altairsim> DEPOSIT 100 00 00 00 00      change four bytes
 altairsim> RESTORE before.snap
 restored from before.snap
-altairsim> DUMP 100-103                 they are back
+altairsim> DUMP 100-103                 the old bytes are back
 0100  DE AD BE EF                                       ....
 ```
 
-It saves *state*, not *configuration* — the boards themselves are not in the file. `RESTORE`
-loads back into the machine you already have, and refuses a file that does not match its shape
-(the same boards, ids, and order), leaving the running machine untouched. Build that shape with
-the machine file or a `CONFIG LOAD` first, then restore into it.
+A snapshot holds the *state* of the machine, not its *configuration*. The file does not hold the
+boards. `RESTORE` loads the state into the machine that you have now. If the file does not match
+the machine (the same boards, ids and order), `RESTORE` refuses it and does not change the
+machine. Make the machine first, with the machine file or with `CONFIG LOAD`. After that, restore
+the snapshot into it.
 
-## Getting an assistant to do it — the MCP server
+## Using an AI assistant: the MCP server
 
-Everything in this document is a command you type. It is also a tool an **AI assistant** can
-call. Start the machine with `--mcp` instead of at a terminal —
+Each command in this document is a command that you type. An **AI assistant** can also use it.
+Start the machine with `--mcp`, and not at a terminal:
 
 ```
 $ altairsim <machine> --mcp
 ```
 
-— and the same debugger is offered to an assistant as structured tools: it can set a breakpoint,
-run to it, read the registers, disassemble, step, dump memory, and read the bus recorder, on the
-*same* machine object the monitor drives. So instead of learning the commands, you can describe
-the symptom in a sentence and let the assistant work the machine for you. (The MCP server is
-covered in full in the **MCP server** chapter of the User Manual, including how to register it
-with clients other than the one below.)
+The assistant then gets the debugger as a set of tools. It can set a breakpoint, run to it,
+read the registers, disassemble, step, dump memory and read the bus history. It uses the *same*
+machine that the monitor operates. For this reason, you do not need to learn the commands. You
+can tell the assistant the problem in one sentence, and the assistant operates the machine for
+you.
 
-**Setting it up — the example is Claude Code.** Two one-time steps. First, register the server so
-the assistant can reach the machine; run this in the directory that holds your machine file, so the
-relative path and the host bridge both resolve there:
+The *User Manual* has a full chapter, **The MCP server**. That chapter also tells how to
+connect the server to other clients.
 
-```
-$ claude mcp add altairsim -- altairsim <machine> --mcp
-$ claude mcp list                      # confirm it registered and is reachable
-```
+### Setting up the assistant
 
-Second, hand the assistant its briefing. `DRIVING-WITH-AI.md` ships in the package; it is written
-for the assistant, not for you — it teaches these tools and the recipes for booting, building and
-debugging over them. Copy it into the same directory, start `claude` there, and point the assistant
-at it before you give it a job:
+The example uses Claude Code. You do these steps one time.
 
-```
-$ cp /path/to/DRIVING-WITH-AI.md .
-$ claude
-> Read DRIVING-WITH-AI.md, then use the altairsim MCP tools for what follows.
-```
+1. Go to the directory that holds your machine file. The relative paths and the host bridge
+   then find their files there.
+2. Register the server, so that the assistant can get to the machine:
 
-From then on you talk to the assistant, not to the server.
+   ```
+   $ claude mcp add altairsim -- altairsim <machine> --mcp
+   ```
 
-**What you say.** Give the assistant the whole job in plain language, and name the tools so it
-drives the simulator rather than guessing:
+3. Make sure that the server is registered and that the assistant can get to it:
 
-> *Using the altairsim MCP tools, boot the machine and run `HELLO.COM`. It should print
-> `HELLO, WORLD` but it prints `ELLO, WORLD` — find the bug and fix the source.*
+   ```
+   $ claude mcp list
+   ```
 
-> *My loader hangs instead of reaching the prompt. Boot with the MCP tools, break at `2C00`
-> where it relocates itself, and single-step from there to tell me where it goes wrong.*
+4. Copy `DRIVING-WITH-AI.md` from the package into the same directory. This file is for the
+   assistant, not for you. It tells the assistant how to use the tools, and how to boot, build
+   and debug with them.
 
-> *Something is overwriting the BIOS at `E400`. Set a memory-write breakpoint there, run until
-> it trips, and show me the instruction and registers that did it.*
+   ```
+   $ cp /path/to/DRIVING-WITH-AI.md .
+   ```
 
-**What the assistant does with that.** It works the same loop you would, one tool call at a time.
-Given the first sentence, it boots the machine, runs the program, and sees `ELLO, WORLD`; sets a
-breakpoint at `0100`, runs there, and disassembles — where it finds the pointer advanced by an
-`INX H` *before* the first character is read, so the `H` is skipped. It corrects the source,
-reassembles it on the CP/M disk, and runs again to confirm `HELLO, WORLD`. You watch the reasoning
-and the fix; you type none of the commands.
+5. Start `claude` in the directory, and tell the assistant to read the file before you give it
+   a task:
 
-**When a typed tool does not reach.** The assistant is not limited to the structured tools: it can
-run any monitor command and read the reply, so a conditional breakpoint (`BREAK 200 IF HL==8000`)
-or an octal dump is one call away, exactly as it is for you.
+   ```
+   $ claude
+   > Read DRIVING-WITH-AI.md, then use the altairsim MCP tools for what follows.
+   ```
 
-`examples/ai-mcp/` is a ready-made version of the first sentence above — a CP/M machine and a
-`HELLO.ASM` with one deliberate bug — with a walkthrough of the session the assistant runs to find
-and fix it. It is the fastest way to see this work end to end.
+After this, you talk to the assistant, not to the server.
 
-## Things to know about the bus
+### What to tell the assistant
 
-Not commands — facts about how the backplane behaves, the kind that turn a baffling reading into
-an expected one.
+Give the assistant the full task in plain words. Name the tools, so that the assistant uses the
+simulator and does not guess:
+
+> *Use the altairsim MCP tools. Boot the machine and run `HELLO.COM`. It must print
+> `HELLO, WORLD`, but it prints `ELLO, WORLD`. Find the bug and fix the source.*
+
+> *My loader stops before it gets to the prompt. Boot with the MCP tools, and set a breakpoint
+> at `2C00`, where the loader moves itself. Single-step from there, and tell me where it goes
+> wrong.*
+
+> *Something writes over the BIOS at `E400`. Set a memory-write breakpoint there, and run until
+> it stops the machine. Show me the instruction and the registers that wrote the byte.*
+
+### What the assistant does
+
+The assistant does the same steps that you would do, one tool call at a time. For the first
+task above:
+
+1. It boots the machine, runs the program, and sees `ELLO, WORLD`.
+2. It sets a breakpoint at `0100`, runs to it, and disassembles the code.
+3. It finds an `INX H` that moves the pointer *before* the program reads the first character.
+   For this reason, the program does not print the `H`.
+4. It corrects the source and assembles it again on the CP/M disk.
+5. It runs the program again, and sees `HELLO, WORLD`.
+
+You see the reasoning and the fix, and you type none of the commands.
+
+**The assistant can also use each monitor command.** It can run a monitor command and read the
+reply. For example, a conditional breakpoint (`BREAK 200 IF HL==8000`) or an octal dump is one
+tool call, as it is one command for you.
+
+`examples/ai-mcp/` is the first task above, ready to use. It has a CP/M machine, and a
+`HELLO.ASM` that has one bug, put there for the example. It also shows the session that the
+assistant runs to find and fix the bug. Use this example to see all the steps work.
+
+## About the bus
+
+These are not commands. They are facts about the backplane that explain a reading that looks
+wrong.
 
 ### When `FF` is not data
 
-`FF` is a perfectly good byte — a `RST 38`, an `RST 7`, the value −1 — so most of the time it
-reads back as exactly what a board put there. But it is also what the bus gives you when *nobody
-answered*, and telling those two apart is worth a habit.
+`FF` is a good byte. It is `RST 38` (`RST 7`), and it is the value −1. Usually, when a read
+gives `FF`, a board put `FF` there. `FF` is also what the bus gives when *no board
+answers*. Learn to tell these two cases apart.
 
-**An `IN` from a port nothing decodes, or a read from an address no board answers for, returns
-`FF`.** That is not an error code and it is not a convention we invented — it is what a **floating
-bus** reads. Nobody is driving the data lines, they idle high, and the processor faithfully reads
-eight ones. A real Altair does exactly this.
+**An `IN` from a port that no board decodes gives `FF`. A read from an address that no board
+answers also gives `FF`.** This is not an error code, and `altairsim` did not choose it. It is
+what a **floating bus** gives. No board drives the data lines, so they stay high, and the
+processor reads eight ones. A real Altair does the same.
 
-It has a famous consequence, and it is worth knowing because you will meet it: on a machine with
-no interrupt-vector board, a board pulls the interrupt line, nobody drives the data bus during the
-acknowledge cycle, the processor reads `FF` — and `FF` is `RST 7`. That is not a fallback anybody
-coded. It is what the hardware does, and it is why the interrupt vector on a bare Altair is
-`RST 7`.
+This has an important result. Suppose that a machine has no interrupt-vector board, and a board
+asserts the interrupt line. During the acknowledge cycle, no board drives the data bus, so the
+processor reads `FF`. `FF` is `RST 7`. Nobody programmed this. It is what the hardware does, and
+it is the reason that the interrupt vector on an Altair with no vector board is `RST 7`.
 
-So when a read gives you `FF` you did not expect, ask `WHO`: it tells you whether a board answered
-with that byte or the bus floated because none did.
+When a read gives an `FF` that you did not expect, use `WHO`. It tells you if a board answered
+with that byte, or if no board answered and the bus floated.

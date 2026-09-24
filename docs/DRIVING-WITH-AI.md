@@ -394,7 +394,7 @@ turns a guess into a fact. Grouped by what you are trying to see:
 |---|---|---|
 | See the CPU now | `regs` (or `REGS`) | Free on every stop — you rarely type it. The last column is the next instruction, already disassembled. |
 | Run one instruction, or *n* | `STEP` / `STEP 20` | Real bus cycles through the real decode — it *is* the machine moved forward one instruction. Prints the registers after each. |
-| Step **over** a `CALL`/`RST` | `NEXT` (`N`) | Runs the callee at full speed and stops the instant it returns — so you stay in the code you are reading instead of touring a print routine. On anything else it is a single step. |
+| Step **over** a `CALL`/`RST` | `NEXT` (`N`) | Runs the callee as `RUN` does (paced by `clock_hz`, flat out by default) and stops the instant it returns — so you stay in the code you are reading instead of touring a print routine. On anything else it is a single step. |
 | Jam the PC and look | `EXAMINE <addr>` | Sets PC to `<addr>` (the front-panel switch), then shows the register line and the instruction `STEP` will run. |
 
 **Stopping on the exact event**

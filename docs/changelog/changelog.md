@@ -17,6 +17,14 @@ machine stays stopped, as it does at every monitor prompt. The section on board 
 the two shorter forms. You can omit the digits at the end of a board's id, and you can omit a unit
 when only one unit fits the command.
 
+### The Debugger document reads more plainly
+
+*The Debugger* is rewritten in the same shorter, simpler sentences as *The Monitor*. Each thing
+has one name: a **cycle breakpoint** for `BREAK MEM` and `BREAK IO`, a **diagnostic channel** and
+its **debug flags** for `SET … DEBUG`, and the **instruction history** and **bus history** for
+`HISTORY`. The steps to set up an AI assistant are now numbered. The `SHOW DEBUG` example now
+lists the channels in the order that the program shows them.
+
 ### SHOW BOARDS fits on a screen
 
 `SHOW BOARDS` now lists each board type on one line, with a short summary. The full description,
