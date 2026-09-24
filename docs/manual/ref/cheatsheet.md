@@ -26,7 +26,7 @@
 ## Command line
 
 ```
-altairsim [options] [machine]
+altairsim [machine] [options]
 
   machine            a built-in name, or a config file (has a '/' or ends .toml).
                      Omitted: ./altairsim.toml if there is one, else `default`.
@@ -38,6 +38,8 @@ altairsim [options] [machine]
   -x, --exec <cmd>   run one monitor command (repeatable), then exit.
   -i, --interactive  after --script/--exec, stay in the monitor.
       --mcp          MCP server on stdio.
+      --mirror <sock>  with --mcp: mirror the console to socket:PORT so a person
+                     can telnet in to watch and take over. Add ?ro for watch-only.
   -v, --version      print the version and exit.
   -h, --help         print this help and exit.
 ```

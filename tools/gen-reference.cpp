@@ -549,7 +549,7 @@ void cheatsheet(const std::string& dir) {
 
     o << "## Command line\n\n"
          "```\n"
-         "altairsim [options] [machine]\n"
+         "altairsim [machine] [options]\n"
          "\n"
          "  machine            a built-in name, or a config file (has a '/' or ends .toml).\n"
          "                     Omitted: ./altairsim.toml if there is one, else `default`.\n"
@@ -561,6 +561,8 @@ void cheatsheet(const std::string& dir) {
          "  -x, --exec <cmd>   run one monitor command (repeatable), then exit.\n"
          "  -i, --interactive  after --script/--exec, stay in the monitor.\n"
          "      --mcp          MCP server on stdio.\n"
+         "      --mirror <sock>  with --mcp: mirror the console to socket:PORT so a person\n"
+         "                     can telnet in to watch and take over. Add ?ro for watch-only.\n"
          "  -v, --version      print the version and exit.\n"
          "  -h, --help         print this help and exit.\n"
          "```\n\n";

@@ -144,7 +144,7 @@ console.
 need a disk or a tape, such as `basic8k`, `ps2` and `minidisk`, start with an empty drive:
 
 ```
-$ altairsim -x "SHOW MOUNTS" basic4k
+$ altairsim basic4k -x "SHOW MOUNTS"
 altairsim> SHOW MOUNTS
   UNIT       KIND  HOLDS
   acr0:tape  tape  (empty)

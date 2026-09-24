@@ -73,7 +73,7 @@ A **built-in** machine is a machine file that is stored in the program. It uses 
 as the machine files in `examples/`. To see what is in a built-in machine, load it and look:
 
 ```
-$ altairsim -x BOARDS basic4k
+$ altairsim basic4k -x BOARDS
 ```
 
 To get a built-in machine as a file that you can edit, type `CONFIG SAVE mine.toml`. This
