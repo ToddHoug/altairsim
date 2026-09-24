@@ -34,7 +34,8 @@ says where the Developer Guide is (with the source, not on the release page), an
 the version line as the program prints it today. *Running it* now shows the Windows command,
 and it says that `-x BOARDS` loads a machine to look at it, not that it boots one. In the
 *Quick start*, the command to write-protect the CP/M disk works now, and the `DIR` listing
-shows every file that is on the disk. *Machines* now lists the `--mirror` option, and so does the cheatsheet.
+shows every file that is on the disk. The *Quick start* is now numbered steps, shows the whole
+boot output, and tells you how to leave BASIC (`SYSTEM`). *Machines* now lists the `--mirror` option, and so does the cheatsheet.
 `altairsim --help` and the manual now write the command line as `altairsim [machine]
 [options]`, with the machine first. Both orders still work. *The machine file* now lists the
 `[terminal]` table and the `history` and `log` console keys, and its `base` example is the real
