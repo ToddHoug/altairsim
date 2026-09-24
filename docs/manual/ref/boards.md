@@ -646,7 +646,7 @@ SSM IO-4 (2P+2S): the real Solid State Music board -- two full-duplex serial cha
 
 ### `pmmi`
 
-PMMI MM-103: Bell 103 modem on an S-100 card, unit 'line'. Four ports at BASE+0..3 (default C0), read/write different registers. Transmit/receive over a ByteStream; CONNECT it to in:/out: files. No dialer; modem status is a fixed stub
+PMMI MM-103: Bell 103 modem on an S-100 card, unit 'line'. Four ports at BASE+0..3 (default C0), read/write different registers. dial=host:port places a call over TCP when the guest goes off-hook with DTR; answer=port rings the guest on an inbound call. CONNECT the line to a file, socket or real serial port instead. Pulse digits are not decoded; no interrupts
 
 **Units:** `line` (serial, CONNECT)
 

@@ -1,511 +1,548 @@
 # Boards
 
-An Altair is a **backplane**. Everything else is a board in it — the memory, the serial ports, the
-disk controller, the front panel, and the processor itself. There is no "machine" underneath the
-boards doing the real work; take the boards out and there is nothing left but a bus.
+An Altair is a **backplane**, and everything in it is a board. The memory, the serial ports, the
+disk controller, the front panel and the processor are all boards. Without the boards, only the
+bus is left.
 
-`altairsim` is built that way on purpose, and it is the reason the CPU's crystal is a property of
-the CPU *board* and the sense switches are a property of the *front panel*. Not nitpicking: it is what
-lets you pull a board out, put a different one in, and find out what the software does about it.
+`altairsim` works in the same way. For this reason, the crystal is a property of the processor
+*board*, and the sense switches are a property of the *front panel*. You can remove a board, add
+a different one, and see what the software does.
 
-This chapter says what the boards **are** — what the real hardware was, what it is for, and
-what will bite you. **It does not list their parameters.** Every key of every board is in the board
-reference at the back of this manual, printed from the program's own tables, which is why it cannot
-be wrong.
+This chapter tells you what each board **is**: what the real hardware was, what it is for, and
+what can go wrong. **It does not list the properties of each board.** The board reference at the
+back of this manual lists every property of every board, from the program's own tables.
 
 ## The boards
 
-Grouped by what they do — the same order as the sections below.
+The boards are in groups, in the same order as the sections below.
 
 **Memory**
 
 | Type | What it is |
 |---|---|
 | `memory` | RAM and ROM, as a list of regions |
-| `bankmem` | bank-switched RAM — Vector Graphic, Cromemco 64KZ, North Star HRAM, ExpandoRAM II |
-| `v2z80rom` | S100Computers V2 Z80 CPU board's onboard MASTER monitor ROM — a paged EEPROM, not a processor |
+| `bankmem` | bank-switched RAM: Vector Graphic, Cromemco 64KZ, North Star HRAM, ExpandoRAM II |
+| `v2z80rom` | the onboard MASTER monitor ROM of the S100Computers V2 Z80 processor board. A paged EEPROM, not a processor |
 
 **Processors**
 
 | Type | What it is |
 |---|---|
 | `8080` | the MITS 88-CPU |
-| `8085` | an 8085 CPU board — the 8080's binary-compatible superset, with RIM/SIM and the TRAP/RST interrupts |
-| `z80` | a Z80 CPU board — the same bus, a different instruction set |
+| `8085` | an 8085 processor board. It runs all 8080 code, and adds RIM, SIM and the TRAP and RST interrupts |
+| `z80` | a Z80 processor board. The same bus, with a different instruction set |
 
 **Serial ports and consoles**
 
 | Type | What it is |
 |---|---|
-| `2sio` | MITS 88-2SIO — two serial ports. The usual console |
-| `sio` | MITS 88-SIO — one serial port. MITS's first |
-| `sbc` | SD Systems SBC-100/200 — a Z80 single-board computer's serial console |
-| `propio` | S100Computers Console I/O — a Propeller-based serial console |
-| `pmmi` | PMMI MM-103 — a Bell 103 telephone modem on one card |
+| `2sio` | MITS 88-2SIO: two serial ports. The usual console |
+| `sio` | MITS 88-SIO: one serial port. The first MITS serial board |
+| `sbc` | SD Systems SBC-100/200: the serial console, timer and parallel port of a Z80 single-board computer |
+| `gsio` | a generic serial board with two channels, set up with straps |
+| `io4` | SSM IO-4: two serial ports and four parallel ports |
+| `propio` | S100Computers Console I/O: a serial console built on a Propeller chip |
+| `pmmi` | PMMI MM-103: a Bell 103 telephone modem on one board |
 
 **Cassette**
 
 | Type | What it is |
 |---|---|
-| `acr` | MITS 88-ACR — the cassette interface |
-| `uio` | MITS 88-UIO — a serial port and a cassette, on one card |
+| `acr` | MITS 88-ACR: the cassette interface |
+| `uio` | MITS 88-UIO: a serial port and a cassette interface on one board |
 
 **Printers**
 
 | Type | What it is |
 |---|---|
-| `c700` | MITS 88-C700 — the line-printer controller. Capture to a file |
-| `lpc` | MITS 88-LPC — the other line-printer controller, line-buffered |
+| `c700` | MITS 88-C700: the line-printer controller. Capture to a file |
+| `lpc` | MITS 88-LPC: the other line-printer controller, with a line buffer |
 
 **Parallel and analog I/O**
 
 | Type | What it is |
 |---|---|
-| `pio` | MITS 88-PIO — an 8-bit parallel port, in and out |
-| `4pio` | MITS 88-4PIO — up to four programmable parallel ports |
-| `d7a` | Cromemco D+7A — analog and parallel I/O; reads joysticks |
+| `pio` | MITS 88-PIO: an 8-bit parallel port, in and out |
+| `4pio` | MITS 88-4PIO: up to four programmable parallel ports |
+| `d7a` | Cromemco D+7A: analog and parallel I/O. Reads joysticks |
 
 **Floppy and disk controllers**
 
 | Type | What it is |
 |---|---|
-| `dcdd` | MITS 88-DCDD — the 8″ floppy controller |
-| `mds` | MITS 88-MDS — the 5¼″ minidisk controller |
-| `hdsk` | MITS 88-HDSK — the Datakeeper hard-disk controller |
-| `versafloppy` | SD Systems VersaFloppy I/II — a soft-sector floppy controller. Boots SDOS |
-| `tarbell` | Tarbell #1011 — a single-density floppy controller with its own boot PROM. Boots CP/M by itself |
-| `tarbelldd` | Tarbell #2022 — the double-density twin, mixed-density disks |
-| `icom` | iCOM FD3712/FD3812 — an 8″ floppy controller with its own boot PROM. Boots CP/M and FDOS |
-| `dualsd` | S100Computers Dual SD — two microSD cards as CP/M drives. Boots CP/M 3 |
-| `dualide` | S100Computers IDE-AB — two CompactFlash cards as CP/M drives. Boots CP/M 3 |
+| `dcdd` | MITS 88-DCDD: the 8″ floppy controller |
+| `mds` | MITS 88-MDS: the 5¼″ minidisk controller |
+| `hdsk` | MITS 88-HDSK: the Datakeeper hard-disk controller |
+| `versafloppy` | SD Systems VersaFloppy I/II: a soft-sector floppy controller. Boots SDOS |
+| `tarbell` | Tarbell #1011: a single-density floppy controller with its own boot PROM. Boots CP/M by itself |
+| `tarbelldd` | Tarbell #2022: the double-density version, for mixed-density disks |
+| `icom` | iCOM FD3712/FD3812: an 8″ floppy controller with its own boot PROM. Boots CP/M and FDOS |
+| `16fdc` | Cromemco 16FDC: a floppy controller with a console UART and the RDOS 2.52 boot PROM. Boots CDOS |
+| `64fdc` | Cromemco 64FDC: a floppy controller with a console UART and the RDOS 3.12 boot PROM. Boots CDOS |
+| `dualsd` | S100Computers Dual SD: two microSD cards as CP/M drives. Boots CP/M 3 |
+| `dualide` | S100Computers IDE-AB: two CompactFlash cards as CP/M drives. Boots CP/M 3 |
 
 **Video and display**
 
 | Type | What it is |
 |---|---|
-| `vdm1` | Processor Technology VDM-1 — memory-mapped video. Needs a display |
-| `dazzler` | Cromemco Dazzler — color graphics. Needs a display |
-| `vdb8024` | SD Systems VDB-8024 — an 80×24 video terminal on one board. Needs a display |
-| `sol` | Processor Technology Sol-PC — the Sol-20's onboard I/O, on one card |
+| `vdm1` | Processor Technology VDM-1: memory-mapped video. Needs a display |
+| `dazzler` | Cromemco Dazzler: color graphics. Needs a display |
+| `vdb8024` | SD Systems VDB-8024: an 80×24 video terminal on one board. Needs a display |
+| `sol` | Processor Technology Sol-PC: the onboard I/O of the Sol-20, on one board |
 
 **Interrupts and the clock**
 
 | Type | What it is |
 |---|---|
-| `virtc` | MITS 88-VI/RTC — vectored interrupts and a clock |
-| `ss1` | CompuPro System Support 1 — a multifunction board: real-time clock, serial channel, interval timer, and dual interrupt controllers |
-| `rtc100` | SciTronics RTC-100 — a battery-backed real-time clock, with an optional once-a-second interrupt |
+| `virtc` | MITS 88-VI/RTC: vectored interrupts and a clock |
+| `ss1` | CompuPro System Support 1: a real-time clock, a serial channel, an interval timer and two interrupt controllers |
+| `rtc100` | SciTronics RTC-100: a battery-backed real-time clock, with an optional interrupt each second |
 
 **The whole machine**
 
 | Type | What it is |
 |---|---|
 | `fp` | the front panel |
-| `turnkey` | MITS 8800b Turnkey Module — the front-panel-less Altair, on one card |
+| `turnkey` | MITS 8800b Turnkey Module: the Altair with no front panel, on one board |
 
 **Host integration**
 
 | Type | What it is |
 |---|---|
-| `hostbridge` | file transfer to your host. **Ours, not a period card** |
+| `hostbridge` | file transfer to your computer. **Our own board, not a period board** |
 
 **PROM programmers**
 
 | Type | What it is |
 |---|---|
-| `pb1` | SSM PB1 — burn a 2708/2716 EPROM, then save it as a hex file |
+| `pb1` | SSM PB1: program a 2708 or 2716 EPROM, and save it as a hex file |
 
 ---
 
 ## Memory
 
-RAM, ROM, and the boards that switch banks of it.
+RAM, ROM, and the boards that switch banks of RAM.
 
 ## `memory` — RAM and ROM
 
-A memory board is **a list of regions**, and the regions are the board. That is not a modelling
-convenience; it is what an S-100 memory board was. One physical card carried banks of chips
-decoding whatever ranges its jumpers said, and a card with 56K of RAM low and a 256-byte boot PROM
-at `FF00` is a perfectly ordinary card.
+A memory board is **a list of regions**. A real S-100 memory board was the same. It had banks of
+chips, and each bank decoded the addresses that its jumpers set. A board with 56K of RAM at the
+bottom and a 256-byte boot PROM at `FF00` was an ordinary board.
 
-So `default` has exactly one memory board in it, and that board is the 56K *and* the PROM.
+For this reason, `default` has one memory board, and that board holds both the 56K and the PROM.
 
-### `PHANTOM*` — how a boot PROM gets out of the way
+### `PHANTOM*`: how a boot PROM gets out of the way
 
-The bus has a line called `PHANTOM*`. **A board pulls it to switch another board off.** When the
-PROM at `FF00` is being read, it asserts `PHANTOM*`, and the RAM card underneath — if it is
-jumpered to honour it — shuts up. Two boards decode `FF00`; only one answers.
+The bus has a line called `PHANTOM*`. **A board pulls this line to switch another board off.**
+When the processor reads the PROM at `FF00`, the PROM asserts `PHANTOM*`. The RAM board under it
+stops answering, if its jumper tells it to obey `PHANTOM*`. Two boards decode `FF00`, and only
+one answers.
 
-This is how an Altair with disks boots. The PROM overlays the RAM at the top of memory, the loader runs
-out of it, and then **the loader gets out of the way** and the RAM underneath is uncovered — which
-matters, because CP/M wants that memory back.
+This is how an Altair with disks boots. The PROM covers the RAM at the top of memory, and the
+loader runs from the PROM. After that, **the loader switches the PROM off**, and the RAM under
+it can be used again. CP/M needs that memory.
 
-Whether a board honours `PHANTOM*`, and whether it asserts it, are **jumpers**. They are on the
-board and they are yours to set. Getting them wrong produces a machine that does not boot and does
-not say why — which is precisely what it did in 1977, and the bus view in the monitor will show you
-both boards claiming the page.
+Whether a board obeys `PHANTOM*`, and whether it asserts it, are **jumpers** on the board. You
+set them. If you set them wrong, the machine does not boot, and it does not tell you why. The
+bus view in the monitor shows you both boards on the same page.
 
-### Banking is its own board
-
-Sixty-four kilobytes was not enough for very long, and the industry's answer was **bank switching**:
-several cards' worth of RAM at the same addresses, with a write-only port that says which is live.
-Nobody agreed on how — so banking is **not a knob on `memory`**. It is its own board, **`bankmem`**
-(below), and each real card it models owns its own decode. A plain `memory` board is exactly that:
-plain, unbanked RAM and ROM.
+A plain `memory` board has no bank switching. Bank switching is a different board, `bankmem`.
 
 ---
 
 ## `bankmem` — bank-switched RAM
 
-When 64K stopped being enough, S-100 makers put several planes of RAM at the same addresses and a
-write-only **select port** that chose which plane the CPU saw. Every maker did it differently, so
-`bankmem` is **one board with four decoders**, chosen by `card`:
+When 64K was not enough, S-100 makers put several planes of RAM at the same addresses. A
+write-only **select port** chose which plane the processor saw. Each maker did this in a
+different way, so `bankmem` is **one board with four decoders**. Its `card` property selects the
+decoder:
 
 | `card` | Real board | Select port | What a write does |
 |---|---|---|---|
-| `vector` | Vector Graphic 64K | `40` | **one-hot** — `01`→bank 0, `02`→1, `04`→2 … `80`→7 |
-| `cromemco64kz` | Cromemco 64KZ / 64KZ-II | `40` | **8-bit mask** — bit *N* turns bank *N* on; **several at once** (`28`→banks 3 and 5) |
-| `northstar` | North Star HRAM | `C0` | bit 0 = on/off, bits 1–7 = which bank; banks toggle **one at a time** |
-| `expandoram2` | SD Systems ExpandoRAM II | `FF` | the byte is a **page number** (an approximation — see below) |
+| `vector` | Vector Graphic 64K | `40` | **one bit for each bank**: `01`→bank 0, `02`→1, `04`→2 … `80`→7 |
+| `cromemco64kz` | Cromemco 64KZ / 64KZ-II | `40` | **8-bit mask**: bit *N* turns bank *N* on. **Several banks can be on** (`28`→banks 3 and 5) |
+| `northstar` | North Star HRAM | `C0` | bit 0 = on or off, bits 1–7 = which bank. Banks change **one at a time** |
+| `expandoram2` | SD Systems ExpandoRAM II | `FF` | the byte is a **page number** (see the note below) |
 
-`banks` sets how many planes the card carries (one per real board): up to 8 for `vector` and
-`cromemco64kz`, 6 for `northstar`, 10 for `expandoram2`. `fill` and `seed` behave exactly as they do
-on `memory`. The select port is write-only and the **guest** drives it; from the monitor you can
-drive it yourself with `OUT`, and `SHOW` lists every plane and which is live.
+`banks` sets the number of planes on the board: up to 8 for `vector` and `cromemco64kz`, 6 for
+`northstar`, and 10 for `expandoram2`. `fill` and `seed` work as they do on `memory`. The guest
+writes the select port. At the monitor, you can write it yourself with `OUT`, and `SHOW` lists
+every plane and which plane is on.
 
-There is no banked operating system in the box to boot, so this board is here to be *driven* — the
-quickest way to see it work is from the monitor:
+The package has no operating system that uses banks. The quickest way to see the board work is
+from the monitor:
 
 ```
-altairsim bankmem
-OUT 40 01            ; select bank 0
-DEPOSIT 1000 A0
-OUT 40 08            ; select bank 3 (one-hot 0x08, not bank 8)
-DEPOSIT 1000 B3
-OUT 40 01            ; back to bank 0 — DUMP reads A0
-DUMP 1000-1000
-OUT 40 08            ; bank 3 — DUMP reads B3; the plane really swapped
-DUMP 1000-1000
+$ altairsim bankmem
+altairsim> OUT 40 01
+port 40 <- 01
+altairsim> DEPOSIT 1000 A0
+altairsim> OUT 40 08
+port 40 <- 08
+altairsim> DEPOSIT 1000 B3
+altairsim> OUT 40 01
+port 40 <- 01
+altairsim> DUMP 1000-1000
+1000  A0                                                .
+altairsim> OUT 40 08
+port 40 <- 08
+altairsim> DUMP 1000-1000
+1000  B3                                                .
 ```
 
-> **`expandoram2` is an approximation.** The real board decodes the page number through an on-board
-> PROM into a 32K or 48K partition; that decode is not published in a form we can reproduce
-> faithfully, so `bankmem` models a plain page-select over 64K planes and says so here. The other
-> three cards are exact.
+`OUT 40 08` selects bank 3, because bit 3 is on. It does not select bank 8. The two `DUMP`
+commands read different bytes at the same address, because the plane changed.
+
+> **The `expandoram2` page decode is an approximation.** The real board sends the page number
+> through a PROM on the board, and that PROM map is not published in a form that we can copy.
+> For this reason, `bankmem` selects a plain page. The two stock partitions of the PROM are
+> real: `partition = "ex48"` gives 48K of banked RAM and 16K of common RAM at `C000`, and
+> `partition = "ex32"` gives 32K of banked RAM and 32K of common RAM at `8000`. `ram` sets the
+> RAM on the board, and the program calculates the number of banks from it. The other three
+> cards are exact.
 
 ---
 
-## `v2z80rom` — the S100Computers V2 Z80 CPU board's onboard monitor ROM
+## `v2z80rom` — the S100Computers V2 Z80 processor board's onboard monitor ROM
 
-**This board is not a processor** — it is the **monitor ROM** that a real S100Computers V2 Z80 CPU
-board carries on it: an **8K EEPROM** at `F000`–`FFFF` holding John Monahan's MASTER V6.6 ROM
-monitor. It is a separate board from the CPU on purpose — a machine that uses it still needs a `z80`
-(below) beside it for the processor, exactly as the real card is a Z80 with its own onboard firmware.
+**This board is not a processor.** It is the **monitor ROM** on a real S100Computers V2 Z80
+processor board. That ROM is an **8K EEPROM** that holds John Monahan's MASTER V6.6 ROM monitor.
+A machine that uses this board also needs a `z80` board (below) for the processor. The real
+board has the Z80 and its own firmware on one board, and here they are two boards.
 
-The EEPROM is **paged**: two 4K halves both live at `F000`–`FFFF`, and a write to port `D3` chooses
-which is visible (and can switch the EEPROM off altogether, so the RAM underneath shows through).
-That is how CP/M gets a flat 64K after boot — it inactivates the EEPROM and the monitor's window
-becomes ordinary memory. While it is on, the EEPROM shadows the RAM in its window for reads.
+The EEPROM has **two 4K pages**, and both pages use the addresses `F000`–`FFFF`. A write to port
+`D3` selects the page. The same write can also switch the EEPROM off, so that the RAM under it
+can be used. CP/M does this after it boots, to get a flat 64K of RAM. While the EEPROM is on, a
+read in its window gets the EEPROM, not the RAM.
 
-There is no `BOOT` verb — **the monitor is the boot command**. `startup = ["RUN F000"]` cold-starts
-it, and at its `->` prompt the **`I` command** boots CP/M 3 off a Dual SD card (below). This is the
-board that makes `altairsim dualsd` go.
+There is no `BOOT` command. **The monitor boots the machine.** `startup = ["RUN F000"]` starts
+the monitor. At its `->` prompt, the **`I` command** boots CP/M 3 from a Dual SD card (below).
+The `dualsd` machine uses this board.
 
 ---
 
-## The CPU boards — one plugs in, and it drives the bus
+## The processor boards
 
-`altairsim` has three S-100 processor boards — `8080`, `8085`, and `z80` — and everything in this
-shared section is true of all three. Each is described on its own below; what they have in common
-is here.
+`altairsim` has three S-100 processor boards: `8080`, `8085` and `z80`. This section applies to
+all three. The sections after it describe each one.
 
-**The processor is a board like any other.** It plugs into the backplane, it can be removed, and
-with `-n` you can build a machine that does not have one. It decodes no ports and answers no
-addresses. What it does is **drive the bus** — which makes it unlike every other board in the box,
-and is exactly what a CPU card did. Put a `z80` where an `8080` would go and the bus, the boards,
-and the debugger neither know nor care; that is the whole point of keeping the processor a board.
+**The processor is a board like the other boards.** It plugs into the backplane, and you can
+remove it. With `-n`, you can build a machine with no processor. The processor board decodes no
+ports and no addresses. It runs the program, and it drives the bus to do that. You can put a
+`z80` where an `8080` was, and the bus, the other boards and the debugger all work the same.
 
-Every CPU board carries the same three properties: **`clock_hz`** (the crystal), **`idle`**
-(stands the processor down at a prompt), and the read-only **`achieved_hz`** (the speed it
-actually reached).
+Every processor board has the same three properties:
 
-### The crystal is on the board — `clock_hz`
+- **`clock_hz`**, the crystal
+- **`idle`**, which lets the processor rest at a prompt
+- **`achieved_hz`**, a read-only value: the speed that the processor reached
 
-Because the crystal is soldered to the CPU card, `clock_hz` is the *board's* property, not the
-machine's. **`clock_hz = 0` is the default, and it means run flat out** — on a modern host,
-north of a hundred times a real Altair.
+### The crystal is on the board: `clock_hz`
+
+The crystal is on the processor board, so `clock_hz` is a property of the board, not of the
+machine. **`clock_hz = 0` is the default, and it means "run as fast as possible".** On a modern
+computer, that is more than a hundred times as fast as a real Altair.
+
+To run at the speed of a real 2 MHz Altair, type:
 
 ```
 SET cpu0 clock_hz=2000000
 ```
 
-buys back the real 2 MHz machine, and it is worth doing once. **What the guest sees is identical
-either way**: instructions cost the same T-states and a cassette loads in the same number of
-them, so the crystal buys period *feel*, not period *behaviour*.
+**The guest sees the same result at either speed.** Each instruction takes the same number of
+T-states, and a cassette loads in the same number of T-states. The crystal changes how the
+machine feels to you, not what it does.
 
-That holds everywhere except at the edge of the machine. A guest counts instructions to measure
-time, so flat out it retires a "three-second" timeout in milliseconds of yours — which is why
-anything the guest times against the *outside* world (XMODEM through a serial port) wants the
-real crystal. The troubleshooting chapter has the full story.
+There is one exception, at the edge of the machine. A guest counts instructions to measure time.
+At full speed, a guest's "three-second" timeout passes in a few milliseconds of your time. For
+this reason, a guest that times something outside the machine, such as XMODEM through a serial
+port, needs the real crystal. The troubleshooting chapter tells you more.
 
-To see where the guest's own clock has got to, ask the machine:
+To see how much time has passed for the guest, type `SHOW CLOCK`:
 
 ```
 altairsim> SHOW CLOCK
 clock  (emulated time -- T-states since POWER, and what they are worth)
 
-  elapsed    1.103268 s   (2206535 T-states)
+  elapsed    0.102953 s   (205905 T-states)
   crystal    2000000 Hz   SET cpu0 clock_hz=N
-  pacing     free -- emulated seconds pass as fast as the host allows
+  pacing     paced -- emulated seconds keep step with real ones
 ```
 
-Elapsed is counted in T-states since power and divided by the crystal above, so it is the
-guest's time and not yours — booting CP/M costs the same emulated second whether you ran it
-flat out or at 2 MHz. That is the number to measure a guest's own timeout against.
+The program counts the T-states since power on, and divides them by the crystal. The result is
+the guest's time, not your time. A CP/M boot takes the same guest time at full speed and at 2
+MHz. Use this number to measure a guest's own timeout.
 
-### `idle` — the CPU stands down at a prompt
+### `idle`: the processor rests at a prompt
 
-At a prompt a guest is only spinning on the serial status register waiting for a keystroke, and
-flat out that pins a core to accomplish nothing. **`idle` (on by default) stands the processor
-down while the guest is polling an empty keyboard** — a pinned core becomes a few percent — and
-**the guest cannot tell**, because the moment a byte arrives the processor is back before the
-next poll. An XMODEM transfer through an idling machine is byte-exact.
+At a prompt, a guest only reads the serial status register again and again, and waits for a key.
+At full speed, that keeps one core of your computer busy. **`idle` lets the processor rest while
+the guest reads an empty keyboard.** It is on by default. The busy core then uses a few percent.
+**The guest cannot see the difference**, because the processor starts again as soon as a byte
+arrives, before the next read. An XMODEM transfer is correct with `idle` on.
 
 ---
 
 ## `8080` — the MITS 88-CPU
 
-The original — the board the Altair shipped with, and the one the other two processors stand in
-for. As a board it is the plain case of everything above: it drives the bus, decodes nothing, and
-carries `clock_hz`, `idle`, and `achieved_hz`.
+The original processor board. The Altair shipped with it, and the other two processor boards
+replace it. It has all the properties in the section above, and nothing more.
 
 ---
 
-## `8085` — an 8085 CPU
+## `8085` — an 8085 processor
 
-**The 8080's own successor, and a binary *superset* of it** — every 8080 program runs on an 8085
-unchanged, which makes it the closest of the three to the 88-CPU. Everything in *The CPU boards*
-above applies unchanged; what follows is only what the 8085 adds.
+**The 8085 came after the 8080, and it runs every 8080 program** without a change. Of the three
+processors, it is the nearest to the 88-CPU. Everything in *The processor boards* above applies.
+This section gives only what the 8085 adds.
 
-Over the 8080 it adds `RIM` and `SIM` (read and set the interrupt mask and the SID/SOD serial
-pins) and the on-chip interrupts — `TRAP` plus `RST 5.5`, `6.5` and `7.5`, layered on the
-8080-style `INTR` line. The documented set is faithful (including the one instruction that
-differs, `ANA`/`ANI` always setting the auxiliary carry), and the undocumented opcodes execute
-too, with the extra V and K flag bits some of them set; `DISASM` marks each undocumented byte
-the way `DDT` does. The built-in `8085` machine is a minimal one — an `8085`, 64K of RAM, and a
+The 8085 adds `RIM` and `SIM`, which read and set the interrupt mask and the SID and SOD serial
+pins. It also adds its own interrupts, `TRAP`, `RST 5.5`, `RST 6.5` and `RST 7.5`, as well as
+the 8080's `INTR` line. The documented instructions are correct. This includes the one
+instruction that is different from the 8080: `ANA` and `ANI` always set the auxiliary carry. The
+undocumented instructions run too, and set the extra V and K flag bits. `DISASM` marks each
+undocumented byte, as `DDT` does. The built-in `8085` machine has an `8085`, 64K of RAM and a
 2SIO console.
 
-What no board drives is the 8085's on-chip *pins*: the `SID`/`SOD` serial lines and the
-`TRAP`/`RST 5.5`/`6.5`/`7.5` interrupt inputs. Nothing on the S-100 bus carries them, so no card
-asserts them; ordinary interrupts over the `INTR` line work as they do for the 8080.
+No board drives the 8085's own *pins*: the `SID` and `SOD` serial lines, and the `TRAP`,
+`RST 5.5`, `RST 6.5` and `RST 7.5` interrupt inputs. The S-100 bus does not carry them. Ordinary
+interrupts on the `INTR` line work as they do on the 8080.
 
 ---
 
-## `z80` — a Z80 CPU
+## `z80` — a Z80 processor
 
-**The other processor you can drop into the slot** — the same backplane, a different instruction
-set behind it. Everything in *The CPU boards* above applies unchanged. The built-in `z80`
-machine is a minimal one — a `z80`, 64K of RAM, and a 2SIO console — for putting it through its
-paces.
+**The other processor that you can put in the machine.** It uses the same backplane, with a
+different instruction set. Everything in *The processor boards* above applies. The built-in
+`z80` machine has a `z80`, 64K of RAM and a 2SIO console, so that you can try the processor.
 
 ---
 
 ## Serial ports and consoles
 
-The boards that carry a serial port — a console, a modem, or both.
+The boards that have a serial port, for a console, a modem or both.
 
 ## `2sio` — MITS 88-2SIO
 
-Two **6850 ACIAs**, units `a` and `b`, four ports at BASE+0 through BASE+3. Base defaults to `10`
-hex, which is where every listing from the period expects it.
+Two **6850 ACIAs**, units `a` and `b`, with four ports at BASE+0 to BASE+3. The base is `10` hex
+by default, which is where every listing of the period expects it.
 
-This is **the usual console board**, and it is what `default` has. If you are running CP/M or
-Microsoft BASIC, this is the board the software is talking to.
+This is **the usual console board**, and `default` has one. CP/M and Microsoft BASIC use this
+board.
 
-### The two halves share nothing
+### The two halves are independent
 
-Not the baud rate, not the endpoint, not the interrupt strap. **They are two independent chips that
-happen to be bolted to the same board**, and the model says so: `a` and `b` are separate units with
-separate properties.
+**The two units are two separate chips on the same board.** Each unit has its own baud rate, its
+own connection and its own interrupt setting. For example, unit `a` can be a console at 9600
+baud, and unit `b` a modem at 1200 baud. One can use interrupts while the other is polled.
 
-So a console on `a` at 9600 and a modem on `b` at 1200, one interrupting and one polled, is not a
-configuration you have to work around. It is Tuesday.
-
-The serial chapter covers what a channel can be *connected* to: your terminal, a TCP socket, or a
-real serial port on your host, with the modem control lines wired through.
+The serial chapter tells you what you can connect a unit to: your terminal, a TCP socket, or a
+real serial port on your computer, with the modem control lines.
 
 ---
 
 ## `sio` — MITS 88-SIO
 
-One **COM2502 UART**, unit `tty`, two ports. This was **MITS's first serial card** — it predates
-the 2SIO, and the earliest Altair software talks to it. `basic4k` uses it.
+One **COM2502 UART**, unit `tty`, with two ports. This was **the first MITS serial board**. It
+came before the 2SIO, and the earliest Altair software uses it. The `basic4k` machine uses it.
 
-### Its status bits are inverted
+The port must be **even**. Control is at BASE, and data is at BASE+1.
 
-**A clear bit means ready.** Read that twice, because every instinct you have says otherwise, and
-because it will make you certain you have found a bug in the simulator.
+### On the default Rev 1 board, the status bits are inverted
 
-You have not. **It is a fact about the chip**, not a quirk anyone invented: the COM2502's status
-lines came out of the package active-low, MITS wired them to the data bus as they were, and every
-program that drove an 88-SIO was written knowing it. `basic4k`'s I/O routine masks and branches on
-zero, and it is right to.
+**A clear bit means "ready".** This is correct for the board, and it is not a bug in the
+simulator. MITS changed the board at the factory, and on the changed board, "ready" is bit 7 for
+output and bit 0 for input, both inverted. Every program for the 88-SIO expects this. The I/O
+routine of `basic4k` tests for zero, and that is correct.
 
-The port must be **even**: control at BASE, data at BASE+1.
+The `rev` property selects the board. `rev = 1` is the changed board, and it is the default.
+`rev = 0` is the board as it first shipped, which also shows the two signals, not inverted, on
+bits 5 and 1.
+
+`in_int` and `out_int` set where the receive and transmit interrupts go, as the pads on the real
+board did.
 
 ---
 
 ## `sbc` — SD Systems SBC-100/200
 
-SD Systems built S-100 boards for people who wanted a whole computer on as few cards as possible,
-and the **SBC-100** and **SBC-200** are the heart of one: a **Z80 single-board computer** —
-processor, some memory, and a serial console — on a single card. `altairsim` models the console
-half, which is the part the software talks to.
+SD Systems made S-100 boards for people who wanted a whole computer on as few boards as
+possible. The **SBC-100** and **SBC-200** are **Z80 single-board computers**, with the
+processor, memory, a serial console and more on one board. The `sbc` board models the parts that
+the software uses. They are all in one block of eight ports, `78`–`7F`:
 
-That console is an **Intel 8251 USART**, not the 6850 the MITS boards use — unit `tty`, with data
-at `7C` and the status/command register at `7D`. Software written for a 2SIO will not drive it; the
-SBC's own **SD monitor** will.
+- an **Intel 8251 USART** console, unit `tty`, with data at `7C` and status and command at `7D`
+- a **Z80-CTC** at `78`–`7B`, which gives a keyboard interrupt when a byte arrives
+- a **parallel port** at `7E`–`7F`. A write to `7F` with bit 1 set switches the onboard PROM off
+- a socket for an **onboard boot PROM**
 
-### It measures your terminal's speed
+The 8251 is not the 6850 that the MITS boards use. Software for a 2SIO cannot use it. The SBC's
+own **SD monitor** can. The processor is a separate `z80` board, and its `clock_hz` sets the
+speed. `variant` selects the board: `sbc200` or `sbc100`.
 
-The board's one memorable trick is **auto-baud**. Run `altairsim sbc200` and the SD monitor is
-waiting — not at a fixed rate, but for you to **press Return**. It times the bits of that one
-character and sets its own baud to match, so a terminal at any common speed just works. Nothing
-happens until that first Return, which surprises people: it is not hung, it is listening.
+### It measures the speed of your terminal
 
-The `sbc200` machine boots the **SD monitor**. Give the machine the **DDBIOS** disk BIOS in a PROM
-socket and a `versafloppy` controller beside it, and the monitor's `C` command boots **SDOS** — see
-the VersaFloppy below, and the SD Systems example in `examples/`. `variant` picks the generation
-(`sbc200` or `sbc100`).
-The parallel ports, timer and interrupts of the real card are a later phase; the console is here now.
+The board has **auto-baud**. Run `altairsim sbc200`, and the SD monitor waits for you to **press
+Return**. It times the bits of that one character, and sets its own baud rate to match. A
+terminal at any common speed works. Nothing happens until you press Return. The program is not
+stopped. It is waiting for that key.
+
+The `sbc200` machine boots the **SD monitor**. With the **DDBIOS** disk BIOS in a PROM socket
+and a `versafloppy` controller, the monitor's `C` command boots **SDOS**. See the VersaFloppy
+section below.
 
 ---
 
-## `gsio` — the generic strap-configurable serial board
+## `gsio` — the generic serial board, set up with straps
 
-Most serial boards in this list model **one specific chip** — the 2SIO's 6850, the SBC's 8251, the
-88-SIO's COM2502 — so the software has to be written for that chip. **`gsio`** is the other kind: a
-generic serial board with no fixed chip to imitate. You **describe** the port with straps — which
-port is status/control, which is data, which status bit means a byte is waiting (`dav`), which means
-the transmitter is ready (`tbmt`), and whether the shared **`inverter_gate`** flips their sense — and
-that description *is* the port. It is the general-purpose serial board for reaching whatever polled
-"read a status bit, then a data byte" interface a piece of software expects.
+Most serial boards in this chapter model **one specific chip**, such as the 2SIO's 6850, the
+SBC's 8251 or the 88-SIO's COM2502. Software must be written for that chip. **`gsio`** is
+different. It models no specific chip. You **describe** the port with straps:
 
-It carries **two independent serial channels**, units **`a`** and **`b`**, each with its own straps,
-`baud` and `connect` endpoint, configured under its own `[board.unit.a]` / `[board.unit.b]` table in
-a machine file. By default `a` answers ports `0`/`1` and `b` answers `2`/`3`.
+- which port is status and control, and which port is data
+- which status bit means that a byte is waiting (`dav`)
+- which status bit means that the transmitter is ready (`tbmt`)
+- whether the shared **`inverter_gate`** inverts both bits
 
-You rarely set the straps by hand. A **profile** presets them to imitate a known card: **`sior1`**
-(MITS SIO Rev 1 — the default, what the SSM 8080 monitor expects), `sior0` (MITS SIO Rev 0),
-`tuart` (Cromemco TU-ART), `imsai-sio2`, `compupro-if2` (CompuPro Interfacer II), `compupro-ss1`
-(CompuPro System Support 1).
-Pick a profile per channel, then override any individual strap afterward — a jumpered board, and so
-is this one. The board is polled, with no interrupts, and does **basic transmit and receive only**:
-it does not emulate programmable word length, parity or stop bits. A specific card that needs those
-is a separate, fully emulated board.
+Use it for any polled interface that reads a status bit and then a data byte.
+
+The board has **two independent serial channels**, units **`a`** and **`b`**. Each channel has
+its own straps, `baud` and `connect`, in its own `[board.unit.a]` or `[board.unit.b]` table. By
+default, `a` uses ports `0` and `1`, and `b` uses ports `2` and `3`.
+
+You seldom set the straps one at a time. A **profile** sets them to match a known board:
+
+- **`sior1`**: MITS SIO Rev 1. This is the default, and the SSM 8080 monitor expects it
+- `sior0`: MITS SIO Rev 0
+- `tuart`: Cromemco TU-ART
+- `imsai-sio2`: IMSAI SIO-2
+- `compupro-if2`: CompuPro Interfacer II
+- `compupro-ss1`: CompuPro System Support 1
+
+Select a profile for each channel, and then change any strap, as you would move a jumper. The
+board is polled, with no interrupts. It **only sends and receives bytes**. It does not model
+word length, parity or stop bits. A board that needs those is a separate board with a full
+model.
 
 ---
 
 ## `io4` — SSM IO-4 (2P + 2S)
 
-Where `gsio` describes a serial port with straps, **`io4`** is the specific card `gsio` declines to
-be: the **SSM IO-4**, a combined S-100 board with **two full-duplex serial channels *and* four
-latched parallel ports** on one card, modeled as the real silicon it is. Each serial channel is a
-real UART with **programmable word length (5–8 bits), parity, stop bits and baud**, and the full
-status-word strapping the card was famous for.
+`gsio` describes a serial port with straps. **`io4`** is a specific board, the **SSM IO-4**. It
+has **two full-duplex serial channels *and* four latched parallel ports**. Each serial channel
+is a real UART with **programmable word length (5 to 8 bits), parity, stop bits and baud**. The
+status byte can be strapped in many ways, as on the real board.
 
-Its **two serial channels** are units **`a`** (Serial A) and **`b`** (Serial B), each with its own
-`[board.unit.a]` / `[board.unit.b]` table, its own `baud` and `connect` endpoint. The four ports of
-the serial half sit on a four-port block that must start on a four-boundary (default `0`–`3`):
-`a` answers `0`/`1`, `b` answers `2`/`3`.
+The **two serial channels** are units **`a`** (Serial A) and **`b`** (Serial B). Each has its
+own `[board.unit.a]` or `[board.unit.b]` table, its own `baud` and its own `connect`. The serial
+half uses a block of four ports, which must start at a multiple of four (default `0`–`3`). `a`
+uses ports `0` and `1`, and `b` uses ports `2` and `3`.
 
-### You strap it, or you name a personality
+### Set the straps, or select a profile
 
-The IO-4 was a heavily jumpered card, and every jumper is a property here. Which data-bus bit carries
-"a byte is waiting" (`stat_dav`), which carries "the transmitter is ready" (`stat_tbmt`), and four
-more status signals (`stat_teoc`, `stat_ror`, `stat_rpe`, `stat_rfe`); whether the whole status byte
-is inverted (`invert_status`); and whether the status and data ports are swapped (`port_reversal`).
-You rarely set those one at a time. A **`profile`** presets them to imitate a known host:
-**`altair-rev1`** — the default, the MITS SIO Rev-1 console the SSM 8080 monitor expects — plus
-`altair-rev0`, `i8251`, `proctech`, `imsai`, and `custom` (every strap left free to roll your own).
-Pick a profile, then override any individual strap afterward, exactly as you would move a jumper.
+The IO-4 had many jumpers, and each jumper is a property here:
 
-The three UART **error flags** — parity, framing and overrun — are strappable to the status byte, but
-they always read inactive: the serial line here carries exact bytes and models no line noise, so
-there is nothing for them to report. The card's current-loop and EIA/RS-232 electrical options are an
-electrical choice, not a programming one; they are not modeled.
+- which data bit means that a byte is waiting (`stat_dav`)
+- which data bit means that the transmitter is ready (`stat_tbmt`)
+- four more status signals: `stat_teoc`, `stat_ror`, `stat_rpe` and `stat_rfe`
+- whether the whole status byte is inverted (`invert_status`)
+- whether the status port and the data port change places (`port_reversal`)
+
+You seldom set these one at a time. A **`profile`** sets them to match a known host:
+**`altair-rev1`** (the default, the MITS SIO Rev 1 console that the SSM 8080 monitor expects),
+`altair-rev0`, `i8251`, `proctech`, `imsai`, and `custom` (all straps free for you to set).
+Select a profile, and then change any strap, as you would move a jumper.
+
+You can strap the three UART **error flags** (parity, framing and overrun) to the status byte,
+but they always read as inactive. The serial line carries exact bytes and has no line noise. The
+current-loop and RS-232 options of the real board are electrical, not programmable, so they are
+not modeled.
 
 ### The parallel half
 
-The other half is **four 8212 latched ports** — two input, two output — as units **`pa`** and `pb`
-(Parallel A and B), on their own two-port block (default `4`/`5`) that must start on a two-boundary.
-Each input latches a byte on its strobe and raises a service-request flip-flop; a read hands the byte
-over and acknowledges it. `CONNECT io40:pa …` wires a port to a byte source or sink like any serial
-line. The `dav_bit`, `dav_source` and `dav_active_low` straps set up the "status byte here, data byte
-there" console idiom the card supports across a pair of ports.
+The other half is **four 8212 latched ports**, two for input and two for output, as units
+**`pa`** and **`pb`** (Parallel A and B). They use their own block of two ports (default `4` and
+`5`), which must start at an even port. An input port latches a byte on its strobe and sets a
+service-request flip-flop. A read gets the byte and clears the request. `CONNECT io40:pa …`
+connects a port to a source or a sink of bytes, like a serial line. The `dav_bit`, `dav_source`
+and `dav_active_low` straps set up a console with its status byte on one port and its data byte
+on the other.
 
-**The two halves are mutually exclusive on overlap.** Set the serial four-port block and the parallel
-two-port block to overlapping addresses and **neither section responds** in the contended ports — a
-deliberate design of the card, not a bus fight.
+**If the two blocks of ports overlap, neither half answers** on the shared ports. The real board
+was designed this way. It is not two boards on the same address.
 
 ### Interrupts, if you strap them
 
-The card's **W4 header** routes interrupts, and `io4` follows it: each serial channel's receive
-(`rx_int`) and transmit (`tx_int`), and each parallel input (`int`), can be strapped to a vectored
-interrupt line, to the plain interrupt pin, or to `none`. There is **no software enable** — the strap
-*is* the enable, just as on the card — so a stock board with the header bare (the default) boots
-polled. A strapped transmit interrupt is a level, asserted whenever the transmitter is idle; a
-parallel input raises its interrupt on the strobe even when the port is not being read. Wire these to
-a `virtc` and the receive of a character, or a parallel strobe, vectors to the RST you strapped.
+The **W4 header** of the board sets the interrupts, and `io4` follows it. Each serial channel's
+receive (`rx_int`) and transmit (`tx_int`), and each parallel input (`int`), can go to a
+vectored interrupt line, to the plain interrupt pin, or to `none`. **There is no software
+enable.** The strap is the enable, as on the real board. With no straps, the default, the board
+is polled. A strapped transmit interrupt stays on while the transmitter is idle. A parallel
+input sets its interrupt on the strobe, also when nothing reads the port. Connect these to a
+`virtc`, and a received character or a parallel strobe goes to the RST that you strapped.
 
-`SHOW io40` reports every unit, its ports and its live line state. The SSM 8080 monitor booting on a
-stock `io4` console is in the examples.
+`SHOW io40` shows every unit, its ports and the live state of its lines.
 
 ---
 
 ## `propio` — S100Computers Console I/O
 
-A **serial console** of the reproduction era: the S100Computers Console I/O board, built around a
-Parallax Propeller instead of a 6850 or 8251, with status at `00` and data at `01`. It is a polled
-console, unit `serial` — you `CONNECT` it to a terminal, a file, a socket or a serial port like any
-other serial board. It is the console the Dual SD machine uses.
+A **serial console** from the modern reproduction boards: the S100Computers Console I/O board.
+It uses a Parallax Propeller chip, not a 6850 or an 8251, with status at `00` and data at `01`.
+It is a polled console, unit `serial`. You `CONNECT` it to a terminal, a file, a socket or a
+serial port, like other serial boards. The Dual SD machine uses it as its console.
 
-Underneath, `propio` is just a **preset**: it is the strap-configurable serial engine (the same
-one behind the [`gsio`](#gsio) board) with this board's documented convention filled in — the ports,
-and which status bit means receive-ready and which means transmit-ready. Because the real board is
-jumpered, every one of those straps is still yours to override, so a differently-strapped Console
-I/O board needs no new board type, just a property or two.
+`propio` is a **preset** of the serial model that `gsio` uses (above). The preset sets the ports
+of this board, and which status bits mean "receive ready" and "transmit ready". The real board
+has jumpers, so you can still change each strap. A Console I/O board with different jumpers
+needs only a property or two, not a new board type.
 
 ---
 
 ## `pmmi` — PMMI MM-103 modem
 
-A **Bell 103 telephone modem on one S-100 card** — the first S-100 modem approved for direct
-connection to the phone line. In a real machine it dialed, answered, and carried a serial link over
-the line at up to 600 baud. Here it is the card's **transmit and receive path**: unit `line`, four
-ports from a base that must sit on a four-port boundary (default `C0`; the DIP switch on the real
-card set it, and PMMI's own North Star software used `E0`).
+A **Bell 103 telephone modem on one S-100 board**. It was the first S-100 modem that was
+approved for a direct connection to the telephone line. In a real machine, it dialed, answered
+and carried a serial link at up to 600 baud. It has unit `line`, and four ports from a base that
+must be a multiple of four. The default base is `C0`. The DIP switch on the real board set it,
+and the North Star software of PMMI used `E0`.
 
-Its four ports are the card's quirk: **read and write at the same address are different registers.**
-Writing `BASE+0` sets the character format (data bits, parity, stop bits) and the modem-control bits;
-*reading* it gives you UART status. `BASE+1` is transmit on a write, receive on a read. `BASE+2`
-writes the baud-rate divisor and reads modem status; `BASE+3` writes the modem chip's control word
-and, read, returns nothing the card drives. The three control registers are **write-only** — the
-program keeps its own copy of what it wrote, exactly as it had to on the hardware.
+**A read and a write at the same port are different registers:**
 
-There is no telephone network in the box, so **`CONNECT` its `line` to a byte source and sink**: the
-straightforward test is a pair of paper-tape-style files — `CONNECT pmmi0:line
-in:incoming.tap,out:outgoing.tap` — where what the guest sends lands in one file and what it receives
-is read from the other. The bytes are exact; the Bell 103 tones are not simulated, because the
-line here is a byte stream, not audio.
+| Port | Write | Read |
+|---|---|---|
+| BASE+0 | character format and modem control | UART status |
+| BASE+1 | transmit | receive |
+| BASE+2 | baud-rate divisor | modem status |
+| BASE+3 | the modem chip's control word | nothing that the board drives |
 
-**What it does *not* do yet, on purpose.** It does not dial: the make-and-break of the hook relay a
-period dialer program produces is not decoded into a phone number, and no number picks a far end —
-**placing the call is `CONNECT`'s job**, and reading a number out of the hook would be a behaviour
-this card never had. Modem status (dial tone, ringing, carrier, clear-to-send) reads a fixed
-"connected and ready" value rather than following a real handshake, and the card raises no
-interrupts. `SHOW pmmi0` reports the live frame, baud, UART flags and modem lines alongside the
-base address. To try one, add it to `default` — `BOARDS ADD pmmi` fits it at `C0`.
+The three control registers are **write-only**. The program must keep its own copy of what it
+wrote, as it did on the real board.
+
+### The telephone line
+
+The board does not model the tones of a Bell 103. The line carries exact bytes. You choose what
+is at the other end of the line:
+
+- **`dial = "host:port"`** is the number that the modem calls. When the guest takes the line off
+  the hook and raises DTR, the board opens a TCP connection to `host:port`.
+- **`answer = port`** makes the board answer calls. A TCP connection to that port rings the
+  guest, and the guest answers it as it would answer a telephone call. When the guest drops DTR,
+  the call ends, and the board waits for the next caller.
+- On a `dial` or `answer` line, **`telnet`** (on by default) uses the Telnet protocol. A person
+  with a `telnet` client then gets no double echo, and sends one key at a time. Set
+  `telnet = off` for a raw connection, for example to another simulator.
+- **`CONNECT`** connects the line to something else, as for other serial boards. With a real
+  serial port, the guest's DTR goes to the port, and the port's CTS, DCD and RI come back in the
+  modem status. `rtsdtr = on` makes RTS follow DTR, for a cable that needs it. With a file or a
+  socket, the modem status always reads "connected and ready".
+
+The board does not decode the dial pulses of the guest into a telephone number. The `dial`
+property gives the number. The board also raises no interrupts.
+
+`SHOW pmmi0` shows the live character format, baud rate, UART flags and modem lines, with the
+base address. To try the board, add it to `default`. `BOARDS ADD pmmi` adds it at `C0`.
 
 ---
 

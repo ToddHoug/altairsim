@@ -38,7 +38,10 @@ shows every file that is on the disk. *Machines* now lists the `--mirror` option
 `altairsim --help` and the manual now write the command line as `altairsim [machine]
 [options]`, with the machine first. Both orders still work. *The machine file* now lists the
 `[terminal]` table and the `history` and `log` console keys, and its `base` example is the real
-CP/M example file.
+CP/M example file. *Boards* now describes how the PMMI modem dials and answers over TCP
+(`dial=`, `answer=`, `telnet`), and `SHOW BOARD pmmi` no longer says that it cannot. The
+chapter's board list now includes `gsio`, `io4`, `16fdc` and `64fdc`, and its SBC, 88-SIO and
+ExpandoRAM II sections describe what those boards do today.
 
 ### SHOW BOARDS fits on a screen
 
