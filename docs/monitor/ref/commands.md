@@ -1100,8 +1100,9 @@ STA ADD RUN FF00
 ```
 UNMOUNT <id>:<u>
 ```
-The socket is then EMPTY -- those pages float to FF, exactly as a card with
-no chip in it does.
+Takes the disk, tape or ROM out of the unit. A drive or a tape recorder is then
+empty. A ROM socket is then empty too: those pages float to FF, as on a board
+with no chip in the socket.
 
 ```
 U dsk0:drive0

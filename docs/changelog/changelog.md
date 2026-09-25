@@ -8,6 +8,13 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+### MOUNT and UNMOUNT say the right thing
+
+When `MOUNT` cannot find a file, it shows the command to type with `CREATE` added. If you put
+the path in quotes, that command now has both quotes, so you can paste it back as it is.
+`UNMOUNT` now says what is true of the unit: a drive or a tape recorder is empty. Only a ROM
+socket says that its pages float to `FF`. `HELP UNMOUNT` covers all three.
+
 ### The CP/M disks carry the current file-transfer utilities
 
 The CP/M disks in `examples/cpm` and `examples/ai-mcp` now have the current `R.COM`, `W.COM` and
