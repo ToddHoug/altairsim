@@ -240,9 +240,15 @@ and the same three for *inside*).
 | The end point of a line is **not drawn** (ALINE-1); a rectangle's four edges therefore draw each corner exactly once | an EOR-drawn frame leaves its corners lit after being undrawn |
 | Dot address *n* is bits `n·bpp` upward from the LSB (ORG-3: DPD=4 at 4 bpp is "bit position 4–7"), and +Y is MW words **lower** in memory | the picture is mirrored, or upside down, or both |
 | A line's pattern scan starts at **PPX** (manual 6.8.3) — MAME starts at PSX | a dashed line drawn with a phase offset comes out in the wrong phase |
+| The **pattern pointer is live**: PPX/PZCX step once per pixel position a drawing visits (drawn, COL-suppressed or AREA-clipped alike) and are left where they stopped, so the edges of ARCT/APLL/APLG continue one dash pattern and RPR Pr05 reads the advanced pointer; PZCX/PZCY are the zoom counters' *starting* values (manual 5.10.2.6, 6.8.3) | a dashed polyline restarts its dash at every vertex, and a driver that reads Pr05 back to chain patterns gets its own last write |
+| A plane fill (AFRCT/RFRCT) starts **every row** from the PPX/PZCX it found and steps PPY once per row; it leaves PPY on the row after its last, so a fill drawn at the new CP continues the tiling. The row restart is inferred from PTN-4, not stated | stacked fills show a seam, or a tile skewed one bit per row |
+| AREA 001/101 leave **CP where the drawing crossed** the area boundary, not at Pe ("drawing is executed as long as the CP resides in the defined area", 6.6.3) | a driver that resumes from CP after a hit starts from the wrong place |
 | RWPe after CLR/DRD/DWT is RWP's column on the **last raster** (CLR-4: `$56`, AY = −6, MW `$10` → `$B6`) — MAME leaves it one raster further | a driver that clears in strips by chaining CLRs skips or overlaps a raster |
 | In 8-bit mode WPTN's *n* counts **bytes**, so it is twice the word count (WPTN-1) | half the pattern loads and the other half is parsed as the next command |
 | A DRD "goes into an indefinite wait state after the last transfer" — CED never sets; ABT ends it (manual 6.5) | a driver waiting on CED after a DRD hangs on real silicon and would not here |
+| A read that does not fit the 8-word read FIFO (RPTN *n* > 8, RD or RPR onto a full FIFO) **waits for room** (RD-1), and the commands behind it wait in the write FIFO; CED sets when its last word is in | an RPTN of the whole pattern RAM returns half of it, and the command after it runs early |
+| **RWP is one register**; DN rides in its high word, so rewriting Pr0C to change screens keeps RWPL (5.10.2.8) | a driver that selects the screen after setting the address transfers to address 0 |
+| DRD/DWT/DMOD with **negative AX/AY** walk the block the way CLR does: leftward, and down in Y (up in memory) (DRD-2, DWT-2) | a bottom-up block transfer is rejected, or lands mirrored |
 | The shift register is 8 bpp × 8 words whatever CCR/OMR say: a wrong GBM packs pixels the board will not unpack, a wrong GAI makes each fetch overlap the last | an off-spec program shows a coherent picture here and garbage on the card, or the reverse |
 | **MODE AMODE, not OMR ACM, governs the board's own fetch pattern** — the two are independent straps a driver must agree, and only `wiring` compares them | a driver that sets the ACRTC to interleaved but forgets `port+1` gets a SINGLE-access picture out of doubled registers: half the frame, or a picture that never fills |
 | MODE (`port+1`) is write-only and the ACRTC's own two ports are not adjacent — `port+3` is a gap, not a register | a driver probing the block with `IN` for a live register at `+1` or `+3` finds nothing, correctly; one that assumes RS=0/RS=1 are back to back writes its FIFO data to MODE instead |
@@ -259,7 +265,7 @@ and the same three for *inside*).
 - **Commands not executed**: CPY, SCPY, CRCL, ELPS, AARC, RARC, AEARC, REARC, PAINT, PTN,
   AGCPY, RGCPY. They are recognized and their parameters consumed — the command stream stays in
   step — and **CER is set**, so a guest can tell. DRD/DWT/DMOD run only in the manual's
-  "under program control" mode (no DMAC on the board) and only in the positive X/Y directions.
+  "under program control" mode (no DMAC on the board).
 - **Scan-out**: graphic screens only (CHR = 1 character screens are scanned as graphic), the
   three background screens stacked and the window over them, non-interlaced; single and
   interleaved access only (superimposed mode's second phase is not fetched). The monitor is the

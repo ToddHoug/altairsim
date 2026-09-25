@@ -16,14 +16,6 @@ int floorDiv(int a, int b) {
 }
 int floorMod(int a, int b) { return a - floorDiv(a, b) * b; }
 
-// The pattern-RAM scan (manual 6.8.3/6.8.4): from `start`, one step per `zoom`+1
-// pixels, running `lo`..`hi` and wrapping back to `lo` -- through 15 -> 0 if hi < lo.
-int patternScan(int start, int lo, int hi, int zoom, int i) {
-    int width = ((hi - lo) & 0x0F) + 1;
-    int step  = i / (zoom + 1);
-    return (lo + floorMod((start - lo) + step, width)) & 0x0F;
-}
-
 // log2 of a bits-per-pixel value 1..16.
 int log2bpp(int bpp) {
     int n = 0;
@@ -56,6 +48,7 @@ void Hd63484::reset() {
     params_.clear();
     xferLeft_  = 0;
     xferRead_  = false;
+    rpending_.clear();
     stopped_   = false;
     fifoHalf_  = false;
     dirty_     = true;
@@ -70,7 +63,7 @@ void Hd63484::power() {
     mask_ = 0xFFFF;
     ppx_ = ppy_ = pzcx_ = pzcy_ = psx_ = psy_ = pex_ = pey_ = pzx_ = pzy_ = 0;
     xmin_ = ymin_ = xmax_ = ymax_ = 0;
-    for (auto& r : rwp_) r = 0;
+    rwp_   = 0;
     rwpDn_ = 0;
     orgDpa_ = 0;
     orgDpd_ = 0;
@@ -89,6 +82,7 @@ void Hd63484::abort() {
     params_.clear();
     xferLeft_ = 0;
     xferRead_ = false;
+    rpending_.clear();
     stopped_  = false;
     sr_ = kCED | kWFR | kWFE;
 }
@@ -187,21 +181,43 @@ bool Hd63484::popRead(uint8_t& b) {
     for (int i = 1; i < rfifoN_; ++i) rfifo_[i - 1] = rfifo_[i];
     --rfifoN_;
     updateFifoStatus();
-    // A DRD (or an RD/RPTN too big for the FIFO) waits for space: refill.
-    if (xferRead_ && xferLeft_ > 0 && rfifoN_ + 2 <= kFifoBytes) {
-        uint32_t addr = xferBase_ + (uint32_t)xferX_ - (uint32_t)xferY_ * mw(rwpDn_);
-        uint16_t w    = vramRead(addr);
+    // A command waiting on read-FIFO space goes on; when it has delivered its last word it
+    // ends, and the command stream stalled behind it runs again.
+    const bool waiting = !rpending_.empty();
+    feedRead();
+    if (waiting && rpending_.empty()) commandEnd();
+    if (!readStalled()) processFifo();
+    return true;
+}
+
+void Hd63484::queueRead(uint16_t w) { rpending_.push_back(w); }
+
+// Move owed words into the read FIFO while there is room: first a command's queued
+// words, then a DRD's block, fetched as it goes. After a DRD's LAST word the chip "goes
+// into an indefinite wait state ... the command should be aborted" (manual 6.5): CED
+// stays clear, and the stream stays stalled, until ABT.
+void Hd63484::feedRead() {
+    size_t n = 0;
+    while (n < rpending_.size() && rfifoN_ + 2 <= kFifoBytes) {
+        pushRead((uint8_t)(rpending_[n] >> 8));
+        pushRead((uint8_t)rpending_[n]);
+        ++n;
+    }
+    rpending_.erase(rpending_.begin(), rpending_.begin() + (std::ptrdiff_t)n);
+    while (xferRead_ && xferLeft_ > 0 && rfifoN_ + 2 <= kFifoBytes) {
+        uint16_t w = vramRead(xferAddr());
         pushRead((uint8_t)(w >> 8));
         pushRead((uint8_t)w);
-        if (++xferX_ == xferAx_) {
-            xferX_ = 0;
-            ++xferY_;
-        }
-        --xferLeft_;
-        // After the LAST word a DRD "goes into an indefinite wait state ... the command
-        // should be aborted" (manual 6.5): CED stays clear until ABT.
+        xferAdvance();
     }
-    return true;
+}
+
+void Hd63484::xferAdvance() {
+    if (++xferX_ == xferAx_) {
+        xferX_ = 0;
+        ++xferY_;
+    }
+    --xferLeft_;
 }
 
 void Hd63484::updateFifoStatus() {
@@ -214,10 +230,12 @@ void Hd63484::updateFifoStatus() {
 
 // ---------------------------------------------------------------------------
 // The command engine. Drawing is instantaneous, so the write FIFO drains the moment a
-// word lands -- WFE is the steady state and a driver's polling loop never spins.
+// word lands -- WFE is the steady state and a driver's polling loop never spins. The
+// exception is a command waiting on the read FIFO (readStalled): the words behind it
+// stay in the write FIFO until the host reads, exactly as they would on the chip.
 // ---------------------------------------------------------------------------
 void Hd63484::processFifo() {
-    while (wfifoN_ >= 2) {
+    while (wfifoN_ >= 2 && !readStalled()) {
         uint8_t hi = 0, lo = 0;
         popWrite(hi);
         popWrite(lo);
@@ -256,11 +274,8 @@ int Hd63484::paramsFor(uint16_t op) const {
     case 0x0C00: return 0;                     // RPR (RN)
     default: break;
     }
-    switch (op & ~0x0F03) {
-    case 0x6000: return 4;                     // CPY  (S DSD MM) SAH SAL AX AY
-    case 0x7000: return 4;                     // SCPY
-    default: break;
-    }
+    if ((op & ~0x0F00) == 0x6000) return 4;    // CPY  (S DSD) SAH SAL AX AY
+    if ((op & ~0x0F03) == 0x7000) return 4;    // SCPY (S DSD MM) SAH SAL AX AY
     switch (op & ~0x00FF) {                    // AREA COL OPM in the low byte
     case 0x8800: case 0x8C00: return 2;        // ALINE / RLINE
     case 0x9000: case 0x9400: return 2;        // ARCT / RRCT
@@ -278,9 +293,9 @@ int Hd63484::paramsFor(uint16_t op) const {
     case 0xC800: return 0;                     // PAINT
     default: break;
     }
-    switch (op & ~0x0FFF) {
-    case 0xD000: return 1;                     // PTN SZ
-    case 0xE000: case 0xF000: return 4;        // AGCPY / RGCPY
+    if ((op & ~0x0FFF) == 0xD000) return 1;    // PTN (SL SD) SZ
+    switch (op & ~0x0FE7) {                    // COL must be 00: the source IS the color
+    case 0xE000: case 0xF000: return 4;        // AGCPY / RGCPY (S DSD) Xs Ys DX DY
     default: break;
     }
     return -1;
@@ -289,15 +304,12 @@ int Hd63484::paramsFor(uint16_t op) const {
 void Hd63484::commandWord(uint16_t w) {
     // A DWT/DMOD in progress under program control: the words are frame-memory data.
     if (xferLeft_ > 0 && !xferRead_) {
-        uint32_t addr = xferBase_ + (uint32_t)xferX_ - (uint32_t)xferY_ * mw(rwpDn_);
+        uint32_t addr = xferAddr();
         int      mm   = cmd_ & 3;
         bool     mod  = (cmd_ & 0xFF00) == 0x2C00;
         vramWrite(addr, mod ? modify(vramRead(addr), w, mm) : w);
-        if (++xferX_ == xferAx_) {
-            xferX_ = 0;
-            ++xferY_;
-        }
-        if (--xferLeft_ == 0) commandEnd();
+        xferAdvance();
+        if (xferLeft_ == 0) commandEnd();
         return;
     }
 
@@ -336,6 +348,12 @@ void Hd63484::execute() {
     const uint16_t op = cmd_;
     const auto     p  = [&](size_t i) -> int16_t { return (int16_t)params_[i]; };
     const auto     u  = [&](size_t i) -> uint16_t { return params_[i]; };
+    // A command that answers through the read FIFO ends when its last word is IN it --
+    // now, or when the host has made room (popRead).
+    const auto     endRead = [&] {
+        feedRead();
+        if (rpending_.empty()) commandEnd();
+    };
 
     // ---- Register access (manual 6.4) ----
     if (op == 0x0400) {                        // ORG DPH DPL
@@ -371,10 +389,10 @@ void Hd63484::execute() {
         case 0x0B: ymax_ = (int16_t)d; break;
         case 0x0C:                             // RWP high: DN and the top 8 address bits
             rwpDn_ = (uint8_t)(d >> 14);
-            rwp_[rwpDn_] = (rwp_[rwpDn_] & 0x00FFF) | ((uint32_t)(d & 0xFF) << 12);
+            rwp_   = (rwp_ & 0x00FFF) | ((uint32_t)(d & 0xFF) << 12);
             break;
         case 0x0D:                             // RWP low: the bottom 12 address bits
-            rwp_[rwpDn_] = (rwp_[rwpDn_] & 0xFF000) | (uint32_t)(d >> 4);
+            rwp_ = (rwp_ & 0xFF000) | (uint32_t)(d >> 4);
             break;
         default:                               // Pr0E/0F undefined, Pr10-13 read-only
             commandError();
@@ -414,14 +432,14 @@ void Hd63484::execute() {
         case 0x13: v = (uint16_t)cpy_; break;
         default: ok = false; break;
         }
-        if (ok) {
-            pushRead((uint8_t)(v >> 8));
-            pushRead((uint8_t)v);
-            sr_ = (uint8_t)(sr_ & ~kARD);
-        } else {
+        if (!ok) {
             commandError();
+            commandEnd();
+            return;
         }
-        commandEnd();
+        sr_ = (uint8_t)(sr_ & ~kARD);
+        queueRead(v);
+        endRead();
         return;
     }
     if ((op & ~0x000F) == 0x1800) {            // WPTN (PRA) n, D1..Dn
@@ -433,22 +451,16 @@ void Hd63484::execute() {
     if ((op & ~0x000F) == 0x1C00) {            // RPTN (PRA) n -> read FIFO
         int pra = op & 0x0F;
         int n   = u(0);
-        for (int i = 0; i < n && rfifoN_ + 2 <= kFifoBytes; ++i) {
-            uint16_t w = pram_[(pra + i) & 0x0F];
-            pushRead((uint8_t)(w >> 8));
-            pushRead((uint8_t)w);
-        }
-        commandEnd();
+        for (int i = 0; i < n; ++i) queueRead(pram_[(pra + i) & 0x0F]);
+        endRead();
         return;
     }
 
     // ---- Data transfer (manual 6.5) ----
     if (op == 0x4400) {                        // RD: one word at RWP -> read FIFO; RWP++
-        uint16_t w = vramRead(rwp());
-        pushRead((uint8_t)(w >> 8));
-        pushRead((uint8_t)w);
+        queueRead(vramRead(rwp()));
         setRwp(rwp() + 1);
-        commandEnd();
+        endRead();
         return;
     }
     if (op == 0x4800) {                        // WT D: one word at RWP; RWP++
@@ -470,16 +482,14 @@ void Hd63484::execute() {
     }
     if (op == 0x2400 || op == 0x2800 || (op & ~0x0003) == 0x2C00) {   // DRD / DWT / DMOD AX AY
         // Under program control (manual 6.5, no DMAC): the words follow through the FIFOs.
-        // The block is (|AX|+1) x (|AY|+1) words from RWP; a negative AX/AY runs the other
-        // way. Only the positive directions are modeled -- a negative count is CER.
+        // The block is (|AX|+1) x (|AY|+1) words from RWP, walked as CLR walks it: "if
+        // minus values are set in AX and AY, the read direction becomes negative" (DRD-2),
+        // a negative AY running DOWN in Y, i.e. up in memory.
         int16_t ax = p(0), ay = p(1);
-        if (ax < 0 || ay < 0) {
-            commandError();
-            commandEnd();
-            return;
-        }
-        xferAx_   = ax + 1;
-        xferAy_   = ay + 1;
+        xferSx_   = ax < 0 ? -1 : 1;
+        xferSy_   = ay < 0 ? -1 : 1;
+        xferAx_   = std::abs(ax) + 1;
+        xferAy_   = std::abs(ay) + 1;
         xferX_    = 0;
         xferY_    = 0;
         xferBase_ = rwp();
@@ -488,29 +498,25 @@ void Hd63484::execute() {
         // RWPe: RWP's column on the block's LAST raster (manual CLR-4: RWP $56, AY = -6,
         // MW $10 -> RWPe $B6).
         setRwp(rwp() - (uint32_t)ay * mw(rwpDn_));
-        if (xferRead_) {
-            // Prime the read FIFO; popRead() keeps it fed. CED never -- ABT ends a DRD.
-            while (xferLeft_ > 0 && rfifoN_ + 2 <= kFifoBytes) {
-                uint32_t addr = xferBase_ + (uint32_t)xferX_ - (uint32_t)xferY_ * mw(rwpDn_);
-                uint16_t w    = vramRead(addr);
-                pushRead((uint8_t)(w >> 8));
-                pushRead((uint8_t)w);
-                if (++xferX_ == xferAx_) {
-                    xferX_ = 0;
-                    ++xferY_;
-                }
-                --xferLeft_;
-            }
-        }
+        if (xferRead_) feedRead();             // prime; popRead() keeps it fed. CED never -- ABT ends a DRD
         return;                                // CED comes with the last data word (DWT)
     }
-    if ((op & ~0x0F03) == 0x6000 || (op & ~0x0F03) == 0x7000) {   // CPY / SCPY: not modeled
+    if ((op & ~0x0F00) == 0x6000 || (op & ~0x0F03) == 0x7000) {   // CPY / SCPY: not modeled
         commandError();
         commandEnd();
         return;
     }
 
     // ---- Graphic drawing (manual 6.6) ----
+    // AREA 001/101 end a drawing where the pointer crossed: "drawing is executed as long
+    // as the CP resides in the defined area" (6.6.3), so that is where CP is left.
+    const auto endDraw = [&] {
+        if (stopped_) {
+            cpx_ = stopX_;
+            cpy_ = stopY_;
+        }
+        commandEnd();
+    };
     const uint16_t top = (uint16_t)(op & 0xFF00);
     const bool     rel = (op & 0x0400) != 0;   // bit 10 is the A/R distinction in every pair
     switch (top) {
@@ -526,7 +532,7 @@ void Hd63484::execute() {
         drawLine(cpx_, cpy_, x, y);
         cpx_ = (int16_t)x;
         cpy_ = (int16_t)y;
-        commandEnd();
+        endDraw();
         return;
     }
     case 0x9000: case 0x9400: {                // ARCT / RRCT: X first, around, back to CP
@@ -536,7 +542,7 @@ void Hd63484::execute() {
         drawLine(x, cpy_, x, y);
         drawLine(x, y, cpx_, y);
         drawLine(cpx_, y, cpx_, cpy_);
-        commandEnd();
+        endDraw();
         return;
     }
     case 0x9800: case 0x9C00:                  // APLL / RPLL
@@ -557,19 +563,19 @@ void Hd63484::execute() {
             cpx_ = (int16_t)ex;
             cpy_ = (int16_t)ey;
         }
-        commandEnd();
+        endDraw();
         return;
     }
     case 0xC000: case 0xC400: {                // AFRCT / RFRCT
         int x = rel ? cpx_ + p(0) : p(0);
         int y = rel ? cpy_ + p(1) : p(1);
         fillRect(x, y);
-        commandEnd();
+        endDraw();
         return;
     }
     case 0xCC00: {                             // DOT: the pixel at CP; CP stays
-        drawPixel(cpx_, cpy_, 0, 0);
-        commandEnd();
+        drawPixel(cpx_, cpy_);
+        endDraw();
         return;
     }
     default:
@@ -643,6 +649,8 @@ bool Hd63484::areaAllows(int x, int y) {
         if (crossed) {
             sr_ |= kARD;
             stopped_ = true;
+            stopX_   = (int16_t)x;
+            stopY_   = (int16_t)y;
             return false;
         }
         return true;
@@ -654,22 +662,43 @@ bool Hd63484::areaAllows(int x, int y) {
     }
 }
 
-uint16_t Hd63484::colorFor(int /*x*/, int patX, int patY, bool& draw) const {
+uint16_t Hd63484::colorFor(bool& draw) const {
     const int col = (cmd_ >> 3) & 0x03;
     if (col == 3) {                               // Pattern RAM direct: a 4x4 color tile
-        int cx = patternScan(ppx_ & 3, psx_ & 3, pex_ & 3, pzx_, patX);
-        int cy = patternScan(ppy_ & 3, psy_ & 3, pey_ & 3, pzy_, patY);
         draw = true;
-        return pram_[((cy & 3) * 4 + (cx & 3)) & 0x0F];
+        return pram_[((ppy_ & 3) * 4 + (ppx_ & 3)) & 0x0F];
     }
-    int cx  = patternScan(ppx_, psx_, pex_, pzx_, patX);
-    int cy  = patternScan(ppy_, psy_, pey_, pzy_, patY);
-    int bit = (pram_[cy & 0x0F] >> (cx & 0x0F)) & 1;
+    int bit = (pram_[ppy_ & 0x0F] >> (ppx_ & 0x0F)) & 1;
     switch (col) {
     case 0: draw = true; return bit ? cl1_ : cl0_;
     case 1: draw = bit != 0; return cl1_;
     default: draw = bit == 0; return cl0_;
     }
+}
+
+// One step of the pattern scan (manual 6.8.3): each bit is used PZ+1 times (the zoom
+// counter PZC starts wherever the host left it -- "the initial magnification counter
+// value", 5.10.2.6), then the pointer advances "until PPX = PEX. Then, PPX is reset to
+// PSX" -- through 15 -> 0 when PEX < PSX. Pattern RAM direct (COL 11) scans a 4x4 tile,
+// so its pointer runs in two bits.
+void Hd63484::stepPatternX() {
+    if (pzcx_ < pzx_) {
+        ++pzcx_;
+        return;
+    }
+    pzcx_ = 0;
+    const int m = ((cmd_ >> 3) & 3) == 3 ? 3 : 15;
+    ppx_ = (uint8_t)((ppx_ & m) == (pex_ & m) ? (psx_ & m) : ((ppx_ + 1) & m));
+}
+
+void Hd63484::stepPatternY() {
+    if (pzcy_ < pzy_) {
+        ++pzcy_;
+        return;
+    }
+    pzcy_ = 0;
+    const int m = ((cmd_ >> 3) & 3) == 3 ? 3 : 15;
+    ppy_ = (uint8_t)((ppy_ & m) == (pey_ & m) ? (psy_ & m) : ((ppy_ + 1) & m));
 }
 
 uint16_t Hd63484::applyOpm(uint16_t data, uint16_t color, uint32_t /*addr*/, int shift, int bpp) const {
@@ -691,30 +720,35 @@ uint16_t Hd63484::applyOpm(uint16_t data, uint16_t color, uint32_t /*addr*/, int
     return (uint16_t)((data & ~mask) | ((res << shift) & mask));
 }
 
-void Hd63484::drawPixel(int x, int y, int patX, int patY) {
+// One logical pixel position visited: drawn unless AREA or COL says not, and the pattern
+// pointer steps on either way -- a clipped dash is still a dash's worth of pattern.
+void Hd63484::drawPixel(int x, int y) {
     if (stopped_) return;
-    if (!areaAllows(x, y)) return;
-    bool     draw = false;
-    uint16_t color = colorFor(x, patX, patY, draw);
-    if (!draw) return;
-    uint32_t addr = 0;
-    int      shift = 0;
-    wordAddress(x, y, addr, shift);
-    vramWrite(addr, applyOpm(vramRead(addr), color, addr, shift, bitsPerPixel()));
+    if (areaAllows(x, y)) {
+        bool     draw = false;
+        uint16_t color = colorFor(draw);
+        if (draw) {
+            uint32_t addr = 0;
+            int      shift = 0;
+            wordAddress(x, y, addr, shift);
+            vramWrite(addr, applyOpm(vramRead(addr), color, addr, shift, bitsPerPixel()));
+        }
+    }
+    if (!stopped_) stepPatternX();
 }
 
 // Bresenham from (x0, y0) toward (x1, y1), EXCLUDING the end point (manual ALINE-1:
 // "the logical pixel at position Pe is not drawn"). The pattern scans one step per
-// pixel along the line, from PPX (manual 6.8.3).
+// pixel along the line, from wherever the pointer is (manual 6.8.3) -- so the segments of
+// a rectangle, polyline or polygon continue one pattern rather than restarting it.
 void Hd63484::drawLine(int x0, int y0, int x1, int y1) {
     int dx = std::abs(x1 - x0), dy = std::abs(y1 - y0);
     int sx = x1 > x0 ? 1 : (x1 < x0 ? -1 : 0);
     int sy = y1 > y0 ? 1 : (y1 < y0 ? -1 : 0);
-    int i  = 0;
     if (dx >= dy) {
         int err = dy * 2 - dx;
         while (x0 != x1) {
-            drawPixel(x0, y0, i++, 0);
+            drawPixel(x0, y0);
             if (stopped_) return;
             if (err >= 0) {
                 y0 += sy;
@@ -726,7 +760,7 @@ void Hd63484::drawLine(int x0, int y0, int x1, int y1) {
     } else {
         int err = dx * 2 - dy;
         while (y0 != y1) {
-            drawPixel(x0, y0, i++, 0);
+            drawPixel(x0, y0);
             if (stopped_) return;
             if (err >= 0) {
                 x0 += sx;
@@ -740,16 +774,26 @@ void Hd63484::drawLine(int x0, int y0, int x1, int y1) {
 
 // AFRCT/RFRCT: the rectangle with CP and (x1, y1) as opposite corners, both included,
 // tiled with the pattern; CP ends one raster past the far edge in Y (manual AFRCT-1).
+// A plane drawing (6.8.4): every row starts the X scan from the pointer as the command
+// found it, and PPY steps once per row -- "incremented independent of pixel drawing
+// direction". PPY is left on the row after the last, so a rectangle drawn at the new CP
+// continues the tiling where this one stopped.
 void Hd63484::fillRect(int x1, int y1) {
-    int X = x1 - cpx_, Y = y1 - cpy_;
-    int dx = X < 0 ? -1 : 1, dy = Y < 0 ? -1 : 1;
+    int           X = x1 - cpx_, Y = y1 - cpy_;
+    int           dx = X < 0 ? -1 : 1, dy = Y < 0 ? -1 : 1;
+    const uint8_t ppx0 = ppx_, pzcx0 = pzcx_;
     for (int j = 0; j != Y + dy; j += dy) {
+        ppx_  = ppx0;
+        pzcx_ = pzcx0;
         for (int k = 0; k != X + dx; k += dx) {
-            drawPixel(cpx_ + k, cpy_ + j, std::abs(k), std::abs(j));
+            drawPixel(cpx_ + k, cpy_ + j);
             if (stopped_) return;
         }
+        stepPatternY();
     }
-    cpy_ = (int16_t)(cpy_ + Y + dy);
+    ppx_  = ppx0;
+    pzcx_ = pzcx0;
+    cpy_  = (int16_t)(cpy_ + Y + dy);
 }
 
 // ---------------------------------------------------------------------------
@@ -915,7 +959,7 @@ void Hd63484::serialize(StateWriter& w) const {
     w.u8(ppx_); w.u8(ppy_); w.u8(pzcx_); w.u8(pzcy_);
     w.u8(psx_); w.u8(psy_); w.u8(pex_); w.u8(pey_); w.u8(pzx_); w.u8(pzy_);
     w.u16((uint16_t)xmin_); w.u16((uint16_t)ymin_); w.u16((uint16_t)xmax_); w.u16((uint16_t)ymax_);
-    for (uint32_t r : rwp_) w.u32(r);
+    w.u32(rwp_);
     w.u8(rwpDn_);
     w.u32(orgDpa_);
     w.u8(orgDpd_);
@@ -931,6 +975,12 @@ void Hd63484::serialize(StateWriter& w) const {
         bytes.push_back((uint8_t)(v >> 8));
     }
     w.blob(bytes);
+    w.boolean(xferSx_ < 0);
+    w.boolean(xferSy_ < 0);
+    w.u16((uint16_t)stopX_);
+    w.u16((uint16_t)stopY_);
+    w.u32((uint32_t)rpending_.size());
+    for (uint16_t v : rpending_) w.u16(v);
 }
 
 void Hd63484::deserialize(StateReader& r) {
@@ -961,7 +1011,7 @@ void Hd63484::deserialize(StateReader& r) {
     ppx_ = r.u8(); ppy_ = r.u8(); pzcx_ = r.u8(); pzcy_ = r.u8();
     psx_ = r.u8(); psy_ = r.u8(); pex_ = r.u8(); pey_ = r.u8(); pzx_ = r.u8(); pzy_ = r.u8();
     xmin_ = (int16_t)r.u16(); ymin_ = (int16_t)r.u16(); xmax_ = (int16_t)r.u16(); ymax_ = (int16_t)r.u16();
-    for (auto& v : rwp_) v = r.u32();
+    rwp_    = r.u32() & 0xFFFFF;
     rwpDn_  = (uint8_t)(r.u8() & 3);
     orgDpa_ = r.u32();
     orgDpd_ = r.u8();
@@ -974,6 +1024,13 @@ void Hd63484::deserialize(StateReader& r) {
         for (size_t i = 0; i < vram_.size(); ++i)
             vram_[i] = (uint16_t)(bytes[2 * i] | (bytes[2 * i + 1] << 8));
     }
+    xferSx_ = r.boolean() ? -1 : 1;
+    xferSy_ = r.boolean() ? -1 : 1;
+    stopX_  = (int16_t)r.u16();
+    stopY_  = (int16_t)r.u16();
+    uint32_t nr = r.u32();
+    rpending_.clear();
+    for (uint32_t i = 0; i < nr && i < 65536; ++i) rpending_.push_back(r.u16());
     if (wfifoN_ < 0 || wfifoN_ > kFifoBytes) wfifoN_ = 0;
     if (rfifoN_ < 0 || rfifoN_ > kFifoBytes) rfifoN_ = 0;
     dirty_ = true;
