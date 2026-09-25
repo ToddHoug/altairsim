@@ -52,6 +52,7 @@ To take the disk out, type `UNMOUNT`. The guest then sees an empty drive:
 
 ```
 altairsim> UNMOUNT dsk0:drive1
+dsk0:drive1: unmounted (the drive is now empty)
 ```
 
 Board names are not case-sensitive. When the machine has only one controller, you can leave out

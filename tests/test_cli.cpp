@@ -897,6 +897,8 @@ void test_cli() {
     // socket. The socket stays, empty, and keeps its name.
     std::ostringstream um;
     mon3.exec("UNMOUNT mem0:rom0", um);
+    CHECK(um.str().find("the socket is now EMPTY -- those pages float to FF") != std::string::npos,
+          "a ROM socket's UNMOUNT says its pages float");
     std::ostringstream b2;
     mon3.exec("BOARDS", b2);
     CHECK(b2.str().find("rom0(empty)") != std::string::npos, "the socket survives its chip");
@@ -1380,6 +1382,60 @@ void test_cli() {
         CHECK(std::filesystem::exists(tmp, ec),
               "a pre-existing file that fails to mount is the operator's -- NOT removed");
         std::filesystem::remove(tmp, ec);
+    }
+
+    // -----------------------------------------------------------------------
+    // THE MOUNT AND UNMOUNT MESSAGES SAY WHAT IS TRUE OF THE UNIT (#574, #577).
+    //
+    // The CREATE hint is a command to paste back, so a quoted path must come back with
+    // BOTH its quotes. And UNMOUNT describes the unit it emptied: only a ROM socket has
+    // pages that float to FF -- a drive or a recorder just has nothing in it.
+    // -----------------------------------------------------------------------
+    SECTION("cli: the MOUNT hint and the UNMOUNT message fit what was typed and the unit");
+    {
+        setMediaResolver(openHostFile);
+        const auto dir = std::filesystem::temp_directory_path();
+        const std::string dskPath = (dir / "altairsim-574-577.dsk").string();
+        const std::string tapPath = (dir / "altairsim-574-577.tap").string();
+        std::error_code ec;
+        std::filesystem::remove(dskPath, ec);
+        std::filesystem::remove(tapPath, ec);
+
+        Machine            mm;
+        Monitor            mmon(mm);
+        std::ostringstream msink;
+        mmon.exec("BOARDS ADD dcdd dsk0", msink);
+        mmon.exec("BOARDS ADD acr acr0", msink);
+
+        std::ostringstream q;
+        mmon.exec("MOUNT dsk0:drive0 \"" + dskPath + "\"", q);
+        CHECK(q.str().find("add CREATE: MOUNT dsk0:drive0 \"" + dskPath + "\" CREATE\n") !=
+                  std::string::npos,
+              "a quoted path comes back in the CREATE hint with both quotes (#574)");
+
+        std::ostringstream p;
+        mmon.exec("MOUNT dsk0:drive0 no-such-574.dsk", p);
+        CHECK(p.str().find("add CREATE: MOUNT dsk0:drive0 no-such-574.dsk CREATE\n") !=
+                  std::string::npos,
+              "an unquoted path comes back as it was typed, with no quotes added");
+
+        std::ostringstream d;
+        mmon.exec("MOUNT dsk0:drive0 \"" + dskPath + "\" CREATE", msink);
+        mmon.exec("UNMOUNT dsk0:drive0", d);
+        CHECK(d.str().find("dsk0:drive0: unmounted (the drive is now empty)") != std::string::npos,
+              "UNMOUNT of a disk says the drive is empty (#577)");
+        CHECK(d.str().find("float") == std::string::npos, "...and nothing about pages floating");
+
+        std::ostringstream t;
+        mmon.exec("MOUNT acr0:tape \"" + tapPath + "\" CREATE", msink);
+        mmon.exec("UNMOUNT acr0:tape", t);
+        CHECK(t.str().find("acr0:tape: unmounted (the recorder is now empty)") !=
+                  std::string::npos,
+              "UNMOUNT of a tape says the recorder is empty (#577)");
+        CHECK(t.str().find("float") == std::string::npos, "...and nothing about pages floating");
+
+        std::filesystem::remove(dskPath, ec);
+        std::filesystem::remove(tapPath, ec);
     }
 
     // -----------------------------------------------------------------------
