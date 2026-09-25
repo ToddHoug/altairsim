@@ -6,6 +6,7 @@
 #include "boards/mits-884pio.h"
 #include "boards/mits-88c700.h"
 #include "boards/mits-88lpc.h"
+#include "boards/farmtek-fdcplus.h"
 #include "boards/mits-88pio.h"
 #include "boards/mits-88sio.h"
 #include "boards/mits-frontpanel.h"
@@ -110,6 +111,7 @@ const struct {
     {"spindle", test_spindle},
     {"dcdd", test_dcdd},
     {"mds", test_mds},
+    {"fdcplus", test_fdcplus},
     {"hdsk", test_hdsk},
     {"icom", test_icom},
     {"dualsd", test_dualsd},
@@ -181,6 +183,7 @@ int main(int argc, char** argv) {
     altair::CromemcoFdcBoard::setResolver(altair::resolveEndpoint);
     altair::FrontPanelBoard::setResolver(altair::resolveEndpoint);
     altair::Ss1Board::setResolver(altair::resolveEndpoint);
+    altair::FdcPlusBoard::setResolver(altair::resolveEndpoint);
 
     // A graphics board draws into an injected Display; headless tests give it a
     // NullDisplay, so a VDM-1 renders into memory and a test reads the pixels back

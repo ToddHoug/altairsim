@@ -41,6 +41,7 @@ and within a group the boards are in **alphabetical order**.
 | [`dcdd`](#dcdd) | MITS 88-DCDD: 8" hard-sector floppy controller |
 | [`dualide`](#dualide) | S100Computers IDE-AB: two CompactFlash sockets for CP/M 3 |
 | [`dualsd`](#dualsd) | S100Computers Dual SD: two microSD sockets for CP/M 3 |
+| [`fdcplus`](#fdcplus) | FarmTek FDC+: serial drive (drive types 6, 7) |
 | [`hdsk`](#hdsk) | MITS 88-HDSK Datakeeper: Pertec hard disk controller |
 | [`icom`](#icom) | iCOM FD3712/FD3812: 8" floppy controller with boot PROM |
 | [`mds`](#mds) | MITS 88-MDS: 5.25" minidisk controller |
@@ -346,6 +347,22 @@ S100Computers Dual SD: two microSD sockets (drives 0/1) presented as raw 512-byt
 | Key | Kind | Default | Legal | Meaning |
 |---|---|---|---|---|
 | `port` | int | `0x80` | `0x0` .. `0xFE` | Base address. The board decodes two ports: BASE (status/command) and BASE+1 (data) |
+
+
+### `fdcplus`
+
+FarmTek FDC+ in serial-drive mode: an 88-DCDD/88-MDS-compatible controller with no drive at all -- a drive server on unit 'line' holds the images and the card fetches a whole track at a time. drivetype=7 (8", incl. the 8 MB drive) or 6 (Minidisk), read at power-on. Four ports at BASE+0..3 (08 or 80)
+
+**Units:** `line` (serial, CONNECT)
+
+#### Board properties
+
+| Key | Kind | Default | Legal | Meaning |
+|---|---|---|---|---|
+| `port` | int | `0x8` | `0x0` .. `0xFC` | Base address: 08, or 80 with the address jumpers moved. Four ports, BASE+0 .. BASE+3 |
+| `drivetype` | int | `7` | `6` .. `7` | Drive Type switches (S3), read at power-on: 6 = serial drive as a Minidisk, 7 = serial drive as an 8" drive |
+| `baud` | int | `403200` | `9600` .. `460800` | Serial drive baud rate: 9600, 19200, 38400, 57600, 76800, 230400, 403200 (preferred) or 460800 |
+| `connect` | string | `null` | text | The drive server on the other end of the line (CONNECT sets this) |
 
 
 ### `hdsk`

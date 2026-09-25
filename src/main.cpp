@@ -2,6 +2,7 @@
 #include "boards/mits-884pio.h"
 #include "boards/mits-88c700.h"
 #include "boards/mits-88lpc.h"
+#include "boards/farmtek-fdcplus.h"
 #include "boards/mits-88pio.h"
 #include "boards/mits-88sio.h"
 #include "boards/mits-88uio.h"
@@ -260,6 +261,7 @@ int main(int argc, char** argv) {
     CromemcoFdcBoard::setResolver(resolveEndpoint);  // the FDC family's TMS 5501 console (16/64FDC)
     FrontPanelBoard::setResolver(resolveEndpoint);   // the fp panel dials OUT to the graphical bridge
     Ss1Board::setResolver(resolveEndpoint);          // the System Support 1's 2651 serial channel
+    FdcPlusBoard::setResolver(resolveEndpoint);      // the FDC+ serial drive's line to its server
 
     // The video service, injected the same way (DESIGN.md 7.4): a graphics board
     // draws into a Display and never learns it is SDL. The shipping binary hands it

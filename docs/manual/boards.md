@@ -175,6 +175,7 @@ The boards are in groups, in the same order as the sections below.
 |---|---|
 | `dcdd` | MITS 88-DCDD: the 8″ floppy controller |
 | `mds` | MITS 88-MDS: the 5¼″ minidisk controller |
+| `fdcplus` | FarmTek FDC+: the serial drive. The disk images are on a drive server, on a serial line |
 | `hdsk` | MITS 88-HDSK: the Datakeeper hard-disk controller |
 | `versafloppy` | SD Systems VersaFloppy I/II: a soft-sector floppy controller. Boots SDOS |
 | `tarbell` | Tarbell #1011: a single-density floppy controller with its own boot PROM. Boots CP/M by itself |
@@ -875,6 +876,53 @@ because its motor never stopped.
 **The two boards use the same three ports.** This is the MITS address map. A real Altair with
 both boards would have them both on the data bus at the same time. If you add both here, the bus
 view names the conflict. Use one or the other.
+
+### `fdcplus`: FarmTek FDC+ serial drive
+
+The FDC+ is a modern board that replaces the 88-DCDD and the 88-MDS. In its **serial drive**
+mode it has no disk drive. A **drive server** on another computer keeps the disk images, and the
+board gets a whole track at a time over a serial line. To the software, the board is an 88-DCDD
+or an 88-MDS, so CP/M and the boot PROM work as they are.
+
+Use it to use the images on a drive server, to share one set of images between the simulator
+and a real FDC+ Altair, or to test a drive server.
+
+| Property | What it sets |
+|---|---|
+| `drivetype` | `7`: the server's disks are 8″ disks, including the 8 MB disk. `6`: they are minidisks. The board reads this at power-on, as the real switches are read. |
+| `connect` | The drive server. `CONNECT fdc0:line` sets it too. |
+| `baud` | The speed of the serial line: 9600, 19200, 38400, 57600, 76800, 230400, 403200 or 460800. Set the same speed on the server. The default is 403200, the fastest reliable speed. |
+| `port` | `08`, or `80`. The board uses four ports. |
+
+**The server mounts the images, not the simulator.** `MOUNT` on this board gives an error. A drive
+that has no image on the server is not ready, as an empty drive is.
+
+**Do not run the machine at full speed.** A guest counts instructions to measure time, and CP/M
+stops looking for a sector after 1.4 seconds of its time at 2 MHz. At full speed, that is a few
+milliseconds, and a track takes longer than that to arrive. A faster crystal is possible if the
+line is fast too: 10 MHz with 230400 baud works, and 38400 baud needs 2 MHz.
+
+To use a server on `/dev/cu.usbserial-AL009KFH` at 38400 baud in the `default` machine:
+
+```
+altairsim> BOARDS REMOVE dsk0
+altairsim> BOARDS ADD fdcplus fdc0
+altairsim> SET cpu0 clock_hz=2000000
+altairsim> SET fdc0 baud=38400
+altairsim> CONNECT fdc0:line serial:/dev/cu.usbserial-AL009KFH
+altairsim> RUN FF00
+```
+
+The `default` machine's `dcdd` uses the same ports, so remove it first. On Windows, the device is
+a name such as `serial:COM3`. `CONFIG SAVE` writes the machine to a file, so that you do the
+setup only once.
+
+The package has this machine as a file: `examples/cpm/cpm22-fdcplus.toml`. Set your serial port
+and speed in it, and run it.
+
+A slower line makes a slower disk. At 38400 baud, a track takes about one second. When the machine
+is not using the disk, the board writes changed tracks back to the server after about one second.
+It also writes them back before a `DISCONNECT`, a `POWER`, or when you quit.
 
 ### `hdsk`: MITS 88-HDSK Datakeeper
 
