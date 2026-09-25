@@ -2,7 +2,10 @@
 
 #include "core/statefile.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstdlib>
+#include <utility>
 
 namespace altair {
 namespace {
@@ -38,6 +41,12 @@ Scan destScan(int dsd) {
     const int ux = (dsd & 2) ? -1 : 1, uy = (dsd & 1) ? -1 : 1;
     return (dsd & 4) ? Scan{0, uy, ux, 0} : Scan{ux, 0, 0, uy};
 }
+
+// The curve commands' parameters are 16 bits "but only the low order 13 bits are
+// effective" (manual CRCL-1, AARC-2): a coordinate is 13-bit two's complement, a size
+// (r, a, b, dX) 13 bits unsigned.
+int sext13(uint16_t v) { return (int)((v & 0x1FFF) ^ 0x1000) - 0x1000; }
+int mag13(uint16_t v) { return v & 0x1FFF; }
 
 // log2 of a bits-per-pixel value 1..16.
 int log2bpp(int bpp) {
@@ -609,7 +618,60 @@ void Hd63484::execute() {
         break;
     }
 
-    // Everything else (CRCL ELPS arcs PAINT PTN AGCPY RGCPY) was recognized and its
+    // ---- The curves (manual CRCL, ELPS, AARC, RARC, AEARC, REARC): C (bit 8) = 1 is
+    // clockwise, 0 counter-clockwise, in the logical frame (+Y up). ----
+    const bool cw = (op & 0x0100) != 0;
+    switch (op & 0xFE00) {
+    case 0xA800: {                             // CRCL r: from (A+r, B) all the way round
+        const int r = mag13(u(0));
+        traceConic(cpx_, cpy_, 1, 1, cpx_ + r, cpy_, cpx_ + r, cpy_, cw);
+        endDraw();                             // "the CP moves back to the center" -- it never left
+        return;
+    }
+    case 0xAC00: {                             // ELPS a b dX
+        // a and b are NOT the semi-axes: "a : b = dX^2 : dY^2", the curve
+        // (X-A)^2/a + (Y-B)^2/b = dX^2/a (ELPS-2). dX is the X semi-axis.
+        const int a = mag13(u(0)), b = mag13(u(1)), dx = mag13(u(2));
+        if (a == 0 || b == 0) {
+            commandError();
+            commandEnd();
+            return;
+        }
+        traceConic(cpx_, cpy_, a, b, cpx_ + dx, cpy_, cpx_ + dx, cpy_, cw);
+        endDraw();
+        return;
+    }
+    case 0xB000: case 0xB400:                  // AARC / RARC  Xc Yc Xe Ye
+    case 0xB800: case 0xBC00: {                // AEARC / REARC  a b Xc Yc Xe Ye
+        // From CP round the center to Pe; the radius is CP's own distance from the center
+        // (appendix: R = sqrt((CPx-Xc)^2 + (CPy-Yc)^2)). Relative forms are offsets from
+        // CP, both the center and the end (RARC-1: "CC (A+dXc, B+dYc)").
+        const bool   ell = (op & 0x0800) != 0;
+        const size_t o   = ell ? 2 : 0;
+        const int    a   = ell ? mag13(u(0)) : 1, b = ell ? mag13(u(1)) : 1;
+        if (a == 0 || b == 0) {
+            commandError();
+            commandEnd();
+            return;
+        }
+        int xc = sext13(u(o)), yc = sext13(u(o + 1)), xe = sext13(u(o + 2)), ye = sext13(u(o + 3));
+        if (rel) {
+            xc += cpx_;
+            yc += cpy_;
+            xe += cpx_;
+            ye += cpy_;
+        }
+        traceConic(xc, yc, a, b, cpx_, cpy_, xe, ye, cw);
+        cpx_ = (int16_t)xe;                    // "CP moves to Pe. However a dot is not drawn at Pe"
+        cpy_ = (int16_t)ye;
+        endDraw();
+        return;
+    }
+    default:
+        break;
+    }
+
+    // Everything else (PAINT PTN AGCPY RGCPY) was recognized and its
     // parameters consumed; it is not executed, and CER says so.
     commandError();
     commandEnd();
@@ -821,6 +883,92 @@ void Hd63484::drawLine(int x0, int y0, int x1, int y1) {
             y0 += sy;
             err += dx * 2;
         }
+    }
+}
+
+// THE CURVE TRACER, for every circle, ellipse and arc. The curve is
+//     b (x - xc)^2 + a (y - yc)^2 = K,  K fixed by the start point,
+// a circle when a = b.
+//
+// WHICH pixels: the nearest pixel to the curve in every column where the curve runs
+// mostly horizontally, and in every row where it runs mostly vertically -- the classic
+// raster rule, in exact integer arithmetic, mirrored into all four quadrants. So the set
+// depends on the curve alone, never on the direction drawn, and is symmetric as the curve
+// is (and 8-way for a circle).
+//
+// IN WHAT ORDER: by angle round the center from the start point, counter-clockwise, or
+// clockwise for C = 1 (the mirror image). Drawing order is what the chip's own is too, and
+// it matters: the pattern scans along it and an AREA stop ends at the first pixel that
+// crossed. The start point is drawn first, then every pixel of the set strictly past its
+// angle, up to -- not including -- the end point's angle: "a dot is not drawn at Pe". The
+// manual gives no rule for detecting the end (its appendix only says to put Pe on the
+// curve, truncating toward the center), so a Pe off the curve ends the arc where its ray
+// crosses it. A closed curve (CRCL, ELPS) is an arc whose Pe is its own start: once round.
+// (Pixels at the start's own angle -- a thin ellipse's tip -- follow it, nearest first.)
+void Hd63484::traceConic(int xc, int yc, int64_t a, int64_t b, int x0, int y0, int xe, int ye, bool cw) {
+    using Pt = std::pair<int64_t, int64_t>;
+    const int64_t m  = cw ? -1 : 1;                      // C = 1: walk the mirror image
+    const Pt      p0 = {x0 - xc, m * (y0 - yc)};
+    const Pt      pe = {xe - xc, m * (ye - yc)};
+    const int64_t K  = b * p0.first * p0.first + a * p0.second * p0.second;
+    drawPixel(x0, y0);
+    if (stopped_ || K == 0) return;
+
+    // round(sqrt(rem / d)), exactly: the floor, then up if rem/d >= (n + 1/2)^2.
+    const auto nearestRoot = [](int64_t rem, int64_t d) {
+        int64_t n = (int64_t)std::sqrt((double)rem / (double)d);
+        while (n > 0 && d * n * n > rem) --n;
+        while (d * (n + 1) * (n + 1) <= rem) ++n;
+        return 4 * rem >= d * (2 * n + 1) * (2 * n + 1) ? n + 1 : n;
+    };
+    std::vector<Pt> pts;
+    const auto add = [&](int64_t u, int64_t v) {
+        pts.push_back({u, v});
+        pts.push_back({-u, v});
+        pts.push_back({u, -v});
+        pts.push_back({-u, -v});
+    };
+    // Columns while the curve is x-major (a v >= b u), then rows while it is y-major
+    // (b u > a v) -- judged on the curve itself OR at the chosen pixel, whichever runs
+    // longer, so the two runs overlap at the 45-degree point and at a thin ellipse's tip
+    // instead of leaving a gap between them.
+    for (int64_t u = 0;; ++u) {
+        const int64_t rem = K - b * u * u;
+        if (rem < 0) break;
+        const int64_t v = nearestRoot(rem, a);
+        if (a * rem < b * b * u * u && a * v < b * u) break;
+        add(u, v);
+    }
+    for (int64_t v = 0;; ++v) {
+        const int64_t rem = K - a * v * v;
+        if (rem < 0) break;
+        const int64_t u = nearestRoot(rem, b);
+        if (b * rem <= a * a * v * v && b * u <= a * v) break;
+        add(u, v);
+    }
+    std::sort(pts.begin(), pts.end());
+    pts.erase(std::unique(pts.begin(), pts.end()), pts.end());
+
+    // Angle order counter-clockwise from p0, exactly: the half-turn a point is in, then the
+    // cross product; points on one ray nearest first.
+    const auto cross = [](const Pt& p, const Pt& q) { return p.first * q.second - p.second * q.first; };
+    const auto dot   = [](const Pt& p, const Pt& q) { return p.first * q.first + p.second * q.second; };
+    const auto half  = [&](const Pt& p) {
+        const int64_t c = cross(p0, p);
+        return (c < 0 || (c == 0 && dot(p0, p) < 0)) ? 1 : 0;
+    };
+    const auto before = [&](const Pt& p, const Pt& q) {
+        if (half(p) != half(q)) return half(p) < half(q);
+        const int64_t c = cross(p, q);
+        return c != 0 ? c > 0 : dot(p, p) < dot(q, q);
+    };
+    std::sort(pts.begin(), pts.end(), before);
+    const bool once = cross(p0, pe) == 0 && dot(p0, pe) > 0;   // Pe on the start's own ray
+    for (const Pt& p : pts) {
+        if (p == p0) continue;                                // the start: drawn already
+        if (!once && !(half(p) < half(pe) || (half(p) == half(pe) && cross(p, pe) > 0))) break;
+        drawPixel((int)(xc + p.first), (int)(yc + m * p.second));
+        if (stopped_) return;
     }
 }
 
