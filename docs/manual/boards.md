@@ -175,7 +175,7 @@ The boards are in groups, in the same order as the sections below.
 |---|---|
 | `dcdd` | MITS 88-DCDD: the 8″ floppy controller |
 | `mds` | MITS 88-MDS: the 5¼″ minidisk controller |
-| `fdcplus` | FarmTek FDC+: the serial drive. The disk images are on a drive server, on a serial line |
+| `fdcplus` | FarmTek FDC+: the 1.5 MB floppy, or the serial drive, where the disk images are on a drive server on a serial line |
 | `hdsk` | MITS 88-HDSK: the Datakeeper hard-disk controller |
 | `versafloppy` | SD Systems VersaFloppy I/II: a soft-sector floppy controller. Boots SDOS |
 | `tarbell` | Tarbell #1011: a single-density floppy controller with its own boot PROM. Boots CP/M by itself |
@@ -877,9 +877,13 @@ because its motor never stopped.
 both boards would have them both on the data bus at the same time. If you add both here, the bus
 view names the conflict. Use one or the other.
 
-### `fdcplus`: FarmTek FDC+ serial drive
+### `fdcplus`: FarmTek FDC+ serial drive and 1.5 MB floppy
 
-The FDC+ is a modern board that replaces the 88-DCDD and the 88-MDS. In its **serial drive**
+The FDC+ is a modern board that replaces the 88-DCDD and the 88-MDS. Its drive type switches
+select what it does. This board does three drive types: **5**, the 1.5 MB floppy (see
+[The 1.5 MB floppy](#the-15-mb-floppy-drive-type-5) below), and **6** and **7**, the serial drive.
+
+In its **serial drive**
 mode it has no disk drive. A **drive server** on another computer keeps the disk images, and the
 board gets a whole track at a time over a serial line. To the software, the board is an 88-DCDD
 or an 88-MDS, so CP/M and the boot PROM work as they are.
@@ -889,13 +893,13 @@ and a real FDC+ Altair, or to test a drive server.
 
 | Property | What it sets |
 |---|---|
-| `drivetype` | `7`: the server's disks are 8″ disks, including the 8 MB disk. `6`: they are minidisks. The board reads this at power-on, as the real switches are read. |
+| `drivetype` | `7`: the server's disks are 8″ disks, including the 8 MB disk. `6`: they are minidisks. `5`: the 1.5 MB floppy, below. The board reads this at power-on, as the real switches are read. |
 | `connect` | The drive server. `CONNECT fdc0:line` sets it too. |
 | `baud` | The speed of the serial line: 9600, 19200, 38400, 57600, 76800, 230400, 403200 or 460800. Set the same speed on the server. The default is 403200, the fastest reliable speed. |
 | `port` | `08`, or `80`. The board uses four ports. |
 
-**The server mounts the images, not the simulator.** `MOUNT` on this board gives an error. A drive
-that has no image on the server is not ready, as an empty drive is.
+**The server mounts the images, not the simulator.** `MOUNT` on `fdc0:line` gives an error. A
+drive that has no image on the server is not ready, as an empty drive is.
 
 **Do not run the machine at full speed.** A guest counts instructions to measure time, and CP/M
 stops looking for a sector after 1.4 seconds of its time at 2 MHz. At full speed, that is a few
@@ -923,6 +927,40 @@ and speed in it, and run it.
 A slower line makes a slower disk. At 38400 baud, a track takes about one second. When the machine
 is not using the disk, the board writes changed tracks back to the server after about one second.
 It also writes them back before a `DISCONNECT`, a `POWER`, or when you quit.
+
+#### The 1.5 MB floppy (drive type 5)
+
+With `drivetype = 5`, the FDC+ runs a high-density floppy drive in a format of its own: each
+track is **one sector of 10,240 bytes**, on both sides of the disk. A disk holds **1,525,760
+bytes**, five times an Altair floppy. The board has four drives, `drive0` to `drive3`, and you
+put a disk image in one with `MOUNT`. The serial line is not used.
+
+**A stock Altair boot PROM boots this disk.** The PROM cannot read a 1.5 MB disk. But when the
+PROM asks for a sector, the FDC+ gives it a sector of its own. That sector holds a short loader,
+and the loader reads the real disk. So `RUN FF00` works with the DBL PROM of the `default`
+machine.
+
+**The machine must run at 2 MHz, or at full speed.** The CP/M for this disk moves a track with no
+handshake: it reads a byte every 17 µs, slightly slower than the disk, and writes one every 14
+µs, slightly faster. Those are 2 MHz loops. At full speed, the board keeps the same 2 MHz time as
+the processor, so the disk works. With a faster `clock_hz`, CP/M reads bytes before the disk has
+sent them, as on a real Altair with a fast processor, and the disk does not work.
+
+The package has CP/M for this drive: `examples/cpm/cpm22-fdcplus-hdf.toml` and the disk
+`CPM22-48K-HDF.dsk`. To do the same by hand in the `default` machine:
+
+```
+altairsim> BOARDS REMOVE dsk0
+altairsim> BOARDS ADD fdcplus fdc0
+altairsim> SET fdc0 drivetype=5
+altairsim> POWER
+altairsim> MOUNT fdc0:drive0 CPM22-48K-HDF.dsk
+altairsim> RUN FF00
+```
+
+The board reads `drivetype` at power-on, so `POWER` comes after it. A disk that is mounted
+read-only is write-protected. The CP/M for this disk refuses to write to it, and CP/M then
+shows `Bdos Err On A: Bad Sector`.
 
 ### `hdsk`: MITS 88-HDSK Datakeeper
 

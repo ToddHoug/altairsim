@@ -450,6 +450,8 @@ add_library(altair_core STATIC
   # a PIC's firmware drives the registers, and a drive server on a serial line fills one track
   # buffer. See src/boards/farmtek-fdcplus.h.
   src/boards/farmtek-fdcplus.cpp
+  # ...and drive type 5, the 1.5 MB floppy: a whole track per read, one byte every 16 us.
+  src/boards/farmtek-fdcplus-hdf.cpp
   # The 88-HDSK Datakeeper hard disk -- a "controller does the work" card (Board
   # directly, not HardSectorFdc): it decodes A0h-A7h and serves 256-byte sectors from
   # a linear .DSK through a command/handshake protocol. See src/boards/mits-88hdsk.h.

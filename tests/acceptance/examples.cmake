@@ -262,6 +262,33 @@ execute_process(
 )
 expect_cpm("${out}" "`altairsim -s examples/cpm/cpm22-buffered.ini` from the dist root did not boot CP/M")
 
+# ---- 4a. THE FDC+'s 1.5 MB FLOPPY -- a disk the boot PROM cannot read, booted anyway. ----
+#
+# cpm22-fdcplus-hdf.toml puts CPM22-48K-HDF.dsk in an FDC+ at drive type 5 and boots it with
+# the stock DBL, which knows nothing of 10,240-byte tracks. The card's firmware hands DBL a
+# fake Altair sector of its own, whose loader reads the real track 0 -- so the banner alone
+# proves the fake sector, the loader's no-handshake track read at 2 MHz, and the BIOS after
+# it; `A: ASM      COM` is the directory read off the image.
+function(expect_hdf out why)
+  foreach(want "48K CP/M 2.2b v1.2" "For Altair 1.5Mb Floppy" "A>" "A: ASM      COM")
+    string(FIND "${out}" "${want}" hit)
+    if(hit LESS 0)
+      message(FATAL_ERROR "examples: ${why}\n"
+                          "  '${want}' never reached the terminal.\n--- output ---\n${out}")
+    endif()
+  endforeach()
+endfunction()
+
+execute_process(
+  COMMAND           "${SIM}" cpm22-fdcplus-hdf.toml
+  WORKING_DIRECTORY "${cpm}"
+  INPUT_FILE        "${SRC}/tests/acceptance/cpm-dir.keys"
+  OUTPUT_VARIABLE   out
+  ERROR_VARIABLE    out
+  TIMEOUT           60
+)
+expect_hdf("${out}" "`cd examples/cpm && altairsim cpm22-fdcplus-hdf.toml` did not boot CP/M")
+
 # ---- 4b. THE HARD DISK -- CP/M booted through the 88-HDSK Datakeeper controller. -------
 #
 # Same shape as the floppy CP/M above, and here for the same reason: the disk is beside the

@@ -4,8 +4,12 @@
 // (docs/boards/farmtek-fdcplus.md).
 //
 // The FDC+ is a modern, one-board replacement for the two-board 88-DCDD and 88-MDS. A switch
-// bank (S3, "Drive Type", latched at power-on) picks what it drives. THIS BOARD IS THE SERIAL
-// DRIVE, types 6 and 7: no rotating media at all. The card's high-speed serial port talks to
+// bank (S3, "Drive Type", latched at power-on) picks what it drives. THIS BOARD DOES THREE:
+//
+//   type 5  the 1.5 MB floppy -- a whole 10,240-byte track per read, from a disk image in
+//           drive0..drive3. A different machine again, so it is its own engine, FdcPlusHdf
+//           (farmtek-fdcplus-hdf.h); everything below this paragraph is the serial drive.
+//   types 6 and 7, the SERIAL DRIVE: no rotating media at all. The card's high-speed serial port talks to
 // a DRIVE SERVER on a PC that holds the disk images, and the card fetches and writes back ONE
 // WHOLE TRACK at a time:
 //
@@ -36,6 +40,7 @@
 // "the buffer is dirty" -- and pump() talks to the server a message at a time without waiting,
 // exactly the split the firmware makes between its port ISR and its idle loop.
 
+#include "boards/farmtek-fdcplus-hdf.h"
 #include "core/board.h"
 
 #include <cstdint>
@@ -69,9 +74,12 @@ public:
     std::vector<std::string> debugFlags() const override { return {"seek", "link"}; }
     enum DebugFlag { SEEK = 0, LINK = 1 };
 
-    // ONE serial unit, the card's J2 connector, and no disk units: the server mounts the
-    // images, so MOUNT has nothing to do here.
+    // The serial unit, the card's J2 connector, for types 6 and 7 -- the server mounts those
+    // images -- and the four drives of type 5, drive0..drive3, which MOUNT fills.
     std::vector<UnitDef> units() const override;
+    std::vector<std::string> subUnitTables() const override { return {"drive"}; }
+    std::vector<Property> subUnitProperties(const std::string& table) const override;
+    std::vector<SubUnit>  subUnits() const override;
     bool mount(const std::string& unit, const std::string& path, bool ro, std::string& err) override;
     bool unmount(const std::string& unit, std::string& err) override;
 
@@ -85,6 +93,10 @@ public:
     void serialize(StateWriter& w) const override;
     void deserialize(StateReader& r) override;
 
+protected:
+    bool addSubUnit(const std::string& table, const KeyValues& kv, std::string& err) override;
+
+public:
     using EndpointResolver =
         std::function<std::unique_ptr<ByteStream>(const std::string&, std::string&)>;
     static void setResolver(EndpointResolver r);
@@ -99,6 +111,7 @@ public:
     bool     dirty() const { return dirty_; }
     bool     linkIdle() const { return link_ == Link::Idle; }
     int      track(int drive) const { return track_[(size_t)(drive & 7)]; }
+    const FdcPlusHdf& hdf() const { return hdf_; }
 
     static constexpr uint64_t kStatNs     = 100'000'000;    // STAT_RATE: 0.1 s
     static constexpr uint64_t kTimeoutNs  = 1'000'000'000;  // RESPONSE_TIMEOUT: 1 s
@@ -108,6 +121,7 @@ public:
 private:
     enum class Link { Idle, Stat, Read, WritAsk, WritSta };
 
+    bool     hd() const { return type_ == 5; }
     bool     mini() const { return type_ == 6; }
     int      sectors() const { return mini() ? 16 : 32; }
     int      trackLen() const { return sectors() * kSlot; }
@@ -199,6 +213,8 @@ private:
     uint64_t             rxBytes_ = 0;
 
     std::vector<std::string> log_;
+
+    FdcPlusHdf hdf_;  // type 5
 };
 
 } // namespace altair
