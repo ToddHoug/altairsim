@@ -24,7 +24,7 @@ options before the machine: `altairsim mine.toml -s check.cmd` and
 | `-f, --file <path>` | **always** a file, never a built-in name |
 | `-n, --none` | an empty backplane. No boards, no memory, nothing |
 | `-l, --list` | list the built-in machines and exit |
-| `-s, --script <file>` | run a command script, then exit with its status |
+| `-s, --script <file>` | run a command script, then exit with its status. Paths in it are relative to the script's folder |
 | `-x, --exec <cmd>` | run one monitor command, then exit. You can give it more than one time |
 | `-i, --interactive` | after `--script` or `--exec`, stay in the monitor |
 | `--mcp` | run as an MCP server on stdio |
@@ -190,9 +190,13 @@ This rule lets you copy an example folder to any place, and the machine still bo
 > **A relative path resolves against the machine's directory**, which is the folder that the
 > machine file was loaded from.
 
-That folder is the base for *every* relative path. This includes the disks and PROMs that the
-machine file mounts. It also includes the `MOUNT`, `LOAD`, `SAVE`, `DO` and `-s` paths that you
-type. The rule is the same for a path in the file and a path that you type.
+That folder is the base for the disks and PROMs that the machine file mounts. It is also the
+base for the `MOUNT`, `LOAD`, `SAVE` and `DO` paths that you type. The rule is the same for a
+path in the file and a path that you type.
+
+A **script** follows the same idea. A path in a script is relative to the script's folder, as a
+path in a machine file is relative to the machine file. This is true for a script that you run
+with `DO` and for a script that you run with `-s`.
 
 `examples/cpm/cpm22-buffered.toml` has `mount = "cpm22b23-56k.dsk"`. This means *the disk in
 this folder*. It still means that after you copy the folder, rename it or send it to another
@@ -246,8 +250,9 @@ base.
 ```
 altairsim> SHOW PATHS
   base directory     /home/you/altair/disks/cpm22
-                     Everything resolves against this -- what a machine file
-                     mounts, and the MOUNT / LOAD / SAVE / DO / -s you type.
+                     What a machine file mounts, and the MOUNT / LOAD / SAVE /
+                     DO you type, resolve against this. A path inside a DO or
+                     -s file is relative to that file.
                      It is the directory the machine was loaded from.
 
   hb0 sandbox        /home/you/altair/disks/cpm22/xfer
@@ -328,6 +333,14 @@ $ altairsim -s cpm22-buffered.ini
 ```
 
 At the `altairsim>` prompt, `DO cpm22-buffered.ini` runs the same script.
+
+**A path in a script is relative to the script's folder.** The script above mounts
+`cpm22b23-56k.dsk`, the disk beside it. So the script also works from another folder. Give the
+path to the script from the folder that you are in:
+
+```
+$ altairsim -s examples/cpm/cpm22-buffered.ini
+```
 
 **The exit status is not zero if a command failed.** You can use `altairsim -s` in a shell
 script, a Makefile or a build, and test the result:

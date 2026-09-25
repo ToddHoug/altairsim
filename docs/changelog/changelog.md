@@ -8,6 +8,14 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+### A `-s` script runs from any folder
+
+A path in a script that you run with `altairsim -s` is now relative to the script's folder, as
+in a script that you run with `DO`. Before, it was relative to the machine's folder. So
+`altairsim -s examples/cpm/cpm22-buffered.ini` now boots CP/M from the top of the package, and
+each `.ini` in the examples runs from any folder. You still name the script from the folder that
+you are in. `SHOW PATHS` and `HELP DO` now say this.
+
 ### An empty ROM socket is empty
 
 A `rom` region with no `mount` now reads `FF` even when it has a `size`. Before, a `size` made it

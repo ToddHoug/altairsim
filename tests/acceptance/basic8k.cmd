@@ -6,6 +6,6 @@
 ;
 ; Everything below is what a HUMAN did, and nothing else: put the tape in, press PLAY
 ; (that is MOUNT), toggle in the bootstrap, and run it from 0.
-MOUNT acr0:tape "tapes/8KBasic32/8K BASIC Ver 3-2.tap"
-LOAD "tapes/8KBasic32/LDR8K32.HEX"
+MOUNT acr0:tape "../../tapes/8KBasic32/8K BASIC Ver 3-2.tap"
+LOAD "../../tapes/8KBasic32/LDR8K32.HEX"
 RUN 0

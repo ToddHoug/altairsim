@@ -76,6 +76,20 @@ execute_process(
 )
 expect_basic("${out}" "`altairsim examples/basic/basic4k.toml` from the dist root did not boot BASIC")
 
+# ...and its .ini twin, run with -s from the dist root (#575). The script is named from
+# where you launched; the tape and loader it names lie beside IT, not beside you. Before
+# #575 a -s script's lines resolved against the machine's folder, so this failed while
+# `DO examples/basic/basic4k.ini` worked.
+execute_process(
+  COMMAND           "${SIM}" -s examples/basic/basic4k.ini
+  WORKING_DIRECTORY "${dist}"
+  INPUT_FILE        "${SRC}/tests/acceptance/basic4k.keys"
+  OUTPUT_VARIABLE   out
+  ERROR_VARIABLE    out
+  TIMEOUT           60
+)
+expect_basic("${out}" "`altairsim -s examples/basic/basic4k.ini` from the dist root did not boot BASIC")
+
 # ---- 2a. THE SAME BASIC, OFF A WAV CASSETTE -- the ACR's audio front end end to end. ---
 #
 # basic4k.toml mounts a decoded .tap; basic4k-wav.toml mounts "4K BASIC Ver 3-1.wav", the
@@ -236,6 +250,17 @@ execute_process(
   TIMEOUT           60
 )
 expect_cpm("${out}" "`altairsim examples/cpm/cpm22-buffered.toml` from the dist root did not boot CP/M")
+
+# The flagship's .ini twin, by -s from the dist root: the floppy is beside the script (#575).
+execute_process(
+  COMMAND           "${SIM}" -s examples/cpm/cpm22-buffered.ini
+  WORKING_DIRECTORY "${dist}"
+  INPUT_FILE        "${SRC}/tests/acceptance/cpm-dir.keys"
+  OUTPUT_VARIABLE   out
+  ERROR_VARIABLE    out
+  TIMEOUT           60
+)
+expect_cpm("${out}" "`altairsim -s examples/cpm/cpm22-buffered.ini` from the dist root did not boot CP/M")
 
 # ---- 4b. THE HARD DISK -- CP/M booted through the 88-HDSK Datakeeper controller. -------
 #
