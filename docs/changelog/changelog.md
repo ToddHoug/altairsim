@@ -8,6 +8,16 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+### The MCP server checks its arguments, and `run` obeys `SET BUS UNCLAIMED`
+
+A tool argument of the wrong type is now an error that names the argument. Before, the server
+read it as 0 and gave no error. `run {"from": "0xFF00"}` ran from address 0; now the server
+refuses it and tells you to send `65280`. A missing required argument is an error too.
+
+`run` now obeys `SET BUS UNCLAIMED`, as `RUN` at the monitor does. With `HALT`, it stops with
+`stopped: "unclaimed"` and names the port. With `WARN`, the warning line comes back in the new
+`warnings` list. `run` now also stops on a `BREAK TAPE STOP`, with `stopped: "tape-stop"`.
+
 ### MOUNT and UNMOUNT say the right thing
 
 When `MOUNT` cannot find a file, it shows the command to type with `CREATE` added. If you put

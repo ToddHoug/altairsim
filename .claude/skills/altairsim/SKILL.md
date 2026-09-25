@@ -23,8 +23,12 @@ run {input: "ASM FOO\r", until: "A>", timeout_ms: 120000}
 ```
 
 - `run` never blocks. It returns on `until`, on the guest going idle at a prompt, on
-  `timeout_ms`, `max_steps`, HLT, a breakpoint, or a cancel of the request or a ^C to the
-  process (`interrupted`) — read `stopped` to learn which.
+  `timeout_ms`, `max_steps`, HLT, a breakpoint, a port no board decodes under
+  `SET BUS UNCLAIMED=HALT` (`unclaimed`), a `BREAK TAPE STOP` (`tape-stop`), or a cancel of
+  the request or a ^C to the process (`interrupted`) — read `stopped` to learn which. Bus
+  warnings from the run come back in `warnings`.
+- **Numbers are JSON numbers.** `"from": "0xFF00"` is refused with the value to send
+  (`65280`); it is never read as 0.
 - **`timeout_ms` is a ceiling, not a wait.** A 50-second assembly under `timeout_ms: 120000`
   returns in 50 seconds. Set the worst case you will sit through and let `until` end the call.
 - **Never pick an `until` that recurs.** A disk that auto-runs `PROFILE.SUB` reprints `A>`

@@ -200,5 +200,6 @@ are the most important:
   client boots it with `run`.
 - A `run` **never blocks**. It stops when `until` matches, when the guest waits at a prompt, or
   at `timeout_ms`. `timeout_ms` is a limit, not a wait.
-- JSON has no hex form, so `from` is a decimal number: `65280` is `FF00`.
+- JSON has no hex form, so `from` is a decimal number: `65280` is `FF00`. If you send a string
+  such as `"0xFF00"`, the server refuses the call and tells you the number to send.
 - A control byte is a JSON `\uXXXX` escape: `\u0003` is `Ctrl-C`. `\x03` is not JSON.
