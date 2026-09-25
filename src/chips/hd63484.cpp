@@ -16,6 +16,29 @@ int floorDiv(int a, int b) {
 }
 int floorMod(int a, int b) { return a - floorDiv(a, b) * b; }
 
+// THE COPY SCANS (manual CPY-3/4, Tables C14-1 and C14-2), shared by CPY/SCPY in words
+// and AGCPY/RGCPY in pixels. A scan is a FAST axis (the order within a line) and a SLOW
+// axis (the order of the lines), each a unit step in logical X and Y, +Y up.
+struct Scan {
+    int fx = 1, fy = 0;    // one step along a line
+    int sx = 0, sy = 1;    // one line to the next
+};
+
+// The source (S, bit 11): S = 0 scans rows, S = 1 scans columns; the signs of the extents
+// decide which corner it starts from ("decided by the relation between bit 11 ... and the
+// Pss and the Pse").
+Scan sourceScan(bool s, int dx, int dy) {
+    const int ux = dx < 0 ? -1 : 1, uy = dy < 0 ? -1 : 1;
+    return s ? Scan{0, uy, ux, 0} : Scan{ux, 0, 0, uy};
+}
+
+// The destination (DSD, bits 10-8), read off Table C14-2: bit 2 scans columns instead of
+// rows, bit 1 runs X leftward, bit 0 runs Y downward.
+Scan destScan(int dsd) {
+    const int ux = (dsd & 2) ? -1 : 1, uy = (dsd & 1) ? -1 : 1;
+    return (dsd & 4) ? Scan{0, uy, ux, 0} : Scan{ux, 0, 0, uy};
+}
+
 // log2 of a bits-per-pixel value 1..16.
 int log2bpp(int bpp) {
     int n = 0;
@@ -501,8 +524,12 @@ void Hd63484::execute() {
         if (xferRead_) feedRead();             // prime; popRead() keeps it fed. CED never -- ABT ends a DRD
         return;                                // CED comes with the last data word (DWT)
     }
-    if ((op & ~0x0F00) == 0x6000 || (op & ~0x0F03) == 0x7000) {   // CPY / SCPY: not modeled
-        commandError();
+    if ((op & ~0x0F00) == 0x6000 || (op & ~0x0F03) == 0x7000) {   // CPY / SCPY SAH SAL AX AY
+        // The source is a 20-bit word address, SAH (8 bits) then SAL (12 bits, left-
+        // justified), on the screen RWP names; RWP is the destination (manual CPY-1/2).
+        const uint32_t src = ((uint32_t)(u(0) & 0xFF) << 12) | (uint32_t)(u(1) >> 4);
+        const bool     sel = (op & 0xF000) == 0x7000;
+        copyBlock(src, p(2), p(3), (op & 0x0800) != 0, (op >> 8) & 7, sel, op & 3);
         commandEnd();
         return;
     }
@@ -633,6 +660,31 @@ void Hd63484::clearBlock(uint16_t d, int16_t ax, int16_t ay, bool masked, int mm
         }
     }
     setRwp(org - (uint32_t)ay * w);               // RWPe: RWP's column on the last raster (manual CLR-4)
+}
+
+// CPY/SCPY (manual CPY-1..6, SCPY-1..8): the (|AX|+1) x (|AY|+1)-word block from `src`,
+// scanned by S, written from RWP in DSD's order -- so a copy can transpose, mirror, and be
+// ordered to survive an overlap ("the host chooses the direction"). Words move one at a
+// time, read then written, as the chip does. SCPY applies MM under MASK; CPY does not
+// use MASK at all (5.10.2.5). RWP is left at RWPe: one line past the last on the slow axis,
+// at the fast axis's start (Table C14-2; CPY-6: RWP $B0, four lines up -> RWPe $70).
+void Hd63484::copyBlock(uint32_t src, int16_t ax, int16_t ay, bool s, int dsd, bool masked, int mm) {
+    const int64_t w     = mw(rwpDn_);
+    const Scan    ss    = sourceScan(s, ax, ay);
+    const Scan    ds    = destScan(dsd);
+    const int     nFast = (s ? std::abs(ay) : std::abs(ax)) + 1;
+    const int     nSlow = (s ? std::abs(ax) : std::abs(ay)) + 1;
+    const auto    step  = [&](int dx, int dy) -> int64_t { return dx - dy * w; };   // +Y is MW words lower
+    const int64_t dst   = rwp();
+    for (int j = 0; j < nSlow; ++j) {
+        for (int i = 0; i < nFast; ++i) {
+            const uint32_t sa = (uint32_t)((int64_t)src + i * step(ss.fx, ss.fy) + j * step(ss.sx, ss.sy));
+            const uint32_t da = (uint32_t)(dst + i * step(ds.fx, ds.fy) + j * step(ds.sx, ds.sy));
+            const uint16_t v  = vramRead(sa);
+            vramWrite(da, masked ? modify(vramRead(da), v, mm) : v);
+        }
+    }
+    setRwp((uint32_t)(dst + nSlow * step(ds.sx, ds.sy)));
 }
 
 // ---------------------------------------------------------------------------
