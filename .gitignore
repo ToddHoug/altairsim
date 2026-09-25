@@ -125,6 +125,7 @@ examples/**
 !examples/**/README.md
 !examples/cdos/CDOS258-8IN-DSDD.DSK
 !examples/cpm/cpm22b23-56k.dsk
+!examples/cpm/CPM22-48K-HDF.dsk
 !examples/hdsk/HDCPM22v16-48K.DSK
 !examples/diskbasic/Disk BASIC 4.1.dsk
 !examples/basic/4K BASIC Ver 3-1.tap

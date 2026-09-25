@@ -1,8 +1,10 @@
-# FarmTek FDC+ — serial drive (`fdcplus`)
+# FarmTek FDC+ — serial drive and 1.5 MB floppy (`fdcplus`)
 
-**Status:** partial. Drive types **6** (serial drive as an Altair Minidisk) and **7** (serial
-drive as an Altair 8" drive, including the 8 MB drive) are done. The other drive types, the
-on-board RAM and PROM, and the sector interrupt are not emulated — see Limitations.
+**Status:** partial. Drive types **5** (the 1.5 MB floppy), **6** (serial drive as an Altair
+Minidisk) and **7** (serial drive as an Altair 8" drive, including the 8 MB drive) are done. The
+other drive types, the on-board RAM and PROM, and the sector interrupt are not emulated — see
+Limitations. Type 5 is a different machine from the serial drive, and has
+[its own section](#drive-type-5-the-15-mb-floppy) below.
 
 ## The real hardware
 
@@ -26,6 +28,7 @@ server implementation can be tested without a real FDC+.
 |---|---|---|
 | FDC+ firmware v1.8, `serialDrive.s` | `reference/FDC+ Serial Drive Firmware.md` | **The oracle.** The firmware is the card in types 6 and 7: every register behavior, timer and link rule. |
 | FDC+ Serial Drive Protocol v1.0 | `reference/FDC_Serial_Drive_Protocol.md` | The wire format. |
+| FDC+ firmware v1.8, `hdfloppy.s`, and the 1.5 MB CP/M (`BIOS.ASM`, `HDFBL.ASM`) | `reference/FDC+ HD Floppy Firmware.md` | **The oracle for type 5.** |
 | FDC+ Manual v2.0 | `reference/FDC+ Manual.md` | The port map, the drive types, the address jumpers, the 8 MB drive (§3.7.4). |
 
 The firmware and the protocol text disagree on one point: the firmware times a receive from its
@@ -83,9 +86,10 @@ time.
 The idle write-back was on emulated time at first. On a machine running flat out, 1.3 emulated
 seconds pass long before a track arrives, and the board threw away every track in flight.
 
-**Properties:** `port` (`08` or `80`), `drivetype` (6 or 7, read at power-on), `baud` (one of the
-serial drive's eight rates, default 403200 — see below), `connect` (the drive server; `CONNECT fdc0:line` sets it). One
-serial unit, `line`. No disk units: `MOUNT` is refused, because the server mounts the images.
+**Properties:** `port` (`08` or `80`), `drivetype` (5, 6 or 7, read at power-on), `baud` (one of
+the serial drive's eight rates, default 403200 — see below), `connect` (the drive server;
+`CONNECT fdc0:line` sets it). One serial unit, `line`, which takes no `MOUNT`: the server mounts
+the images. The four disk units `drive0`–`drive3` are type 5's.
 
 **Debug flags:** `seek` (every step) and `link` (every READ/WRIT sent, every track received,
 and a change in the server's mount map).
@@ -117,8 +121,7 @@ and a change in the server's mount map).
 
 ## Limitations and deliberate departures
 
-- **Drive types 0–5 and 8 are not emulated.** Types 0–3 are what `dcdd` and `mds` already do;
-  type 5 (the 1.5 MB drive) is planned.
+- **Drive types 0–4 and 8 are not emulated.** Types 0–3 are what `dcdd` and `mds` already do.
 - **The on-board RAM (64K) and PROM (8K) are not emulated.** Use a `memory` board with
   `builtin:dbl` or `builtin:cdbl` for the boot PROM.
 - **The sector interrupt is not wired.** Interrupt enable/disable are stored, but the card never
@@ -151,9 +154,104 @@ and a change in the server's mount map).
   `DIR B:` and `DIR C:` listed the games and Zork disks. The shipped example
   `examples/cpm/cpm22-fdcplus.toml` is that machine as a file; it boots the same way.
 
+## Drive type 5: the 1.5 MB floppy
+
+With the switches at 5, the card runs a 96 tpi high-density drive (a Teac 55-GFR, or an 8" DSDD
+drive) in Mike Douglas's own format: **one 10,240-byte sector per track**, both sides, MFM, 149
+tracks, **1,525,760 bytes**. Nothing about it is an Altair disk, and nothing on this board's
+serial side runs: the `line` stays connected and quiet. The disks are images in `drive0`–`drive3`,
+put there with `MOUNT` or `[[board.drive]]`.
+
+### Registers (type 5)
+
+| Addr | OUT (write) | IN (read) |
+|---|---|---|
+| base+0 | drive select: bit 7, or a drive of 4 or more, deselects; bits 3–0 = drive | status (low true): 0 ENWD, 1 MOVE HEAD, 2 HEAD STATUS, 3 drive ready, **4 WRITE PROTECT**, 6 TRACK 0, 7 NRDA |
+| base+1 | command: 0 step in, 1 step out, 2 head load, 3 head unload, **4 read enable**, 6 low write current, 7 write enable | sector position: sector 0 or 15, bit 0 sector true (low) |
+| base+2 | write data, into the track buffer | read data, from the track buffer |
+| base+3 | **the track number** — also picks the side | **I/O status** (high true): 1 track error, 2 end of sector too soon, 7 done |
+
+### How it is simulated (type 5)
+
+**Its own engine, `FdcPlusHdf`** (`src/boards/farmtek-fdcplus-hdf.{h,cpp}`), which the board
+owns and hands the bus to when it was powered up at type 5. It is `hdfloppy.s` and nothing else.
+
+**Everything is emulated time, worked out when the 8080 looks.** The disk turns whether anyone
+is reading it, as a `Spindle` does: the index holes are every 166.67 ms from the moment the motor
+came on. Before every port access, the engine runs the card forward to now — the step and settle
+timers, the end of sector true, the read-clear window, the end of a transfer, each index hole —
+and then copies in the disk bytes that have arrived (a read) or copies out the buffer bytes the
+disk has taken (a write). A long quiet stretch with the head loaded is done in one step.
+
+**The transfer has no handshake, so the byte timing is the whole behavior.** A byte arrives every
+16 µs after the sync byte, and the data port gives the next byte in the buffer whether it has
+arrived or not. So a guest that reads faster than the disk gets **old bytes**, and a guest that
+writes slower than the disk has old bytes written in its place — which is what the real card does,
+and why the BIOS needs a 2 MHz 8080 (below).
+
+**Writes reach the image when the track is done**, and are synced. A write-protected disk is not
+written: the drive blocks the write gate, and the card still says done. A track past the end of a
+shorter file makes the file bigger. `MOUNT` takes a file of whole 10,240-byte tracks, 149 at most;
+an empty file is a blank disk.
+
+**The fake boot sector.** At every index hole where no read has been asked for, the firmware
+points the data port at a 137-byte Altair sector in its flash (`HDFBL.ASM`) and asserts NRDA. The
+stock DBL reads it as sector 0 of track 0, loads its 128 bytes to 0000 and jumps there; that
+loader reads the real track 0 to 4000h and jumps to it. So a disk Altair boots a 1.5 MB disk with
+the PROM it already has. The bytes are copied from the firmware, and a test checks them against
+DBL's checksum.
+
+### Quirks reproduced (type 5)
+
+| Quirk | If you get it wrong |
+|---|---|
+| A READ ENABLE sent before the index hole is cleared by it; the read starts at 400 µs only if the flag was set after the hole | A BIOS that asks too early gets a track, where the card gives it nothing |
+| The data port has no handshake: a byte every 16 µs, and a faster reader gets old buffer bytes | A 4 MHz machine reads the disk, where the real card gives garbage |
+| A write takes each byte as the buffer holds it when the disk reaches it | A slow writer's track is written whole |
+| The sector register shows 0 and 15 in turn, only with the head loaded, sector true for 32 µs | DBL (sector 0) or CDBL (0 and 15) never finds a sector |
+| A select starts the motor and throws the first hole away; the motor stops after 32 turns with the head unloaded, and a head load starts it | A select shows a sector at once; a disk left alone keeps spinning |
+| A step ignores a head load in the same command; MOVE after 3 ms, HEAD after 18 ms | Seeks settle at the wrong time |
+| The side comes from the track number (`OUT base+3`), the cylinder from the steps | Odd tracks read from the bottom side |
+| A track the disk does not have gives end of sector at the next index, and NRDA | The 8080 waits for NRDA forever |
+| The drive's write-protect line is status bit 4 | The BIOS, which reads it before every write, writes to a protected disk (and the drive throws the bytes away) |
+
+### Limitations (type 5)
+
+- **No checksum errors.** The sync byte and the checksum are on the disk, not in an image: every
+  read of an image track is good, and its sync byte is the track's own number, so the track error
+  bit means "the head or side is not on the track the 8080 named".
+- **The real drive's MFM, precompensation and write current** change only the flux, which an
+  image does not have.
+- **A drive with no disk has no index holes**, so the sector register stays `FF` and the BIOS's
+  1.4 s timeout reports it. A real drive's spin-up time is not in the firmware and is not
+  modeled: the first hole comes a turn after the motor starts.
+- **Step in stops at cylinder 79**, the Teac 55-GFR's last. The firmware has no limit; the drive
+  has an end stop.
+- **The machine needs 2 MHz of emulated time**, which flat out gives: the card times itself by
+  the same clock as the guest. The BIOS's read loop takes 34 T-states a byte and must be slower
+  than the disk's 16 µs; its write loop takes 28 and must be faster. So the 8080 must run between
+  1.75 and 2.1 MHz. At `clock_hz = 4000000` it cannot read the disk, as on a real 4 MHz Altair.
+
+### Verification (type 5)
+
+- `tests/test_fdcplus.cpp` (the type 5 sections): the select and status bits, write protect,
+  sector 0/15 and its 32 µs, the skipped first hole, the boot sector byte for byte with DBL's
+  checksum, a track read at 17 µs a byte, **a read at 8 µs a byte that gets old bytes**, the read
+  enable lost to the hole, the side from the track number and the track error, end of sector on a
+  missing track, a write at 14 µs that lands, **a write at 18 µs that falls behind**, write
+  protect, the step and settle times, the motor timer, the size check, `[[board.drive]]` and a
+  snapshot. The timing tests were checked by breaking the byte timing.
+- `acceptance-examples` boots `examples/cpm/cpm22-fdcplus-hdf.toml` from a copy of the folder:
+  DBL, the fake boot sector, HDFBL and the BIOS, to `48K CP/M 2.2b v1.2`, `For Altair 1.5Mb
+  Floppy`, `A>` and a directory line.
+- By hand, over `--mcp`, on a copy of `CPM22-48K-HDF.dsk`: `DIR`, `STAT` (`920k` free), `SAVE 4
+  X.COM`, a warm boot, `DIR X.COM`, `ERA X.COM`. At `clock_hz = 2000000` it boots in 2.3 s; at
+  `clock_hz = 4000000` it does not boot.
+
 ## References
 
 - `reference/FDC+ Serial Drive Firmware.md`
 - `reference/FDC_Serial_Drive_Protocol.md`
+- `reference/FDC+ HD Floppy Firmware.md`
 - `reference/FDC+ Manual.md`
 - `docs/boards/mits-dcdd.md`, `docs/boards/mits-88mds.md` — the controllers it replaces

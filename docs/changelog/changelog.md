@@ -18,6 +18,14 @@ drive, including the 8 MB disk, and type 6 is a minidisk. The boards chapter tel
 it up, and `examples/cpm/cpm22-fdcplus.toml` boots CP/M from a server: set your serial port in the
 file and run it (#560).
 
+### The FDC+ runs the 1.5 MB floppy
+
+The `fdcplus` board now also does drive type 5, the FDC+'s 1.5 MB floppy: one 10,240-byte sector
+to a track, on both sides of the disk. Put a disk image in `drive0` to `drive3` with `MOUNT`. The
+stock DBL boot PROM boots it, as on the real board, because the FDC+ gives the PROM a boot sector
+of its own. `examples/cpm/cpm22-fdcplus-hdf.toml` boots Mike Douglas's 1.5 MB CP/M 2.2, and the
+disk is in the package.
+
 ### The VDM-1 shows its whole character set
 
 The VDM-1 now shows the graphics characters for codes 00 to 1F. Before, it always showed them as

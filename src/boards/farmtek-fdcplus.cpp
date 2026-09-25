@@ -6,6 +6,7 @@
 #include "core/statefile.h"
 #include "core/value.h"
 #include "host/endpoint.h"
+#include "host/media.h"
 #include "host/stream.h"
 
 #include <algorithm>
@@ -121,6 +122,8 @@ void FdcPlusBoard::latch() {
 void FdcPlusBoard::power() {
     drain();
     latch();
+    hdf_.setClock(clock_);
+    hdf_.power();
 }
 
 // ---------------------------------------------------------------------------
@@ -151,6 +154,10 @@ bool FdcPlusBoard::decodes(const BusCycle& c) const {
 }
 
 uint8_t FdcPlusBoard::read(const BusCycle& c) {
+    if (hd()) {
+        hdf_.setClock(clock_);
+        return hdf_.read((uint8_t)(c.port() - port_));
+    }
     sync();
     switch ((uint8_t)(c.port() - port_)) {
     case 0: return status_;
@@ -171,6 +178,10 @@ uint8_t FdcPlusBoard::read(const BusCycle& c) {
 }
 
 void FdcPlusBoard::write(const BusCycle& c) {
+    if (hd()) {
+        hdf_.setClock(clock_);
+        return hdf_.write((uint8_t)(c.port() - port_), c.data);
+    }
     sync();
     switch ((uint8_t)(c.port() - port_)) {
     case 0: select(c.data); break;
@@ -181,6 +192,14 @@ void FdcPlusBoard::write(const BusCycle& c) {
 }
 
 std::vector<MapEntry> FdcPlusBoard::ioMap() const {
+    if (hd()) {
+        return {
+            {port_,      port_,      "select/status",  "drive select / status (INVERTED)"},
+            {port_ + 1u, port_ + 1u, "command/sector", "step/head/read/write / sector 0 or 15"},
+            {port_ + 2u, port_ + 2u, "data",           "a whole 10,240-byte track, no handshake"},
+            {port_ + 3u, port_ + 3u, "track/iostatus", "track number / I/O status"},
+        };
+    }
     return {
         {port_,      port_,      "select/status",  "drive select / status (INVERTED)"},
         {port_ + 1u, port_ + 1u, "command/sector", "step/head/write / sector position"},
@@ -389,6 +408,8 @@ void FdcPlusBoard::idleChecks() {
 }
 
 void FdcPlusBoard::pump() {
+    // At type 5 the serial-drive code is not running: the line stays plugged in, and quiet.
+    if (hd()) return;
     stream_->pump();
     sync();
     hostIdle();
@@ -692,11 +713,11 @@ std::vector<Property> FdcPlusBoard::properties() {
     {
         Property x;
         x.name  = "drivetype";
-        x.help  = "Drive Type switches (S3), read at power-on: 6 = serial drive as a Minidisk, "
-                  "7 = serial drive as an 8\" drive";
+        x.help  = "Drive Type switches (S3), read at power-on: 5 = 1.5 MB floppy, 6 = serial "
+                  "drive as a Minidisk, 7 = serial drive as an 8\" drive";
         x.kind  = Kind::Int;
         x.radix = 10;
-        x.min   = 6;
+        x.min   = 5;
         x.max   = 7;
         x.get   = [this] { return Value::ofInt(typeSwitch_); };
         x.set   = [this](const Value& v, std::string&) {
@@ -744,20 +765,133 @@ std::vector<Property> FdcPlusBoard::properties() {
     return p;
 }
 
-std::vector<UnitDef> FdcPlusBoard::units() const { return {{"line", UnitKind::Serial, connectSpec_}}; }
+std::vector<UnitDef> FdcPlusBoard::units() const {
+    std::vector<UnitDef> u{{"line", UnitKind::Serial, connectSpec_}};
+    for (int i = 0; i < FdcPlusHdf::kDrives; ++i) {
+        UnitDef x;
+        x.name  = "drive" + std::to_string(i);
+        x.kind  = UnitKind::Disk;
+        x.state = hdf_.mounted(i) ? hdf_.path(i) : "(empty)";
+        x.readOnly       = hdf_.readOnly(i);
+        x.readOnlyForced = hdf_.readOnlyForced(i);
+        u.push_back(std::move(x));
+    }
+    return u;
+}
+
+// "drive3" -> 3, or -1.
+static int hdDrive(const std::string& unit) {
+    if (unit.size() != 6 || unit.rfind("drive", 0) != 0) return -1;
+    const int i = unit[5] - '0';
+    return (i >= 0 && i < FdcPlusHdf::kDrives) ? i : -1;
+}
 
 ByteStream* FdcPlusBoard::unitStream(const std::string& unit) {
     return unit == "line" ? stream_.get() : nullptr;
 }
 
-bool FdcPlusBoard::mount(const std::string&, const std::string&, bool, std::string& err) {
-    err = id + " has no disk drives of its own -- the drive server mounts the images. CONNECT " +
-          id + ":line to the server";
-    return false;
+// THE DRIVES ARE TYPE 5's. They are cabled whatever the switches say -- a disk can go in
+// before the card is set to 5 and powered up -- but only type 5 reads them. The serial drive's
+// images are on its server, so `line` takes no MOUNT.
+bool FdcPlusBoard::mount(const std::string& unit, const std::string& path, bool ro,
+                         std::string& err) {
+    const int i = hdDrive(unit);
+    if (i < 0) {
+        err = unit == "line"
+                  ? id + ":line is the serial drive's line -- its server mounts the images. " +
+                        "CONNECT " + id + ":line to the server, or MOUNT a 1.5 MB image in " +
+                        id + ":drive0..drive3"
+                  : "no unit `" + unit + "` on " + id + " (it has line, and drive0..drive3)";
+        return false;
+    }
+    auto media = openMedia(resolvePath(path), ro, err);
+    if (!media) {
+        err += pathNote(path);
+        return false;
+    }
+    const bool forced = media->readOnlyForced();
+    if (!hdf_.mount(i, std::move(media), path, err)) return false;
+    if (forced)
+        say(id + ": drive" + std::to_string(i) +
+            " mounted WRITE-PROTECTED -- the host will not let us write " + path);
+    return true;
 }
 
 bool FdcPlusBoard::unmount(const std::string& unit, std::string& err) {
-    return mount(unit, "", false, err);
+    const int i = hdDrive(unit);
+    if (i < 0) {
+        err = "no disk unit `" + unit + "` on " + id + " (it has drive0..drive3)";
+        return false;
+    }
+    return hdf_.unmount(i, err);
+}
+
+// [[board.drive]]: unit, mount, readonly -- as on the other floppy boards.
+std::vector<Property> FdcPlusBoard::subUnitProperties(const std::string& table) const {
+    if (table != "drive") return {};
+    std::vector<Property> p;
+    {
+        Property x;
+        x.name  = "unit";
+        x.help  = "Which drive: 0-3. Drive type 5 only";
+        x.kind  = Kind::Int;
+        x.radix = 10;
+        x.min   = 0;
+        x.max   = FdcPlusHdf::kDrives - 1;
+        p.push_back(std::move(x));
+    }
+    {
+        Property x;
+        x.name = "mount";
+        x.help = "The 1.5 MB disk image to put in it. Relative to THIS FILE.";
+        x.kind = Kind::Str;
+        p.push_back(std::move(x));
+    }
+    {
+        Property x;
+        x.name    = "readonly";
+        x.help    = "Write-protect the disk. The drive tells the card, and the card tells the "
+                    "8080: status bit 4";
+        x.kind    = Kind::Bool;
+        x.aliases = {"writeprotect"};
+        p.push_back(std::move(x));
+    }
+    return p;
+}
+
+bool FdcPlusBoard::addSubUnit(const std::string& table, const KeyValues& kv, std::string& err) {
+    if (table != "drive") {
+        err = type() + " has no [[board." + table + "]] table";
+        return false;
+    }
+    int         unit = -1;
+    std::string path;
+    bool        ro = false;
+    for (const auto& [k, v] : kv) {
+        if (k == "unit") unit = std::stoi(v);
+        else if (k == "mount") path = v;
+        else if (k == "readonly") ro = (v == "true" || v == "1" || v == "yes" || v == "on");
+    }
+    if (unit < 0) {
+        err = "[[board.drive]] needs a `unit`";
+        return false;
+    }
+    if (path.empty()) return true;
+    return mount("drive" + std::to_string(unit), path, ro, err);
+}
+
+std::vector<Board::SubUnit> FdcPlusBoard::subUnits() const {
+    std::vector<SubUnit> out;
+    for (int i = 0; i < FdcPlusHdf::kDrives; ++i) {
+        if (!hdf_.mounted(i)) continue;
+        SubUnit su;
+        su.table = "drive";
+        su.fields.push_back({"unit", std::to_string(i), false});
+        su.fields.push_back({"mount", hdf_.path(i), true});
+        if (hdf_.readOnly(i)) su.fields.push_back({"readonly", "true", false});
+        out.push_back(std::move(su));
+    }
+    return out;
 }
 
 bool FdcPlusBoard::applyEndpoint(const std::string& endpoint, std::string& err) {
@@ -788,7 +922,7 @@ bool FdcPlusBoard::applyEndpoint(const std::string& endpoint, std::string& err) 
 
 bool FdcPlusBoard::connect(const std::string& unit, const std::string& ep, std::string& err) {
     if (unit != "line") {
-        err = "fdcplus has no unit '" + unit + "' -- it has one, and it is called 'line'";
+        err = "fdcplus connects only 'line' -- '" + unit + "' is a disk drive, which MOUNT fills";
         return false;
     }
     return applyEndpoint(ep, err);
@@ -796,7 +930,7 @@ bool FdcPlusBoard::connect(const std::string& unit, const std::string& ep, std::
 
 bool FdcPlusBoard::disconnect(const std::string& unit, std::string& err) {
     if (unit != "line") {
-        err = "fdcplus has no unit '" + unit + "' -- it has one, and it is called 'line'";
+        err = "fdcplus connects only 'line' -- '" + unit + "' is a disk drive, which MOUNT fills";
         return false;
     }
     drain();
@@ -838,11 +972,13 @@ void FdcPlusBoard::serialize(StateWriter& w) const {
     w.u64(tickSeen_);
     w.u64(idleT_);
     w.u64(idleMark_);
+    hdf_.serialize(w);
 }
 
 void FdcPlusBoard::deserialize(StateReader& r) {
     Board::deserialize(r);
-    type_      = r.u8() == 6 ? 6 : 7;
+    const uint8_t ty = r.u8();
+    type_      = ty == 5 || ty == 6 ? ty : 7;
     status_    = r.u8();
     sectorPos_ = r.u8();
     readData_  = r.u8();
@@ -865,6 +1001,7 @@ void FdcPlusBoard::deserialize(StateReader& r) {
     tickSeen_ = r.u64();
     idleT_    = r.u64();
     idleMark_ = r.u64();
+    hdf_.deserialize(r);
     if (secsBuf_ < sectors()) {  // it was still arriving: fetch it again
         key_ |= 0x8000;
         secsBuf_ = 0;
