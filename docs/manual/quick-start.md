@@ -1,222 +1,168 @@
 # Quick start: CP/M in one command
 
-```
-$ ./altairsim examples/cpm/cpm22-buffered.toml
-```
+This chapter boots CP/M 2.2 on a 56K Altair with an 8″ floppy disk. It also shows you the three
+commands that you use every time: `Ctrl-E`, `RUN` and `QUIT`.
 
-On **Windows** the program is `altairsim.exe` and the path is spelled with backslashes:
+Type the commands in the folder where you unzipped the package.
 
-```
-> altairsim.exe examples\cpm\cpm22-buffered.toml
-```
+## Boot CP/M
 
-That is the whole of it.
+1. Start the machine:
 
-```
-startup> RUN FF00
-[console -- ^E returns to the monitor]
+   ```
+   $ ./altairsim examples/cpm/cpm22-buffered.toml
+   ```
 
-56K CP/M 2.2b v2.3
-For Altair 8" Floppy
+   On **Windows**, the program is `altairsim.exe`, and the path uses backslashes:
 
-A>
-```
+   ```
+   > altairsim.exe examples\cpm\cpm22-buffered.toml
+   ```
 
-You are in CP/M. It is 1977. Type `DIR`:
+   The machine boots CP/M:
 
-```
-A>DIR
-A: L80      COM : LADDER   COM : ED       COM : ASM      COM
-A: DUMP     COM : XSUB     COM : PCGET    COM : LS       COM
-A: SUBMIT   COM : LOAD     COM : SURVEY   COM : VIEW     COM
-A: LADDER   DAT : LUNAR    BAS : M80      COM : MAC      COM
-A: MBASIC   COM : PIP      COM : STAT     COM : DDT      COM
-A: MOVCPM8  COM : NSWP     COM : SYSGEN   COM : ACOPY    COM
-A: OTHELLO  COM : STARTRK  BAS : TICTAK   BAS : WM       COM
-A: WM       HLP : CRC      COM : PCPUT    COM : AFORMAT  COM
-A: STARINS  BAS : IOBYTE   TXT
-A>
-```
+   ```
+   56K track-buffered CP/M 2.2b, booting off the 8" floppy in drive A.
+   You land at the A> prompt -- type DIR to see what is on the disk.
 
-An assembler, a debugger, Microsoft BASIC, a text editor, and Star Trek. Run one:
+   Drives B: through D: are empty. FORMAT one from CP/M, or MOUNT an image onto dsk0.
+   AltairSim X.Y.Z -- 8080, full speed.
+   machine: cpm22-buffered.  HELP for commands.
+   startup> RUN FF00
+   [console -- ^E returns to the monitor]
 
-```
-A>MBASIC
-```
+   56K CP/M 2.2b v2.3
+   For Altair 8" Floppy
 
-## What actually happened
+   A>
+   ```
 
-Nothing was faked, and it is worth knowing what the one command did, because the rest of the
-manual is built on it.
+2. Type `DIR` to see what is on the disk:
 
-The machine file named a **56K Altair with an 8″ floppy controller and a boot PROM at
-`FF00`**, put the disk image in drive 0, and then did one more thing: it typed `RUN FF00` for
-you. That is what the `startup>` line is telling you. **There is no `BOOT` command in this
-program** — booting a disk on an Altair meant setting the address switches to `FF00`, pressing
-EXAMINE, and then pressing RUN, so that is what the machine file says, in the operator's own
-words. (EXAMINE is the step that matters: the switches by themselves change nothing, and it is
-EXAMINE that loads them into the program counter. `RUN FF00` is precisely those two presses —
-see the *Monitor* document.) Anything you can type, a machine file can do; it gets no special
-powers.
+   ```
+   A>DIR
+   A: L80      COM : LADDER   COM : ED       COM : ASM      COM
+   A: DUMP     COM : XSUB     COM : PCGET    COM : LS       COM
+   A: SUBMIT   COM : LOAD     COM : SURVEY   COM : VIEW     COM
+   A: LADDER   DAT : LUNAR    BAS : M80      COM : MAC      COM
+   A: MBASIC   COM : PIP      COM : STAT     COM : DDT      COM
+   A: MOVCPM8  COM : NSWP     COM : SYSGEN   COM : W        COM
+   A: ACOPY    COM : OTHELLO  COM : STARTRK  BAS : TICTAK   BAS
+   A: WM       COM : WM       HLP : CRC      COM : PCPUT    COM
+   A: AFORMAT  COM : STARINS  BAS : IOBYTE   TXT : R        COM
+   A: HDIR     COM
+   A>
+   ```
 
-From there it is all real: the PROM read sector 0 off track 0, that loader pulled CP/M into
-high memory and jumped into the BIOS, and the BIOS printed its banner.
+   The disk has an assembler, a debugger, Microsoft BASIC, a text editor and Star Trek.
 
-## Where it found the disk — one base directory
+3. Type `MBASIC` to start Microsoft BASIC, and give it a line to run:
 
-You typed **one** path — the machine file — and the simulator found the rest itself: the disk
-image, named *inside* that file. Both point at the same place, and knowing where is the whole of
-how the program handles directories.
+   ```
+   A>MBASIC
+   BASIC-80 Rev. 5.21
+   [CP/M Version]
+   Copyright 1977-1981 (C) by Microsoft
+   Created: 28-Jul-81
+   21816 Bytes free
+   Ok
+   PRINT 2+2
+    4
+   Ok
+   ```
 
-- **The machine file on the command line** is found from **your shell** — the directory you were
-  in when you ran the command — because at that instant no machine exists yet.
-  `examples/cpm/cpm22-buffered.toml` is walked down from there.
-- **Everything after resolves against the machine's own directory** — the folder that `.toml`
-  lives in. The disk it mounts, a PROM it loads, and anything you type at the `altairsim>`
-  prompt (`MOUNT`, `LOAD`, `SYMBOLS LOAD`) all come from there. `cpm22-buffered.toml` mounts
-  `cpm22b23-56k.dsk` with no directory at all, and the simulator looks for it *beside the
-  `.toml`* — and so would a `MOUNT cpm22b23-56k.dsk` you type.
+4. Type `SYSTEM` to go back to the `A>` prompt.
 
-Here it is concretely. Say you unzipped the package into `~/altairsim` and launched it from
-there:
+## Stop, continue and leave
 
-```
-$ pwd
-/home/you/altairsim
-$ ./altairsim examples/cpm/cpm22-buffered.toml
-```
+1. Press **`Ctrl-E`**. The machine stops, and you get the monitor:
 
-- `examples/cpm/cpm22-buffered.toml` — **you** named it to the shell, so it is found from where
-  you stand: `~/altairsim/examples/cpm/cpm22-buffered.toml`.
-- `cpm22b23-56k.dsk` — the machine mounts it, so it is found in the machine's directory:
-  `~/altairsim/examples/cpm/cpm22b23-56k.dsk`. Type `MOUNT dsk0:drive1 cpm22b23-56k.dsk` and you
-  get that same file, from that same folder.
+   ```
+   A>
+   STOP -- the machine is still at CA9C. RUN resumes.
+   C0Z1M0E1I0 A=00 BC=007F DE=CA01 HL=BC0E SP=BC37 IE=1 PC=CA9C  CALL CA78
+   altairsim>
+   ```
 
-Copy that folder somewhere else and it still boots, because the disk's path is tied to the
-machine, not to you:
+2. Type `RUN`. The machine continues from the instruction where it stopped. Your `A>` prompt
+   is where you left it:
 
-```
-$ cp -R examples/cpm /tmp/mycpm
-$ ./altairsim /tmp/mycpm/cpm22-buffered.toml
-```
+   ```
+   altairsim> RUN
+   ```
 
-Your shell never left `~/altairsim` — the simulator does not change your working directory — yet
-the disk is now read from `/tmp/mycpm/cpm22b23-56k.dsk`, beside the machine file you named, and
-anything you type at the prompt is found there too. That is the whole reason every example is a
-self-contained folder you can copy anywhere and still boot: the disk, and everything you do to
-the machine, travels with the machine file.
+3. Press `Ctrl-E` again, and type `QUIT` to leave the program:
 
-To see it, ask — **`SHOW PATHS`** at the `altairsim>` prompt prints the base directory (and the
-one folder kept separate, the hostbridge sandbox):
+   ```
+   altairsim> QUIT
+   ```
 
-- **the base directory** — the machine's own folder. What a machine file mounts, and what you
-  *type* (`MOUNT`, `LOAD`, `SAVE`, `DO`, or a `-s` script), both resolve against it. For a
-  built-in machine, which has no folder of its own, it is the directory you launched from.
-- **the sandbox root** — the single directory the hostbridge file-transfer board may reach, and
-  cannot escape.
-
-### The `./`, and running from anywhere
-
-Every command so far began with `./altairsim` — which means *the `altairsim` in **this** folder*.
-A fresh unzip drops the program into a directory your shell does not search for commands, so you
-have to point at it, and `./` is how you say *look right here*.
-
-You can make that unnecessary by **installing** the program — copying it into one of the
-directories your shell already searches, its **`PATH`** (on macOS and Linux, `/usr/local/bin` is
-the usual one). Once it is on your `PATH` you drop the `./` and type just `altairsim`, from any
-directory at all — including from *inside* an example folder:
-
-```
-$ cp altairsim /usr/local/bin/          # once: put it on your PATH
-$ cd examples/cpm
-$ pwd
-/home/you/altairsim/examples/cpm
-$ altairsim cpm22-buffered.toml
-```
-
-Now your shell is *inside* `examples/cpm`, so the machine file is simply `cpm22-buffered.toml`
-with no directory — found from where you are — and the disk it mounts is found beside the file,
-as always. The rule did not change; only where the program lives, and which directory you ran it
-from, did.
-
-## Getting back out — `^E`
-
-Press **`^E`** (Control-E). This is the **STOP** switch — `^E` presses the Altair's front-panel
-STOP for you — and it is how you take the keyboard back from a running program:
-
-```
-A>
-STOP -- the machine is still at CA9C. RUN resumes.
-C0Z1M0E1I0 A=00 BC=007F DE=CA01 HL=BC0E SP=BC37 IE=1 PC=CA9C  CALL CA78
-altairsim>
-```
-
-You are back at the monitor, and **the machine is stopped exactly where it stood**. The
-processor executes nothing while this prompt is up: the `PC=CA9C` above is where it will still
-be in an hour. That is what makes the prompt useful — you can read memory, single-step, and set
-a breakpoint, and none of it is a moving target.
-
-Stopped is not **lost**. STOP is not RESET and it is not POWER: every register, every byte of
-memory, the disk in the drive and the CPU's place in its own program are all exactly as they
-were. That is the whole content of *"the machine is still at CA9C"* — it is telling you the
-machine is intact and says where to pick it up.
-
-Why `^E` and not `^C`? Because **`^C` belongs to the software running on the machine** — CP/M
-warm-boots on it and BASIC breaks on it — so the host intercepts `^E` before the running
-program is ever offered the byte, and no program inside the machine can take it from you. Everything else, `^C` included, goes straight
-through. (If `^E` collides with something you need, `CONSOLE stop=1D` moves it to `^]`.)
-
-## Going back in — `RUN`
-
-```
-altairsim> RUN
-```
-
-That is all. The machine never stopped, so it simply picks up where it was, and your `A>`
-prompt is where you left it.
-
-## Leaving — `QUIT`
-
-```
-altairsim> QUIT
-```
-
-There is no `EXIT`. `Q` will do.
-
-## The three things to remember
+These are the three commands to remember:
 
 | | |
 |---|---|
-| **`^E`** | stop the CPU, back to the monitor. The machine stops where it stands, and loses nothing. |
-| **`RUN`** | start the CPU running again. |
-| **`QUIT`** | done. |
+| **`Ctrl-E`** | Stop the machine, and go to the monitor. The machine loses nothing. |
+| **`RUN`** | Start the machine again, from where it stopped. |
+| **`QUIT`** | Leave the program. `Q` is enough. There is no `EXIT` command. |
 
-## Careful: the disk is real, and there is no undo
+## What `Ctrl-E` does
 
-The disk image is mounted **read/write**, because that is what a machine with a disk in it is —
-so anything you do in CP/M happens to the file on your host, with nothing keeping a copy. Two
-ways to be safe:
+`Ctrl-E` does what the STOP switch on the front panel does. **The machine stops at the
+instruction where it was, and it loses nothing.** STOP is not RESET, and it is not POWER. The
+registers, the memory, the disk in the drive and the program counter do not change. While the
+machine is stopped, you can read memory, step one instruction at a time and set breakpoints.
 
-- **Write-protect it.** `MOUNT dsk0:drive0 examples/cpm/cpm22b23-56k.dsk RO` refuses every write at the
-  controller, so the file cannot change however the program behaves. Use it to *look around*. But
-  the program is not *told* the disk is protected, so a program that means to write may not survive
-  being refused — mount `RO` to read, not to run a CP/M you expect to save your work.
-- **Copy the folder** when you actually intend to write. It is self-contained and boots from
-  anywhere:
+`Ctrl-C` is not the stop key, because **`Ctrl-C` belongs to the guest**. CP/M does a warm boot
+when you press `Ctrl-C`, and BASIC stops the program. The program reads `Ctrl-E` before the
+guest can get it, and every other key goes to the guest. If a guest needs `Ctrl-E`, type
+`SET CONSOLE stop=1D` at the monitor. The stop key is then `Ctrl-]`.
 
-  ```
-  $ cp -R examples/cpm my-cpm
-  $ ./altairsim my-cpm/cpm22-buffered.toml
-  ```
+## Before you change the disk
 
-One non-obvious trap: **this BIOS does not write to the disk when CP/M closes a file** — it
-buffers a whole track and flushes it the next time it reads the console. So **get back to the
-`A>` prompt before you quit or copy the image**, or the last write never lands. The disks
-chapter explains all three in full.
+**Copy the folder before you write to the disk.** The machine mounts the disk image
+read/write. Everything that you do in CP/M changes the file on your computer, and the program
+keeps no copy. The folder has all that the machine needs, and the copy boots from any place:
 
-## No disk? Start with a tape instead
+```
+$ cp -R examples/cpm my-cpm
+$ ./altairsim my-cpm/cpm22-buffered.toml
+```
 
-If you would rather see something boot from nothing at all — no disk, no PROM, the bootstrap
-toggled in by hand exactly as MITS printed it in the manual — turn to the tapes chapter and
-load Altair 4K BASIC 3.1. It is the more instructive machine, and it is the one that shows you
-what an Altair actually was.
+**Go back to the `A>` prompt before you quit or copy the image.** This BIOS keeps a full track
+in memory. It writes the track to the disk the next time it reads the console. If you quit
+before that, the last write is lost.
+
+To look at a disk that you do not want to change, write-protect it at the monitor:
+
+```
+altairsim> MOUNT dsk0:drive0 cpm22b23-56k.dsk WP
+```
+
+The controller then refuses every write. CP/M does not know that the disk is write-protected,
+and a program that tries to write can fail. Do not use `WP` for a disk that you save work on.
+The disks chapter tells you more.
+
+## What happened when it booted
+
+The machine file describes a **56K Altair with an 8″ floppy disk controller and a boot PROM at
+`FF00`**. It puts the disk image in drive 0, and it types `RUN FF00` for you. The `startup>`
+line shows this command.
+
+**There is no `BOOT` command.** To boot a disk on a real Altair, you set the address switches
+to `FF00`, pressed EXAMINE, and then pressed RUN. `RUN FF00` does the same thing. A machine file
+can do only what you can type at the monitor.
+
+The rest of the boot is real software. The PROM loads a boot loader from the disk. The boot
+loader loads CP/M into memory, and the BIOS of CP/M prints its banner.
+
+The machine file names its disk `cpm22b23-56k.dsk`, with no folder. The program looks for the
+disk in the folder of the machine file. For this reason, the copy in `my-cpm` finds its own
+disk.
+
+## Where to go next
+
+- **Other machines.** Type `./altairsim --list` to see the built-in machines. The machines
+  chapter describes them.
+- **A machine with no disk.** The tapes chapter loads Altair 4K BASIC from a cassette. You
+  enter the bootstrap by hand, from the listing that MITS printed in its manual.
+- **Complete sessions.** The worked examples chapter has more, from start to end.

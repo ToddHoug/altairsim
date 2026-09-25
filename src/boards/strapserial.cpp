@@ -23,7 +23,7 @@ void StrapSerialBoard::setResolver(EndpointResolver r) { g_resolver = std::move(
 //
 // A profile is JUST the strap bundle -- where the two ports sit, which status bits
 // carry DAV/TBMT, and whether the inverter gate is engaged. A strap-serial channel's
-// jumpers let it imitate each of these; the first, `sior0`, is the MITS-SIO-Rev-0
+// jumpers let it imitate each of these; the first, `sior1`, is the MITS-SIO-Rev-1
 // personality and the default.
 //
 // TO ADD A CARD: add a struct to this vector. Its `name` becomes a `profile` choice,
@@ -31,15 +31,24 @@ void StrapSerialBoard::setResolver(EndpointResolver r) { g_resolver = std::move(
 // ---------------------------------------------------------------------------
 const std::vector<SerialBuiltin>& serialBuiltins() {
     static const std::vector<SerialBuiltin> kBuiltins = {
-        // MITS SIO Rev 0 (AY-5-1013) -- the DEFAULT. Status/data at BASE+0/BASE+1; DAV is
+        // MITS SIO Rev 1 (AY-5-1013) -- the DEFAULT. Status/data at BASE+0/BASE+1; DAV is
         // status bit 0, TBMT is bit 7, both routed through the inverter gate (asserted reads
-        // 0, i.e. active low). This is exactly what the SSM 8080 System Monitor expects on
-        // its console (roms/SSM-8080MON/SSM_8080MonV10.asm: spins while D0=1 waiting for a
-        // byte, spins while D7=1 waiting to send).
-        {"sior0", "MITS SIO Rev 0 (AY-5-1013): status/data at BASE+0/BASE+1, "
+        // 0, i.e. active low). This is the factory errata modification that moved the two
+        // flags to bits 0 and 7 (reference/88-SIO Rev 0 & 1.pdf), and exactly what the SSM
+        // 8080 System Monitor expects on its console (roms/SSM-8080MON/SSM_8080MonV10.asm:
+        // spins while D0=1 waiting for a byte, spins while D7=1 waiting to send).
+        {"sior1", "MITS SIO Rev 1 (AY-5-1013): status/data at BASE+0/BASE+1, "
                   "DAV=bit0 TBMT=bit7, inverter gate on (active low). The default and the "
                   "SSM 8080 monitor console",
          SerialStraps{/*status*/ 0x00, /*data*/ 0x01, /*dav*/ 0, /*tbmt*/ 7, /*inverterGate*/ true}},
+
+        // MITS SIO Rev 0 (AY-5-1013), as shipped: DAV is status bit 5, TBMT is bit 1, both
+        // TRUE sense (inverter gate off). The inverted ready bits at 7/0 a real Rev 0 also
+        // carries are a separate pair a two-bit strap channel does not present -- the same
+        // choice the IO-4 manual's own Altair-Rev-0 recipe makes (io4 `altair-rev0`).
+        {"sior0", "MITS SIO Rev 0 (AY-5-1013): status/data at BASE+0/BASE+1, "
+                  "DAV=bit5 TBMT=bit1, inverter gate off (active high)",
+         SerialStraps{/*status*/ 0x00, /*data*/ 0x01, /*dav*/ 5, /*tbmt*/ 1, /*inverterGate*/ false}},
 
         // Cromemco TU-ART (TMS 5501): status read and data at consecutive ports; DAV
         // is status bit 6 (RBL, receive buffer loaded), TBMT is bit 7 (SBE, send buffer
@@ -243,7 +252,7 @@ std::vector<Property> StrapSerialBoard::channelProperties(size_t idx) {
     // THE PROFILE SELECTOR. Its choices are `custom` plus every built-in name. Choosing a
     // built-in copies its straps into the live fields; choosing `custom` leaves them as they
     // are. The individual straps below are still settable AFTER a profile is chosen -- CONFIG
-    // SAVE writes `profile` first (it is first here), so a saved `profile=sior0` + an
+    // SAVE writes `profile` first (it is first here), so a saved `profile=sior1` + an
     // overridden `status_port` reload in the right order.
     {
         Property x;

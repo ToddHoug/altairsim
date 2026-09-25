@@ -76,6 +76,20 @@ execute_process(
 )
 expect_basic("${out}" "`altairsim examples/basic/basic4k.toml` from the dist root did not boot BASIC")
 
+# ...and its .ini twin, run with -s from the dist root (#575). The script is named from
+# where you launched; the tape and loader it names lie beside IT, not beside you. Before
+# #575 a -s script's lines resolved against the machine's folder, so this failed while
+# `DO examples/basic/basic4k.ini` worked.
+execute_process(
+  COMMAND           "${SIM}" -s examples/basic/basic4k.ini
+  WORKING_DIRECTORY "${dist}"
+  INPUT_FILE        "${SRC}/tests/acceptance/basic4k.keys"
+  OUTPUT_VARIABLE   out
+  ERROR_VARIABLE    out
+  TIMEOUT           60
+)
+expect_basic("${out}" "`altairsim -s examples/basic/basic4k.ini` from the dist root did not boot BASIC")
+
 # ---- 2a. THE SAME BASIC, OFF A WAV CASSETTE -- the ACR's audio front end end to end. ---
 #
 # basic4k.toml mounts a decoded .tap; basic4k-wav.toml mounts "4K BASIC Ver 3-1.wav", the
@@ -236,6 +250,44 @@ execute_process(
   TIMEOUT           60
 )
 expect_cpm("${out}" "`altairsim examples/cpm/cpm22-buffered.toml` from the dist root did not boot CP/M")
+
+# The flagship's .ini twin, by -s from the dist root: the floppy is beside the script (#575).
+execute_process(
+  COMMAND           "${SIM}" -s examples/cpm/cpm22-buffered.ini
+  WORKING_DIRECTORY "${dist}"
+  INPUT_FILE        "${SRC}/tests/acceptance/cpm-dir.keys"
+  OUTPUT_VARIABLE   out
+  ERROR_VARIABLE    out
+  TIMEOUT           60
+)
+expect_cpm("${out}" "`altairsim -s examples/cpm/cpm22-buffered.ini` from the dist root did not boot CP/M")
+
+# ---- 4a. THE FDC+'s 1.5 MB FLOPPY -- a disk the boot PROM cannot read, booted anyway. ----
+#
+# cpm22-fdcplus-hdf.toml puts CPM22-48K-HDF.dsk in an FDC+ at drive type 5 and boots it with
+# the stock DBL, which knows nothing of 10,240-byte tracks. The card's firmware hands DBL a
+# fake Altair sector of its own, whose loader reads the real track 0 -- so the banner alone
+# proves the fake sector, the loader's no-handshake track read at 2 MHz, and the BIOS after
+# it; `A: ASM      COM` is the directory read off the image.
+function(expect_hdf out why)
+  foreach(want "48K CP/M 2.2b v1.2" "For Altair 1.5Mb Floppy" "A>" "A: ASM      COM")
+    string(FIND "${out}" "${want}" hit)
+    if(hit LESS 0)
+      message(FATAL_ERROR "examples: ${why}\n"
+                          "  '${want}' never reached the terminal.\n--- output ---\n${out}")
+    endif()
+  endforeach()
+endfunction()
+
+execute_process(
+  COMMAND           "${SIM}" cpm22-fdcplus-hdf.toml
+  WORKING_DIRECTORY "${cpm}"
+  INPUT_FILE        "${SRC}/tests/acceptance/cpm-dir.keys"
+  OUTPUT_VARIABLE   out
+  ERROR_VARIABLE    out
+  TIMEOUT           60
+)
+expect_hdf("${out}" "`cd examples/cpm && altairsim cpm22-fdcplus-hdf.toml` did not boot CP/M")
 
 # ---- 4b. THE HARD DISK -- CP/M booted through the 88-HDSK Datakeeper controller. -------
 #
@@ -412,8 +464,10 @@ foreach(want
         "loaded 127 bytes"   # kscope.toml's startup LOADed KSCOPE.HEX from beside itself
         "daz0"               # the Dazzler is in the machine...
         "Dazzler"            # ...and mapped at its ports (SHOW BUS IO)
-        "OUT 0E"             # the running program turns the card on...
-        "OUT 0F")            # ...and sets its format -- so KSCOPE really drives the Dazzler
+        "OUT (0E)"           # the running program turns the card on...
+        "OUT (0F)")          # ...and sets its format -- so KSCOPE really drives the Dazzler
+                             # The parentheses are Z80 syntax: the machine has a `z80` board in
+                             # it now, and DISASM speaks the mnemonics of the CPU that is fitted.
   string(FIND "${out}" "${want}" hit)
   if(hit LESS 0)
     message(FATAL_ERROR "examples: the Dazzler example did not behave as the README says.\n"

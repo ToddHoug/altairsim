@@ -13,7 +13,7 @@
 // first such board on the list; its datasheet lives at reference/SSM IO-4 2P+2S IO Board.md.)
 //
 // This is NOT a new engine. It is StrapSerialBoard (src/boards/strapserial.h) with TWO
-// channels: "a" strapped as MITS SIO Rev 0 at ports 0/1 (the default the SSM 8080 monitor
+// channels: "a" strapped as MITS SIO Rev 1 at ports 0/1 (the default the SSM 8080 monitor
 // expects), and "b" the same shape relocated to ports 2/3. Every strap on either channel
 // (profile / status_port / data_port / dav / tbmt / inverter_gate / baud / connect) is
 // overridable. Each channel is configured under its own unit in the machine file:

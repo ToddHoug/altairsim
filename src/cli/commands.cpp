@@ -289,7 +289,8 @@ static const std::vector<CommandDef> kCommands = {
      "It runs against whatever machine is loaded, so a DO file usually opens with MACHINE\n"
      "to pick its own base -- `MACHINE default` then MOUNT/RUN, or `MACHINE none` then\n"
      "BOARDS ADD to build one from scratch. On the command line, `altairsim -s FILE` runs\n"
-     "the same file at startup and exits with its status.\n"
+     "the same file at startup and exits with its status. FILE is named from where you\n"
+     "launched, and the paths in it are relative to it, as in a DO file.\n"
      "\n"
      "It is a LINE RUNNER, not SIMH's scripting language: no arguments, no IF or GOTO.\n"
      "For conditional or interactive automation, drive a live guest over --mcp.\n"
@@ -312,7 +313,7 @@ static const std::vector<CommandDef> kCommands = {
      "  MACHINE none ; BOARDS ADD 8080 cpu0 ; ... ; POWER ; RUN 0"},
 
     // ---- everything else, ranked by how often you type it ----
-    {"SET", true, nullptr, "SET <id>[:<u>]|CONSOLE|DISPLAY|REG|BUS <k>=<v>",  // SE (beats SEARCH)
+    {"SET", true, nullptr, "SET <id>[:<u>]|CONSOLE|DISPLAY|TERMINAL|MACHINE|REG|BUS <k>=<v>",  // SE (beats SEARCH)
      "Each property has a base of its own -- a port is hex, a baud rate is decimal.\n"
      "SHOW <id> lists them all, with each value.\n"
      "\n"
@@ -323,18 +324,21 @@ static const std::vector<CommandDef> kCommands = {
      "CONSOLE and DISPLAY are the HOST's terminal and video window rather than\n"
      "boards, and they take settings the same way. REG is a CPU register (see REGS),\n"
      "and BUS is the backplane's own diagnostics rather than anything plugged into it.\n"
+     "MACHINE is the machine itself: its name is what SHOW MACHINE prints, the video\n"
+     "window's title, and what CONFIG SAVE writes.\n"
      "  SET mem0 fill=zero\n"
      "  SET mem0 phantom=read\n"
      "  SET acr0:tape mode=record   the tape in the recorder, not the recorder\n"
      "  SET vdm0 width=1024      how wide the video window opens, in pixels (auto = ~half the screen)\n"
      "  SET DISPLAY focus=on     the video window takes the keyboard, not the terminal\n"
      "  SET DISPLAY crt=on       paint the window like the period tube: soft phosphor and 4:3\n"
+     "  SET MACHINE name=mybox   what CONFIG SAVE calls the machine\n"
      "  SET REG A=3F             a register in the CPU that is in the socket\n"
      "  SET BUS UNCLAIMED=WARN   warn on a cycle no board answered\n"
      "                           (also CONTENTION=WARN|ERROR|SILENT, UNCLAIMED=WARN|HALT|SILENT)"},
     {"SHOW", true, nullptr,
      "SHOW <id>|BOARDS|BOARD <type> [UNITS]|MACHINES|MACHINE [<name>]|BUS [MAP|IO|IRQ|CONTENTION]|"
-     "ROMS|MOUNTS|PATHS|CONSOLE|DISPLAY|SYMBOLS|VERSION",
+     "ROMS|MOUNTS|PATHS|CONSOLE|DISPLAY|SYMBOLS|CLOCK|VERSION",
      "  SHOW mem0        regions and properties\n"
      "  SHOW BOARDS      the board types you can add\n"
      "  SHOW BOARD sol   one type's description and properties (add UNITS for just those)\n"
@@ -349,6 +353,7 @@ static const std::vector<CommandDef> kCommands = {
      "  SHOW TERMINAL    the built-in terminal's transforms (strip7out, cr, bsdel, ...)\n"
      "  SHOW JOYSTICKS   the host game controllers a D+7A can read (SDL builds)\n"
      "  SHOW SYMBOLS     the loaded symbols (SHOW SYMBOLS SIO* filters); load them with SYMBOLS\n"
+     "  SHOW CLOCK       emulated time: T-states since POWER, and what they are in seconds\n"
      "  SHOW ROMS        the ROM images built into this binary, and where each came from\n"
      "  SHOW VERSION     which build this is, and the commit it was built from"},
     {"DEPOSIT", true, nullptr, "DEPOSIT <addr> <bytes...>",  // DE
@@ -563,8 +568,9 @@ static const std::vector<CommandDef> kCommands = {
     // -- which nothing else wanted -- and it gets out of DISASM's way, which drops
     // to DI now that the D-cluster is one shorter.
     {"UNMOUNT", true, nullptr, "UNMOUNT <id>:<u>",  // U
-     "The socket is then EMPTY -- those pages float to FF, exactly as a card with\n"
-     "no chip in it does.\n"
+     "Takes the disk, tape or ROM out of the unit. A drive or a tape recorder is then\n"
+     "empty. A ROM socket is then empty too: those pages float to FF, as on a board\n"
+     "with no chip in the socket.\n"
      "  U dsk0:drive0"},
     {"DISCONNECT", true, nullptr, "DISCONNECT <id>:<u>",  // DISC
      "The line then goes nowhere. NOT an error: an unconnected 6850 sits there with\n"
@@ -637,11 +643,13 @@ static const std::vector<CommandDef> kCommands = {
      "  loopback    the unit's own transmit wired back to its receive, for testing\n"
      "  scripted    a terminal with a caller in place of a human -- what the MCP tools\n"
      "              and the test suite type into. No tty need exist.\n"
-     "  socket:     PORT alone LISTENS: that is the telnet-in case. HOST:PORT CALLS OUT.\n"
-     "              A RAW pipe -- no echo, no protocol.\n"
+     "  socket:     PORT alone LISTENS; HOST:PORT CALLS OUT. A RAW pipe -- no echo, no\n"
+     "              protocol -- for a PROGRAM at the far end (another machine, a\n"
+     "              transfer). ?banner greets each caller to a listening port.\n"
      "  telnet:     the same, but speaks the Telnet protocol, so a stock `telnet` client\n"
      "              gets the terminal-server handshake: no double echo, keys sent one at a\n"
-     "              time. Use it in place of socket: when a HUMAN telnets in to a BBS.\n"
+     "              time. Use it when a PERSON telnets in. A listening port greets each\n"
+     "              caller with the machine, line and port; ?banner=off stops it.\n"
      "  serial:     a real port on this host. It is opened at 9600 8N1 and then\n"
      "              immediately re-programmed by the board, which is the only thing that\n"
      "              knows what it is strapped to.\n"

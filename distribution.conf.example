@@ -1,0 +1,74 @@
+# distribution.conf -- THIS site's release machines. The procedure is generic and lives in the
+# release skills (.claude/skills/release-*); what is true only of YOUR network lives here.
+#
+#   cp distribution.conf.example distribution.conf      # then fill in your values
+#
+# distribution.conf is gitignored. This template is tracked, so change it whenever a skill
+# starts reading a new key.
+#
+# FORMAT: KEY=value, one per line. No quotes, no spaces around `=`, no comment after a value.
+# That keeps it readable three ways: sh can `. ./distribution.conf`, PowerShell can split each
+# line on the first `=`, and an assistant can just read it. Leave a value empty for "none".
+#
+# PATHS: use forward slashes, even on Windows (c:/altairsim-dev); both git and cmake take
+# them. A worker's REPO is relative to its ssh login directory unless it starts with a drive
+# or a `/`.
+#
+# The coordinator is the one machine that tags, holds GitHub credentials, and collects the
+# archives. Every other box is a WORKER, named by its package target in capitals:
+#   MACOS_ARM64  MACOS_X86_64  WINDOWS_X86_64  LINUX_X86_64
+
+# --- The coordinator -------------------------------------------------------------------------
+
+# Which target the coordinator builds itself.
+COORDINATOR_TARGET=macos-arm64
+# Name the workers scp their archive to. Use a name that does not change, not a DHCP address.
+COORDINATOR_HOST=dist.example.com
+COORDINATOR_USER=builder
+# The coordinator's repo dist/, relative to COORDINATOR_USER's home. Workers scp into it.
+COORDINATOR_DIST=src/altairsim/dist
+
+# --- The workers, as the coordinator reaches them over ssh -----------------------------------
+#
+# <TARGET>_SSH       user@host for `ssh`. Empty = no worker for that target at this site.
+# <TARGET>_REPO      the worker's checkout.
+# <TARGET>_PARALLEL  yes, or no on a machine short of RAM (the compiler gets OOM-killed).
+# <TARGET>_PATH      directories to put in front of PATH for a non-login ssh shell, where the
+#                    profile that finds cmake is not read (a cmake tarball's bin, for one).
+
+MACOS_X86_64_SSH=builder@192.0.2.22
+MACOS_X86_64_REPO=src/altairsim
+MACOS_X86_64_PARALLEL=yes
+MACOS_X86_64_PATH=/Users/builder/opt/cmake/CMake.app/Contents/bin
+
+WINDOWS_X86_64_SSH=builder@192.0.2.29
+WINDOWS_X86_64_REPO=c:/altairsim-dev
+WINDOWS_X86_64_PARALLEL=yes
+WINDOWS_X86_64_PATH=
+
+LINUX_X86_64_SSH=builder@192.0.2.28
+LINUX_X86_64_REPO=src/altairsim
+LINUX_X86_64_PARALLEL=no
+LINUX_X86_64_PATH=
+
+# Targets that are ONE physical machine (a VM and its host), comma-separated. Build them one
+# at a time: together they only fight over the same CPU and RAM. Empty if none.
+SHARED_HOST=macos-x86_64,linux-x86_64
+
+# --- Hardware tests (ctest -L hw), per box ---------------------------------------------------
+#
+# <TARGET>_SERIAL_A / _SERIAL_B: two serial ports joined by a null modem cable, for the
+# serial-hw test (it reads them as ALTAIR_SERIAL_A / ALTAIR_SERIAL_B). On macOS name the
+# /dev/cu.* device, not /dev/tty.*. On Windows, COM3 and so on. Leave both empty on a box with
+# no cable; the test then skips, and the release carries on with a warning.
+#
+# The live TNFS test needs no key here: it runs when de-tnfsd is on PATH.
+
+MACOS_ARM64_SERIAL_A=
+MACOS_ARM64_SERIAL_B=
+MACOS_X86_64_SERIAL_A=
+MACOS_X86_64_SERIAL_B=
+WINDOWS_X86_64_SERIAL_A=
+WINDOWS_X86_64_SERIAL_B=
+LINUX_X86_64_SERIAL_A=
+LINUX_X86_64_SERIAL_B=

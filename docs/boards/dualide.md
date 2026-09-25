@@ -100,7 +100,7 @@ See `reference/dual-ide-card.md` for the complete tables and BIOS fragments.
 
 ## Verification
 
-- **Unit** (`tests/test_dualide.cpp`, `Clock c;` first): drives the 8255/ATA strobe engine over a
+- **Unit** (`tests/test_dualide.cpp`): drives the 8255/ATA strobe engine over a
   `cardimg`/`MemoryMedia` fixture — the WRITE→READ sector round trip at `LBA·512`, the status byte
   vs `IDEwaitnotbusy`/`IDEwaitdrq`, RST aborting a transfer, the three-register LBA, the two CF
   sockets and the drive-select port, an empty socket floating `0xFF`, write-protect, the port

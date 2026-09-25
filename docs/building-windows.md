@@ -3,7 +3,7 @@
 **Status (2026-07-15): builds, passes the full test suite, and the win32 platform
 layer is field-proven with MSVC.** The `src/platform/win32/` layer was written on
 macOS and had never been through a compiler until GitHub Actions CI was added. It now
-**builds and links cleanly** on `windows-latest` (MSVC, Winsock via `ws2_32`), **all
+**builds and links cleanly** on `windows-2025-vs2026` (MSVC, Winsock via `ws2_32`), **all
 registered tests pass** on native Windows, and the serial, socket and terminal
 implementations are each proved against the real world by a `ctest -L hw` leg — see §5.
 
@@ -22,7 +22,8 @@ system C/C++ runtime and `ws2_32` (Winsock).
 **A clean Windows 10 22H2 was taken from nothing to a working build on 2026-07-20** — MSVC Build
 Tools, CMake/Ninja and Git installed with only `curl.exe`, then `altairsim` built from a plain
 PowerShell and the suite run. That walk-through, with the commands and the traps a bare machine
-actually has, is **§1.1**.
+actually has, is **§1.1** — and it is now one script, **`tools\windows\RUN-ME-setup-windows-worker.bat`**,
+which also sets up ssh access so another computer can drive the build.
 
 ---
 
@@ -33,8 +34,14 @@ compiler:
 
 | Option | What it is | Free? |
 |---|---|---|
-| **Build Tools for Visual Studio 2022** | Command-line MSVC toolchain, **no IDE** — all you need to build from CMake | Free, no conditions |
-| **Visual Studio Community 2022** | Full IDE + the same MSVC compiler | Free for individuals, open source, and small orgs |
+| **Build Tools for Visual Studio 2026** | Command-line MSVC toolchain, **no IDE** — all you need to build from CMake | Free, no conditions |
+| **Visual Studio Community 2026** | Full IDE + the same MSVC compiler | Free for individuals, open source, and small orgs |
+
+**Visual Studio 2026, not 2022 (since 2026-09-21).** CI builds every PR on GitHub's
+`windows-2025-vs2026` image, and the release is built with the same Visual Studio, so what ships
+comes from the compiler every PR was checked with. When they differed, a warning that only 2022's
+compiler reports got through CI. VS 2022 still compiles the tree, but it is no longer what anything
+here is checked with. If both are installed, make sure the build uses 2026's (§2).
 
 Either one, from <https://visualstudio.microsoft.com/downloads/> (Community is on
 the main page; Build Tools is lower down under "Tools for Visual Studio"). Pick
@@ -44,7 +51,7 @@ and its debugger (handy for §6).
 In the installer, check the **"Desktop development with C++"** workload. That one
 box installs everything needed:
 
-- **MSVC v143** — the x64/x86 C++ compiler (C++20).
+- **MSVC v145** — the x64/x86 C++ compiler (C++20).
 - **Windows 11 SDK** (or 10 — either is fine).
 - **C++ CMake tools for Windows** — this bundles **CMake** *and* **Ninja**, so you
   usually do **not** need a separate CMake install.
@@ -55,11 +62,47 @@ Optionally install the **GitHub CLI** (`gh`) from <https://cli.github.com/> for 
 
 | Need | Minimum | Comes from |
 |---|---|---|
-| C++20 compiler | MSVC v143 (VS 2022) | Desktop development with C++ |
+| C++20 compiler | MSVC v145 (VS 2026) | Desktop development with C++ |
 | CMake | ≥ 3.20 | bundled with that workload |
 | git | any | Git for Windows |
 
 ### 1.1 From a bare machine, scripted — the reproducible route
+
+> **The short version: double-click `tools\windows\RUN-ME-setup-windows-worker.bat`.** (Not the
+> `.ps1` beside it — double-clicking that only opens it in Notepad.) It approves its own elevation
+> (one UAC prompt) and does everything in this section, plus the rest of a build worker: OpenSSH
+> Server with the firewall open, the ssh key of the computer that will connect (it asks you to
+> paste one; press Enter to skip), the static SDL3 of §6 approach C, and no sleeping on AC power.
+> **The repo is the checkout you run it from** — it is used exactly as it is (no clone, no fetch,
+> `origin` untouched). Only a copy taken out of the repo needs `-RepoDir <folder>`, and then it
+> clones there. It ends by configuring altairsim and **requiring** `SDL3 found -- video boards
+> enabled (windowed)`; add `-Build` to run the full Release build and `ctest -LE slow` as well.
+>
+> **Safe to run again.** Every step checks first and skips what is done. Each line is labelled
+> `[changed]`, `[already]`, `[check]` or `[todo]`, and the summary at the end says what *this
+> run* changed on the machine — on a finished machine, nothing. It deliberately leaves Git Bash's
+> `bin` directory off `PATH` (System32's `bash.exe` is WSL, so which `bash` you got would be a
+> coin toss) and it looks only for Visual Studio **2026** (18.x) — Build Tools, or a Community
+> that is already there. An older Visual Studio on the same machine stays installed, but its
+> CMake and Ninja are taken off the user `PATH`, because they would be found first and 2022's
+> CMake cannot use the 2026 generator. A `build\` folder made with another generator is cleared
+> and made again (`-Build` only). If a previous uninstall left debris in the Build Tools folder —
+> which the installer refuses to install over — it clears that folder, but only when no Visual
+> Studio instance is registered there.
+>
+> **Verified 2026-09-21** on Windows 10 22H2, from scratch and again as a no-op (PR #511), with
+> Visual Studio 2022. **Moved to 2026 the same day** and verified on a machine that already had
+> Community 2026 beside Build Tools 2022 (swapped the `PATH` entries, then a no-op re-run; `-Build`
+> cleared a 2022 `build\` and passed `ctest -LE slow`), and on a machine with only Build Tools
+> 2022, where it installed Build Tools 2026 itself and configured with the 2026 generator.
+> **Not yet exercised:** `-Build`, a pristine machine with no
+> Visual Studio at all, the OpenSSH and Git *installation* paths (both were already present), and
+> the `-RepoDir` clone path (a copy of the script taken out of the repo).
+> It makes **no scp delivery key** — that stays a manual step, because its public half has to be
+> added on the coordinator (`DISTRIBUTION.md` §4.5).
+>
+> The manual commands below are what the script runs, kept here so you can see the reasons and
+> do one step by hand.
 
 **Proven end to end on a clean Windows 10 22H2 (build 19045), 2026-07-20.** The GUI installer
 above works, but a machine set up by clicking is not reproducible and the next person cannot
@@ -82,30 +125,34 @@ Files, so it needs administrator rights: open **Windows PowerShell as administra
 one step (the plain 64-bit console — not x86, not ISE).
 
 ```powershell
-curl.exe -L -o "$env:TEMP\vs_BuildTools.exe" https://aka.ms/vs/17/release/vs_BuildTools.exe
+curl.exe -L -o "$env:TEMP\vs_BuildTools.exe" https://aka.ms/vs/18/stable/vs_BuildTools.exe
 Start-Process "$env:TEMP\vs_BuildTools.exe" -Wait -ArgumentList `
   '--quiet','--wait','--norestart', `
+  '--installPath',"`"${env:ProgramFiles(x86)}\Microsoft Visual Studio\18\BuildTools`"", `
   '--add','Microsoft.VisualStudio.Workload.VCTools', `
   '--add','Microsoft.VisualStudio.Component.VC.CMake.Project', `
   '--includeRecommended'
 "exit: $LASTEXITCODE"    # 0 or 3010 = success
 ```
 
-`Workload.VCTools` is the C++ compiler and Windows SDK; `VC.CMake.Project` bundles CMake **and**
-Ninja. It is a multi-GB download and installs silently for several minutes — `Start-Process
+`vs/18/stable` is Visual Studio 2026's installer (`vs/17/release` is 2022's; there is no
+`vs/18/release`). `Workload.VCTools` is the C++ compiler and Windows SDK; `VC.CMake.Project`
+bundles CMake **and** Ninja. It is a multi-GB download and installs silently for several minutes — `Start-Process
 -Wait` blocks until it is genuinely done. Verify it landed (nothing is put on `PATH`, so `where
 cl` will fail — that is expected, and §1.1's next step fixes it):
 
 ```powershell
 $vsw = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-$vs  = & $vsw -products * -latest -property installationPath
-"$vs"                                                    # ...\2022\BuildTools
-Get-ChildItem "$vs\VC\Tools\MSVC" | Select-Object Name  # e.g. 14.44.35207
+$vs  = & $vsw -products * -version '[18.0,19.0)' -latest -property installationPath
+"$vs"                                                    # ...\18\BuildTools
+Get-ChildItem "$vs\VC\Tools\MSVC" | Select-Object Name  # e.g. 14.51.36231
 ```
 
 **Put CMake and Ninja on your PATH — the step the GUI docs skip.** Build Tools installs them
 under the VS tree, not on `PATH`, so a plain shell cannot invoke `cmake` until you add them. Do
-it once, persistently (user scope — no admin needed):
+it once, persistently (user scope — no admin needed). If an older Visual Studio's CMake is
+already on your `PATH`, take it off first: it is found before this one, and 2022's CMake cannot
+use the 2026 generator.
 
 ```powershell
 $mk = "$vs\Common7\IDE\CommonExtensions\Microsoft\CMake"
@@ -120,8 +167,8 @@ foreach ($d in @("$mk\CMake\bin", "$mk\Ninja")) {
 `vcvars`:
 
 ```powershell
-cmake --version    # 3.31.x-msvc...
-ninja --version    # 1.12.x
+cmake --version    # 4.3.x-msvc...
+ninja --version    # 1.13.x
 ```
 
 **Git for Windows — also scriptable.** This lands `git` *and* Git Bash (the latter
@@ -152,8 +199,8 @@ need to be on your `PATH`. CI is the proof: the Windows leg configures with
 
 **Where you DO need a *Developer* shell is Ninja** (and NMake), below: those invoke
 `cl.exe` directly, and it plus its `INCLUDE`/`LIB` paths only exist inside the VS
-environment. From the Start menu open **"Developer PowerShell for VS 2022"** (or
-**"x64 Native Tools Command Prompt for VS 2022"**).
+environment. From the Start menu open **"Developer PowerShell for VS 2026"** (or
+**"x64 Native Tools Command Prompt for VS 2026"**).
 
 This distinction matters more than it looks: it is what lets the build run
 unattended — in a script, or under an assistant — without a shell that has to be
@@ -162,9 +209,13 @@ launched a particular way.
 ```powershell
 git clone https://github.com/deltecent/altairsim
 cd altairsim
-cmake -S . -B build
+cmake -S . -B build -G "Visual Studio 18 2026"
 cmake --build build --config Release --target altairsim
 ```
+
+**Name the generator.** Without `-G`, CMake picks the newest Visual Studio *it* knows, so a
+2022 CMake that is first on your `PATH` builds with 2022 without saying so. With `-G` a CMake
+too old for 2026 fails instead. (On a machine with only 2026, `-G` changes nothing.)
 
 The default generator on Windows is the **Visual Studio** generator, which is
 *multi-config*: you do **not** pass `-DCMAKE_BUILD_TYPE`; you choose the config at
@@ -191,7 +242,7 @@ deliberately not added here. MSVC warnings stay visible in the log but non-fatal
 ## 3. Smoke test
 
 ```powershell
-build\Release\altairsim.exe --version        # prints "AltairSim 1.0.0-…"
+build\Release\altairsim.exe --version        # prints the version and the commit
 build\Release\altairsim.exe --list           # lists built-in machines (original, default, minidisk, ...)
 build\Release\altairsim.exe -x "help" default   # boots the default machine, runs one command, exits
 build\Release\altairsim.exe                  # interactive: front panel + monitor
@@ -253,7 +304,7 @@ aggregate with `0xC0000409`, §6 shows how to isolate it.
 
 ## 5. What is verified so far
 
-- **Compiles and links** on `windows-latest` (MSVC, CI). The win32 serial, socket,
+- **Compiles and links** on `windows-2025-vs2026` (MSVC, CI). The win32 serial, socket,
   and terminal implementations build; `CMakeLists.txt` links `ws2_32` for Winsock.
 - **All registered tests pass** (the ones that register without `expect`/disk
   images), including the `unit` aggregate now that its teardown bug is fixed.
@@ -329,7 +380,7 @@ aggregate with `0xC0000409`, §6 shows how to isolate it.
 **This section is a job, not a description** — but most of it is now discharged. Of the three
 approaches it lists, **A and C are settled** (A on 2026-07-20; C's `build-sdl3-static.bat`
 re-verified from scratch on 2026-07-22 — exit 0 in ~3.5 min, valid `SDL3-static.lib` — see the
-note above and `DISTRIBUTION.md` §8). **Only approach B (Ninja + chained `vcvars`) remains
+note above). **Only approach B (Ninja + chained `vcvars`) remains
 untried.** The commands to settle it, and how to report back, follow. **If you are an assistant
 on the Windows box, approach B is the work that is left.**
 
@@ -345,7 +396,7 @@ approach below is a different way around that.
 visible from inside WSL. WSL is the better choice for a Linux toolchain and is the only one
 that supports sandboxing, but it cannot build this the way we ship it.
 
-**Launch from a PLAIN PowerShell, not a "Developer PowerShell for VS 2022."** Two reasons,
+**Launch from a PLAIN PowerShell, not a "Developer PowerShell for VS 2026."** Two reasons,
 and the second is the one that bites:
 
 1. Approach A below asks *"does this work without a Developer shell?"* Testing it from a
@@ -392,7 +443,7 @@ Ninja runs `cl.exe` directly, so the environment must exist *within* the one inv
 Adjust the path to your VS edition:
 
 ```powershell
-cmd /c "call ""C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"" && cmake -S . -B build-ninja -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build-ninja --target altairsim"
+cmd /c "call ""C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat"" && cmake -S . -B build-ninja -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build-ninja --target altairsim"
 ```
 
 **C. `tools\build-sdl3-static.bat` — VERIFIED (2026-07-20; re-run from scratch 2026-07-22).**
@@ -400,12 +451,17 @@ It pins SDL3 3.4.12, builds it static into `%USERPROFILE%\opt\sdl3-static`, and 
 on a second run. Needs only CMake — `curl.exe` and `tar.exe` ship with Windows 10 1803+. Both
 paths are confirmed on Windows 10 / MSVC 2022 Build Tools: the from-scratch build produces a
 13 MB `SDL3-static.lib` (plus headers and `cmake/SDL3Config.cmake`) in ~3.5 min, and the
-idempotent "already installed 3.4.12" path works. The commands below are the record of what ran.
+idempotent "already installed 3.4.12" path works. **Re-verified with Visual Studio 2026 on
+2026-09-21:** a from-scratch run into a fresh prefix, exit 0, a 14 MB `SDL3-static.lib`, and
+`altairsim` built against it with `-DWERROR=on` came out `video SDL3 -- windowed`. A library
+built earlier by 2022 also links into a 2026 build (MSVC's newer linker reads the older
+compiler's output), so an existing prefix need not be rebuilt. The commands below are the record
+of what ran.
 
 ```powershell
 tools\build-sdl3-static.bat
 # then, against the prefix it reports:
-cmake -B build -DCMAKE_PREFIX_PATH="$env:USERPROFILE\opt\sdl3-static" `
+cmake -B build -G "Visual Studio 18 2026" -DCMAKE_PREFIX_PATH="$env:USERPROFILE\opt\sdl3-static" `
       -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
 cmake --build build --config Release --target altairsim
 ```

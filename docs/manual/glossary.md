@@ -1,178 +1,184 @@
 # Glossary
 
-**ACIA** — Asynchronous Communications Interface Adapter. The Motorola 6850 chip at the heart
-of the 88-2SIO serial board. It has two registers a program can see: a status register and a
-data register. Everything a program does with a serial port on this machine, it does through
-one of those.
+**ACIA**: Asynchronous Communications Interface Adapter. The Motorola 6850 chip on the 88-2SIO
+serial board. A program can see two of its registers: a status register and a data register. A
+program does everything with a serial port on this machine through one of those two registers.
 
-**ACR** — Audio Cassette Recorder interface. The MITS 88-ACR: a card that wrote bits to an
-ordinary audio cassette and read them back. It is how you loaded BASIC if you could not
-afford a floppy, which in 1976 was most people.
+**ACR**: Audio Cassette Recorder interface. The MITS 88-ACR, a board that wrote bits to an
+ordinary audio cassette and read them back. People who could not pay for a floppy disk loaded
+BASIC with it, and in 1976 that was most people.
 
-**ATTN** — See **STOP**. The former name for the STOP key; the `CONSOLE attn=` spelling still
-works as an alias.
+**ATTN**: See **STOP**. ATTN is the old name of the STOP key. `CONSOLE attn=` still works, and
+it means the same as `CONSOLE stop=`.
 
-**backplane** — The PCB with the connectors on it that every board plugs into. It is not itself
-one of them: nothing in a machine file fits a backplane, because the backplane is what a machine
-file describes the contents of. On an Altair it is the S-100 bus itself: eighteen slots, one
-hundred pins each, all wired in parallel. There is no chipset. The backplane *is* the machine.
+**backplane**: The circuit board with the connectors that every board plugs into. It is not one
+of the boards. A machine file adds no backplane, because a machine file describes what is in the
+backplane. On an Altair, the backplane is the S-100 bus: eighteen slots of one hundred pins
+each, all connected in parallel. There is no chipset. The backplane *is* the machine.
 
-**bank switching** — Making more memory than the processor can address by putting several
-banks at the same addresses and switching between them. An 8080 can address 64K and no more.
-A machine with 128K of RAM in it lies to the processor about which half it is looking at.
+**bank switching**: A way to give the processor more memory than it can address. Several banks
+of memory use the same addresses, and a switch selects one bank at a time. An 8080 can address
+64K and no more, so a machine with 128K of RAM shows the processor one part of it at a time.
 
-**BDOS** — Basic Disk Operating System. The middle layer of CP/M: files, directories, the
-console. A CP/M program asks the BDOS for things and does not know what hardware answers.
+**BDOS**: Basic Disk Operating System. The middle layer of CP/M, which handles files,
+directories and the console. A CP/M program asks the BDOS for what it needs, and does not know
+which hardware answers.
 
-**BIOS** — Basic Input/Output System. The bottom layer of CP/M, and the only part that knows
-what machine it is on. Move CP/M to a new computer and the BIOS is what you rewrite; the BDOS
-and the CCP are untouched. It is also where a track buffer lives *if the author put one there*
-— which is why, on some CP/Ms and not others, a file can be "written" and not yet be on the
-disk. See the disks chapter.
+**BIOS**: Basic Input/Output System. The bottom layer of CP/M, and the only part that knows what
+machine it is on. To move CP/M to a new computer, you rewrite the BIOS. The BDOS and the CCP do
+not change. A track buffer is also in the BIOS, *if the author put one there*. For this reason,
+on some versions of CP/M and not on others, a file can be "written" and not yet be on the disk.
+See the disks chapter.
 
-**board** — Anything that plugs into the backplane: memory, a serial port, a disk controller,
-the front panel, the processor itself. It is the word this program uses everywhere — `BOARDS`
-lists them, `[[board]]` fits them in a machine file — and a board is the thing you add, remove,
-`SHOW` and `SET`. See also **card**, which means the same thing.
+**board**: Anything that plugs into the backplane: memory, a serial port, a disk controller, the
+front panel, or the processor itself. This program uses the word everywhere. `BOARDS` lists
+them, and `[[board]]` adds one in a machine file. A board is the thing that you add, remove,
+`SHOW` and `SET`. See also **card**, which is the same object.
 
-**card** — The same object as a **board**. The period hardware and its manuals said "card", and
-this manual keeps the word where the sentence is about the physical thing somebody bought,
-socketed chips into and set jumpers on. Everywhere else it says board.
+**card**: The same object as a **board**. The period hardware and its manuals said "card". This
+manual uses the word only when the sentence is about the physical object that somebody bought,
+put chips into and set jumpers on. Everywhere else, it says board.
 
-**CCP** — Console Command Processor. The top layer of CP/M — the part that prints `A>` and
-runs what you type. It is deliberately expendable: a big program is allowed to overwrite it,
-and CP/M reloads it from disk afterwards. That reload is the warm boot.
+**CCP**: Console Command Processor. The top layer of CP/M, which prints `A>` and runs what you
+type. A large program can write over it, and CP/M loads it again from the disk afterward. That
+load is the warm boot.
 
-**contention** — Two boards answering the same address. On a real S-100 machine both would
-drive the data bus at once and you would get a byte that is neither of theirs, intermittently,
-in a way that would take you a week. `SHOW BUS CONTENTION` names them instead.
+**contention**: Two boards that answer the same address. On a real S-100 machine, both would
+drive the data bus at the same time, and you would get a byte that is neither board's value,
+sometimes and not always. That is very hard to find. `SHOW BUS CONTENTION` names the boards.
 
-**CP/M** — Control Program for Microcomputers. Digital Research's disk operating system, and
-the reason the 8080 mattered. Write a program for CP/M and it ran on every 8080 machine ever
-built, whoever built it — the first time that was true of anything.
+**CP/M**: Control Program for Microcomputers. The disk operating system of Digital Research, and
+the reason that the 8080 was important. A program written for CP/M ran on 8080 machines from
+many different makers.
 
-**CUTS** — Computer Users Tape System. The Sol-20's cassette scheme, and a faster cousin of
-Kansas City: at its default 1200 baud it drops an octave to **1200/600 Hz** tones and packs a
-bit into one cycle (a "1") or a half cycle (a "0"); its slower 300-baud mode is Kansas City
-proper, 2400/1200 Hz. The Sol's UART does both, and the guest picks which at `OUT 0FAh` D5.
+**CUTS**: Computer Users Tape System. The cassette format of the Sol-20, and a faster version of
+Kansas City. At its default of 1200 baud, it uses tones one octave lower, **1200/600 Hz**, and
+puts one bit in one cycle (a "1") or in a half cycle (a "0"). Its slower 300-baud mode is Kansas
+City, 2400/1200 Hz. The Sol's UART does both, and the guest selects one with bit D5 of
+`OUT 0FAh`.
 
-**DBL** — Disk Boot Loader. The boot PROM on the MITS floppy controller, at `FF00`. It reads
-one sector off track 0 and jumps into it. **There is no `BOOT` command on an Altair** — you set
-the address switches to `FF00`, press EXAMINE to load them into the program counter, then press
-RUN, and this is the thing you are running.
+**DBL**: Disk Boot Loader. The boot PROM of the MITS floppy disk controller, at `FF00`. It reads
+the program at the start of track 0 into memory, and jumps to it. On a CP/M disk, that program
+loads CP/M. **There is no `BOOT` command on an Altair.** You set the address switches to `FF00`,
+press EXAMINE to load them into the program counter, and then press RUN. DBL is the program that
+then runs.
 
-**decode** — What a board does when it recognises an address as its own and answers. A board
-that does not decode an address stays silent and lets somebody else have it. Which board
-decodes which address is the entire question of how an S-100 machine is put together.
+**decode**: What a board does when it recognizes an address as its own, and answers. A board
+that does not decode an address stays silent, and another board can answer. Which board decodes
+which address is the main question of how an S-100 machine is put together.
 
-**DMA** — Direct Memory Access. A board taking the bus away from the processor and reading or
-writing memory itself, without the processor's help. Faster, and the origin of some
-spectacular bugs.
+**DMA**: Direct Memory Access. A board takes the bus from the processor and reads or writes
+memory itself, without the processor. It is faster, and it can cause faults that are difficult
+to find.
 
-**endpoint** — In this program, the thing on the far end of a serial unit's cable: `console`,
-`null`, `loopback`, a TCP socket, or a real serial port. The serial chapter has the complete
-list; there are no others.
+**endpoint**: In this program, the thing at the far end of a serial unit's cable, for example
+`console`, `null`, a TCP socket or a real serial port. The serial chapter has the complete list.
 
-**floating bus** — What the data bus reads when nothing is driving it. On the S-100 it floats
-high, so an `IN` from a port no board decodes returns `FF`. That is not an error. That is the
-absence of a board, and it looks like `FF`.
+**floating bus**: What the data bus reads when nothing drives it. On the S-100 bus it floats
+high, so an `IN` from a port that no board decodes returns `FF`. This is not an error. It means
+that no board is there.
 
-**front panel** — The switches and lamps on the front of the Altair. The address switches, the
-data lamps, DEPOSIT, EXAMINE, RUN, STOP, RESET. Before there was a terminal, this *was* the
-user interface, and you toggled your bootstrap in through it one byte at a time. In this
-program it is a board like any other.
+**front panel**: The switches and lamps on the front of the Altair: the address switches, the
+data lamps, and DEPOSIT, EXAMINE, RUN, STOP and RESET. Before there was a terminal, the front
+panel *was* the user interface, and you toggled in your bootstrap through it, one byte at a
+time. In this program, it is a board like any other.
 
-**FSK** — Frequency Shift Keying. Encoding bits as two audible tones — one for a zero, one for
-a one. It is how the ACR got data onto a cassette, and it is why a loading tape sounds the way
-it does.
+**FSK**: Frequency Shift Keying. A way to encode bits as two audible tones, one for a zero and
+one for a one. The ACR used it to put data on a cassette, and it is the reason for the sound of
+a tape that loads.
 
-The tones were **not** standard across machines, which matters more than it sounds: the
-88-ACR uses 2400/1850 Hz and holds a tone for the whole bit; Kansas City counts *whole cycles*
-of 2400/1200 Hz per bit, and CUTS at its 1200-baud default does the same an octave down
-(1200/600 Hz, a half cycle for a "0"). A board can only read the modulation its own
-modem was built for, so mounting a recording in the wrong one is refused rather than decoded.
-See the tapes chapter.
+The tones were **not** the same on all machines, and this is important. The 88-ACR uses
+2400/1850 Hz, and holds a tone for the whole bit. Kansas City counts *whole cycles* of 2400/1200
+Hz for each bit. CUTS, at its default of 1200 baud, does the same one octave lower (1200/600 Hz,
+with a half cycle for a "0"). A board can read only the modulation that its own modem was built
+for. For this reason, the program refuses a recording in the wrong modulation, and does not
+decode it. See the tapes chapter.
 
-**hard-sector** — A floppy where the sector boundaries are marked by physical holes punched in
-the disk, and the controller counts them going past. The MITS floppies are hard-sectored. A
-soft-sectored disk has one hole and finds its sectors by reading marks written in the data,
-which is the arrangement that won.
+**guest**: The software that runs on the simulated machine, such as CP/M, BASIC or a program
+that you wrote. The guest cannot tell that the machine is simulated.
 
-**IntAck** — Interrupt Acknowledge. The bus cycle the 8080 runs when it accepts an interrupt.
-The interrupting board puts one instruction on the data bus during that cycle, and the
-processor executes it. Almost always an `RST`.
+**hard-sector**: A floppy disk where physical holes in the disk mark the sector boundaries, and
+the controller counts them as they go past. The MITS floppy disks are hard-sectored. A
+soft-sectored disk has one hole, and finds its sectors from marks written in the data. Soft
+sectors became the common method.
 
-**Kansas City standard** — The 1975 agreement on how microcomputers should record data on
-ordinary audio cassettes, named for the meeting that settled it. A one is eight cycles of
-2400 Hz, a zero is four cycles of 1200 Hz, and both take the same time — which is the whole
-point: a receiver counts cycles instead of trusting a clock, so a tape that plays 5% slow
-still reads. 300 baud. See also **CUTS**, its faster variant, and **FSK**.
+**IntAck**: Interrupt Acknowledge. The bus cycle that the 8080 runs when it accepts an
+interrupt. The board that interrupts puts one instruction on the data bus during that cycle, and
+the processor executes it. It is almost always an `RST`.
 
-**MCP** — Model Context Protocol. The protocol an AI assistant uses to call structured tools.
-`altairsim --mcp` speaks it, so an assistant can drive the machine directly. See the MCP
-chapter.
+**Kansas City standard**: The 1975 agreement on how microcomputers should record data on
+ordinary audio cassettes, named after the meeting where it was agreed. A one is eight cycles of
+2400 Hz, and a zero is four cycles of 1200 Hz. Both take the same time. For this reason, a
+receiver counts cycles and does not depend on a clock, so a tape that plays 5% slow still reads.
+It runs at 300 baud. See also **CUTS**, its faster version, and **FSK**.
 
-**monitor** — The `altairsim>` prompt. Not a program running inside the machine — it is you,
-standing in front of it, with a much better front panel than MITS shipped.
+**machine file**: The `.toml` file that describes a machine: its boards, their settings, and the
+commands to run when it starts. The configuring chapter describes the format.
 
-**PHANTOM\*** — An S-100 line that tells memory boards to shut up. Pull it, and a ROM can
-answer at an address a RAM board also decodes, without contention. It is how a boot PROM can
-sit on top of RAM and then get out of the way. The asterisk means the line is active low, and
-on this bus most of them are.
+**MCP**: Model Context Protocol. The protocol that an AI assistant uses to call structured
+tools. `altairsim --mcp` uses it, so that an assistant can control the machine directly. See the
+MCP chapter.
 
-**pINT** — The S-100 interrupt request line. Any board may pull it. The processor notices, if
-interrupts are enabled, and runs an IntAck cycle to find out who and why.
+**monitor**: The `altairsim>` prompt. It is not a program that runs in the machine. It is you,
+in front of the machine, with more controls than the real front panel had.
 
-**PROM** — Programmable Read-Only Memory. A chip with a program burned into it that survives
-power-off. The Altair's boot loader lives in one, which is the only reason a disk machine can
-start at all: something has to already be there to read the disk.
+**PHANTOM\***: An S-100 line that tells memory boards to stop answering. When a board pulls it,
+a ROM can answer at an address that a RAM board also decodes, with no contention. In this way, a
+boot PROM can cover RAM and then get out of the way. The asterisk means that the line is active
+low, as most lines on this bus are.
 
-**RST** — Restart. A one-byte 8080 instruction that calls a fixed low address — `RST 0` through
-`RST 7`, at `0000`, `0008`, and so on to `0038`. One byte, so it fits in an IntAck cycle,
-which is exactly what it is for.
+**pINT**: The S-100 interrupt request line. Any board can pull it. The processor sees it, if
+interrupts are enabled, and runs an IntAck cycle to find out which board interrupted and why.
 
-**S-100** — The bus. One hundred pins, eighteen slots, designed by MITS for the Altair and
-then adopted by everyone. It was the first open standard in personal computing, mostly by
-accident, and it is the reason a card from one company worked in another company's machine.
+**PROM**: Programmable Read-Only Memory. A chip with a program in it that stays when the power
+is off. The Altair's boot loader is in one. Without it, a disk machine could not start, because
+something must already be in memory to read the disk.
 
-**sector** — The smallest chunk of a disk you can read or write. On these floppies, 137 bytes
-of which 128 are yours.
+**RST**: Restart. A one-byte 8080 instruction that calls a fixed low address: `RST 0` to
+`RST 7`, at `0000`, `0008` and so on to `0038`. It is one byte, so it fits in an IntAck cycle.
+That is what it is for.
 
-**SENSE switches** — The top eight address switches (A8–A15) on the front panel, readable by
-a program as an input port. Software used them for configuration before there was anywhere
-else to put it: which port is the console, how much memory to use, whether to load from tape.
-Half the boot procedures in this manual begin with a sense switch setting.
+**S-100**: The bus. One hundred pins and eighteen slots. MITS designed it for the Altair, and
+then other makers used it. It was an early open standard in personal computing, and for this
+reason, a board from one company worked in the machine of another company.
 
-**STOP** — The front-panel STOP switch, and the key that presses it: `^E` by default. It stops
-the running CPU and returns you to the monitor without disturbing the machine — not RESET, not
-POWER — so a bare `RUN` resumes at the instruction it was about to execute. The host intercepts
-it before the guest sees the byte, so no guest program can take it from you. Move it with
-`CONSOLE stop=` (the older `attn=` still works).
+**sector**: The smallest part of a disk that you can read or write. On these floppy disks, a
+sector is 137 bytes, and 128 of them are yours.
 
-**T-state** — One clock cycle. Every 8080 instruction costs a known number of them, and that
-is how this program knows what time it is. At 2 MHz a T-state is 500 nanoseconds, and a
-cassette takes 110 seconds because it takes 220 million of them.
+**SENSE switches**: The top eight address switches (A8 to A15) on the front panel. A program can
+read them as an input port. Software used them for settings before there was any other place for
+them: which port is the console, how much memory to use, or whether to load from tape.
 
-**TDRE** — Transmit Data Register Empty. The bit in the 6850's status register that means
-"the board has room for another character". A program that wants to print polls it until it
-sets. A serial port connected to `null` sets it forever, which is why writing to nothing works
-fine.
+**STOP**: The STOP switch on the front panel, and the key that presses it, `Ctrl-E` by default.
+It stops the processor and gives you the monitor. It does not change the machine. It is not
+RESET, and it is not POWER. For this reason, `RUN` with no address continues at the instruction
+that the machine was about to execute. The program reads the key before the guest sees the byte,
+so no guest program can take it from you. Move it with `CONSOLE stop=`. The older `attn=` still
+works.
 
-**track** — One concentric ring of sectors on a disk. The head steps in and out to reach a
-track and does not move again to reach the sectors on it, which is why a BIOS that buffers
-buffers a whole track at a time: having paid for the seek, it may as well have the lot.
+**T-state**: One clock cycle. Every 8080 instruction takes a known number of them, and this
+program uses them to measure time. At 2 MHz, a T-state is 500 nanoseconds.
 
-**UART** — Universal Asynchronous Receiver/Transmitter. The chip that turns a byte into a
-sequence of bits on a wire and back again. The ACIA is one.
+**TDRE**: Transmit Data Register Empty. The bit in the 6850's status register that means "the
+board has room for another character". A program that prints reads this bit until it is set. A
+serial port connected to `null` has it set all the time. For this reason, a program that writes
+to nothing works.
 
-**unit** — One channel on a board that moves characters — the socket on the back. A 2SIO has
-two of them, `a` and `b`, and they are connected independently. `CONNECT sio0:b` names the
-board and then the unit.
+**track**: One ring of sectors on a disk. The head steps in and out to reach a track, and does
+not move again to reach the sectors on it. For this reason, a BIOS with a buffer keeps a whole
+track at a time: after one seek, it can read or write every sector of the track.
 
-**VI0–VI7** — The eight vectored interrupt lines on the S-100 bus, served by the 88-VI/RTC
-board. **VI0 is the highest priority.** A board pulling VI*n* gets `RST` *n*, and the interrupt
-board sorts out who wins when two pull at once.
+**UART**: Universal Asynchronous Receiver/Transmitter. The chip that changes a byte into a
+series of bits on a wire, and back again. The ACIA is one.
 
-**warm boot** — CP/M reloading its own top layer (the CCP) from the disk, because the program
-that just finished was allowed to overwrite it. `^C` at the `A>` prompt does one deliberately.
-It is not a reset; the machine never stopped.
+**unit**: One channel of a board that moves characters, like the connector on the back of the
+board. A 2SIO has two units, `a` and `b`, and you connect each one separately. `CONNECT sio0:b`
+names the board and then the unit.
+
+**VI0–VI7**: The eight vectored interrupt lines of the S-100 bus, served by the 88-VI/RTC board.
+**VI0 has the highest priority.** A board that pulls VI*n* gets `RST` *n*, and the interrupt
+board decides which board wins when two pull at the same time.
+
+**warm boot**: CP/M loads its own top layer (the CCP) again from the disk, because the program
+that had finished could write over it. `Ctrl-C` at the `A>` prompt does a warm boot on purpose.
+It is not a reset, and the machine does not stop.

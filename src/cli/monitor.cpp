@@ -31,7 +31,6 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
-#include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -70,6 +69,37 @@ bool guestIsWaiting(const SliceWork& w, uint64_t ratio) {
 bool shouldPace(bool anyConsole, bool tty, bool anyRemoteLine, bool free) {
     if (free) return false;  // no crystal asked for -> flat out, always
     return (anyConsole && tty) || anyRemoteLine;
+}
+
+// SET MACHINE's table: the settings that belong to the machine as a whole rather than to
+// any board in it. Today that is only the name -- what SHOW MACHINE prints, the video
+// window's title, and what CONFIG SAVE writes as `[machine] name`. Before this it was set only by the
+// loader, so a machine built at the prompt always saved as whatever it was built from
+// (`none`, `default`). Property rows rather than a hand-rolled check, so SET, its errors
+// and tab completion come out of the same generic path CONSOLE and DISPLAY use.
+static std::vector<Property> machineProperties(Machine& m) {
+    Property n;
+    n.name = "name";
+    n.help = "The machine's name -- what SHOW MACHINE prints and CONFIG SAVE writes";
+    n.kind = Kind::Str;
+    n.get  = [&m] { return Value::ofStr(m.name); };
+    n.set  = [&m](const Value& v, std::string& err) {
+        if (v.s().empty()) {
+            err = "machine: name cannot be empty";
+            return false;
+        }
+        // CONFIG SAVE writes the name raw inside `"..."`, which is how the loader reads a
+        // string back -- quotes stripped from the ends, nothing unescaped. A `"` inside it
+        // would close the string early, and a `#` after that is read as a comment, so
+        // the file would load as a different name or not at all. Refuse it here.
+        if (v.s().find('"') != std::string::npos) {
+            err = "machine: a name cannot contain a double quote";
+            return false;
+        }
+        m.name = v.s();
+        return true;
+    };
+    return {n};
 }
 
 std::vector<std::string> tokenize(const std::string& line) {
@@ -602,7 +632,8 @@ Completions Monitor::complete(const std::string& line) {
         if (c == std::string::npos) {
             for (const auto& b : m_.boards()) keep(b->id);
             if (wantPseudo)
-                for (const char* kw : {"CONSOLE", "DISPLAY", "TERMINAL", "REG", "BUS"}) keep(kw);
+                for (const char* kw : {"CONSOLE", "DISPLAY", "TERMINAL", "MACHINE", "REG", "BUS"})
+                    keep(kw);
             // What comes after the board-id half depends on the board. For a target that
             // names a UNIT (MOUNT, CONNECT, a board verb), a bare id is finished only when
             // the board has exactly one unit of the right kind -- the lone-unit rule
@@ -718,6 +749,8 @@ Completions Monitor::complete(const std::string& line) {
                 props = Display::properties();
             } else if (is(target, "TERMINAL")) {
                 props = TerminalStream::properties();
+            } else if (is(target, "MACHINE")) {
+                props = machineProperties(m_);
             } else {
                 size_t c = target.find(':');
                 if (c == std::string::npos) {
@@ -1166,8 +1199,9 @@ void Monitor::showPaths(std::ostream& out) {
     }
 
     row("base directory", base);
-    out << pad << "Everything resolves against this -- what a machine file\n"
-        << pad << "mounts, and the MOUNT / LOAD / SAVE / DO / -s you type.\n";
+    out << pad << "What a machine file mounts, and the MOUNT / LOAD / SAVE /\n"
+        << pad << "DO you type, resolve against this. A path inside a DO or\n"
+        << pad << "-s file is relative to that file.\n";
     if (m_.fromFile)
         out << pad << "It is the directory the machine was loaded from.\n";
     else
@@ -1278,6 +1312,51 @@ void Monitor::showVersion(std::ostream& out) {
         row("tree", "MODIFIED when built -- this binary is not that commit");
     else
         row("tree", "clean");
+}
+
+// ---------------------------------------------------------------------------
+// SHOW CLOCK -- emulated time, which the machine has always known and never told
+// anyone (issue #492). Clock::now() is T-states since POWER; nothing before this
+// printed it, so the only way to answer "how long has the guest been running, in
+// its own seconds" was to count instructions and assume a rate.
+//
+// SECONDS COME FROM THE CRYSTAL, NEVER FROM THE HOST. now()/hz() is the guest's
+// own experience of time -- the same division a 9600-baud line does to turn a
+// character time into T-states -- so it stays true under replay and under a
+// snapshot. Reading steady_clock here would produce a number that looked similar
+// and meant something else.
+//
+// hz() is a DIVISOR and is never 0 (clock.h); free() is the pacing POLICY. So
+// emulated seconds are well defined even flat out -- they simply pass faster
+// than real ones, which is the distinction this command has to make plain.
+// ---------------------------------------------------------------------------
+void Monitor::showClock(std::ostream& out) {
+    const uint64_t  t  = m_.clock.now();
+    const long long hz = m_.clock.hz();
+
+    char buf[256];
+    auto row = [&](const char* label, const std::string& value) {
+        std::snprintf(buf, sizeof buf, "  %-9s  %s", label, value.c_str());
+        out << buf << "\n";
+    };
+
+    out << "clock  (emulated time -- T-states since POWER, and what they are worth)\n\n";
+
+    std::snprintf(buf, sizeof buf, "%.6f s   (%llu T-states)", (double)t / (double)hz,
+                  (unsigned long long)t);
+    row("elapsed", buf);
+
+    std::snprintf(buf, sizeof buf, "%lld Hz   SET cpu0 clock_hz=N", hz);
+    row("crystal", buf);
+
+    row("pacing", m_.clock.free()
+                      ? "free -- emulated seconds pass as fast as the host allows"
+                      : "paced -- emulated seconds keep step with real ones");
+
+    out << "\n  Elapsed is the GUEST's time, counted from the crystal above: the same\n"
+           "  division a 9600-baud line does to turn a character into T-states. It is\n"
+           "  not how long you have been sitting here, and running flat out is exactly\n"
+           "  when the two differ most.\n";
 }
 
 // A tiny glob: '*' matches any run, '?' any one character. Both operands are already
@@ -1445,32 +1524,12 @@ static void reportStop(const RunResult& r, const Debugger& dbg, std::ostream& ou
 //      twenty times too fast and every timing-dependent thing on the screen --
 //      a cursor, a banner, a Teletype's pace -- would be a lie.
 // ---------------------------------------------------------------------------
+// ^C -- SigintGuard is defined in core/debug.h (shared with the --mcp server,
+// which installs it around the whole of runMcp for the same "no ISIG, no ATTN"
+// reason: its stdin is the JSON-RPC channel, not a keyboard). See there for why.
 // ---------------------------------------------------------------------------
-// ^C.
-//
-// The handler does ONE thing: set a lock-free flag. It does not print, it does
-// not touch the machine, and it does not throw -- those are all undefined in a
-// signal handler, and the bug they produce is a hang or a corrupted heap once in
-// a hundred runs, which is the worst kind there is.
-//
-// It is installed only for the duration of a RUN or a STEP, and the previous
-// handler is put back afterwards, so ^C at the monitor prompt still kills the
-// process exactly as it did before there was a CPU.
-//
-// ON A TERMINAL IT NEVER FIRES, and that is deliberate (Patrick, 2026-07-12): raw
-// mode clears ISIG, because Ctrl-C is a byte CP/M is entitled to read. ATTN is the
-// stop key. This guard is what is left for a PIPED run, where there is no raw mode
-// and no ATTN, and the signal is the only way to stop a program that never ends.
-// ---------------------------------------------------------------------------
-static void onSigint(int) { Debugger::interrupt(); }
 
 namespace {
-struct SigintGuard {
-    void (*prev)(int) = nullptr;
-    SigintGuard() { prev = std::signal(SIGINT, onSigint); }
-    ~SigintGuard() { std::signal(SIGINT, prev); }
-};
-
 // The two opcodes NEXT steps OVER instead of into: a subroutine call leaves a
 // return address to stop at, so NEXT runs to it. These are 8080 encodings and the
 // Z80 shares them, so the test holds for the core that is coming. Everything else
@@ -1659,6 +1718,10 @@ void Monitor::runMachine(std::ostream& out, bool stepOver) {
     // ^C still stops a PIPED run, because there raw mode never happened and the
     // signal is all there is. On a terminal ISIG is off and this never fires --
     // which is the point: the guest gets that byte.
+    //
+    // A ^C from before this RUN must not stop it, so the flag is cleared ONCE, here,
+    // before the guard can set it -- and NOT by every slice below (see there).
+    Debugger::clearStopRequest();
     SigintGuard guard;
 
     // Whose screen this is. Pushed at the start of every run rather than wired once,
@@ -1695,6 +1758,15 @@ void Monitor::runMachine(std::ostream& out, bool stepOver) {
     clk::time_point idleSince{};
 
     for (;;) {
+        // A ^C THAT LANDED BETWEEN SLICES -- in the throttle's sleep, the pump, the
+        // keyboard poll -- is caught here. Each slice used to clear the flag on entry,
+        // which erased exactly those: a paced RUN (clock_hz set, a live wire) lost 54 of
+        // 100 ^Cs on Windows and 92 of 100 on macOS, and a flat-out one 7 in 1000.
+        if (Debugger::stopRequested()) {
+            r.why = StopReason::StopRequested;
+            break;
+        }
+
         // What the guest did with its slice: did it SAY anything, did it RECEIVE
         // anything, and how often did it come to the keyboard and find nothing there.
         // Those three are the whole of the idle judgement at the bottom of the loop.
@@ -1705,7 +1777,11 @@ void Monitor::runMachine(std::ostream& out, bool stepOver) {
         // A slice, then a look around. Short enough that ATTN feels instant and a
         // keystroke is picked up promptly; long enough that the per-slice overhead
         // is noise.
-        r = m_.debug.run(2000);
+        //
+        // KEEP A PENDING STOP REQUEST (the `false`): one can also land between the check at
+        // the top of this loop and here, and clearing it on entry would erase it unseen.
+        // It was cleared once already, at the start of this RUN.
+        r = m_.debug.run(2000, false);
 
         // Every board with a line on it gets its slice of wall time, console or no
         // console: a 2SIO wired to a socket is still moving bytes when nobody is
@@ -1961,7 +2037,7 @@ void Monitor::runMachine(std::ostream& out, bool stepOver) {
     if (anyConsole) out << "\n";  // the guest was mid-line; do not print on top of it
 
     // EVERY STOP SAYS WHY, and there is now exactly one path that says it. This
-    // used to guess -- `Interrupted && anyConsole` meant "probably ATTN" -- and a
+    // used to guess -- `StopRequested && anyConsole` meant "probably ATTN" -- and a
     // guess is what you write when the reason was never carried. Now it is: ATTN,
     // a script's input running out, and a real ^C are three different words.
     //
@@ -2070,13 +2146,18 @@ void Monitor::showConsole(std::ostream& out) {
         << ")\n";
     showProps(con.properties(), out);
 
+    // A unit holds the console when it is wired to it -- or, under --mcp, when its line is
+    // the console's stand-in: a filter that follows the console's transforms (issue #529).
     std::string holder;
     for (const auto& b : m_.boards())
-        for (const auto& u : b->units())
-            if (u.kind == UnitKind::Serial && u.state == "console") {
-                if (!holder.empty()) holder += ", ";
-                holder += b->id + ":" + u.name;
-            }
+        for (const auto& u : b->units()) {
+            if (u.kind != UnitKind::Serial) continue;
+            const auto* f       = dynamic_cast<const FilterStream*>(b->unitStream(u.name));
+            const bool  standIn = f && f->follows(con.filter());
+            if (u.state != "console" && !standIn) continue;
+            if (!holder.empty()) holder += ", ";
+            holder += b->id + ":" + u.name + (standIn ? " (--mcp)" : "");
+        }
     out << "\n  held by  " << (holder.empty() ? "(nobody -- CONNECT <id>:<unit> console)" : holder)
         << "\n";
     out << "\n  The transforms (UPPER, STRIP7OUT, CRLF, BSDEL...) are the CONSOLE's, and\n"
@@ -2706,7 +2787,7 @@ static void reportStop(const RunResult& r, const Debugger& dbg, std::ostream& ou
                       "input ended -- the machine is still at %s. RUN resumes.", fmtWord(r.pc).c_str());
         out << buf << "\n";
         break;
-    case StopReason::Interrupted:
+    case StopReason::StopRequested:
         out << "^C -- stopped at the instruction boundary. The machine is intact.\n";
         break;
     case StopReason::WindowClosed:
@@ -3186,7 +3267,7 @@ bool Monitor::exec(const std::string& line, std::ostream& out) {
         if (!need(2, "SHOW <id> | SHOW BOARDS | SHOW BOARD <type> | SHOW MACHINES"
                      " | SHOW MACHINE [<name>] | SHOW BUS [MAP|IO|IRQ|CONTENTION] | SHOW ROMS"
                      " | SHOW MOUNTS | SHOW PATHS | SHOW DEBUG | SHOW JOYSTICKS"
-                     " | SHOW VERSION"))
+                     " | SHOW CLOCK | SHOW VERSION"))
             return true;
         // The selector resolves by prefix -- `SHOW MOU` reaches MOUNTS, `SHOW VER` VERSION --
         // built-ins first, exactly the ordering the top-level dispatcher keeps (a keyword
@@ -3197,7 +3278,7 @@ bool Monitor::exec(const std::string& line, std::ostream& out) {
             {"BUS", "ROMS", "MOUNTS", "MOUNT", "PATHS", "PATH", "PWD", "CONSOLE", "DEBUG",
              "VERSION", "BUILD", "DISPLAY", "VIDEO", "WINDOW", "TERMINAL", "JOYSTICKS",
              "JOYSTICK", "JOY", "SYMBOLS", "SYMBOL", "SYM", "BOARDS", "BOARD", "MACHINES",
-             "MACHINE"});
+             "MACHINE", "CLOCK", "TIME"});
         if (sub.empty()) sub = upper(a[1]);
         // Reject trailing junk uniformly: a subcommand that has consumed all the arguments
         // it understands must report the first leftover token, not silently drop it -- a
@@ -3243,6 +3324,13 @@ bool Monitor::exec(const std::string& line, std::ostream& out) {
             showDebug(out);
             return true;
         }
+        // TIME as well as CLOCK: the question is asked both ways ("what time is it in
+        // there", "how fast is the clock"), and this one command answers both.
+        if (sub == "CLOCK" || sub == "TIME") {
+            if (tooMany(2)) return true;
+            showClock(out);
+            return true;
+        }
         // BUILD as well as VERSION: half the time the question being asked is "which
         // build is this", and the operator should not have to guess our noun.
         if (sub == "VERSION" || sub == "BUILD") {
@@ -3273,8 +3361,8 @@ bool Monitor::exec(const std::string& line, std::ostream& out) {
         if (sub == "BOARDS" || sub == "BOARD") {
             if (tooMany(4)) return true;
             // The board catalog -- what you can ADD. Plural BOARDS is the whole list, one
-            // aligned row per type with the description WRAPPED inside its column; singular
-            // BOARD <type> drills into one: its description, then its properties. Either
+            // aligned row per type with its one-line summary; singular BOARD <type> drills
+            // into one: its full description, then its properties. Either
             // spelling works with or without a name -- the presence of the name decides.
             // This lives beside SHOW MACHINES: both answer "what can I build?".
             const auto types = boardTypes();
@@ -3431,22 +3519,24 @@ bool Monitor::exec(const std::string& line, std::ostream& out) {
                 return true;
             }
 
-            // The catalog. Name column sized to the data, description wrapped beneath it.
+            // The catalog, alphabetical -- registry order is build order, which no reader
+            // can search. Name column sized to the data, then the one-line summary -- the
+            // full description is SHOW BOARD <type>'s, so the list stays one screen.
+            auto sorted = types;
+            std::sort(sorted.begin(), sorted.end(),
+                      [](const BoardType& x, const BoardType& y) { return x.name < y.name; });
             size_t wName = 4;  // "TYPE"
-            for (const auto& t : types) wName = std::max(wName, t.name.size());
+            for (const auto& t : sorted) wName = std::max(wName, t.name.size());
             const size_t descCol = 2 + wName + 2;
 
             std::snprintf(buf, sizeof buf, "  %-*s  %s", (int)wName, "TYPE", "DESCRIPTION");
             out << buf << "\n";
             out << "  " << std::string(wName, '-') << "  "
                 << std::string(width - descCol, '-') << "\n";
-            for (const auto& t : types) {
-                auto desc = wrapText(t.description, width - descCol);
+            for (const auto& t : sorted) {
                 std::snprintf(buf, sizeof buf, "  %-*s  %s", (int)wName, t.name.c_str(),
-                              desc[0].c_str());
+                              t.summary.c_str());
                 out << buf << "\n";
-                for (size_t i = 1; i < desc.size(); ++i)
-                    out << std::string(descCol, ' ') << desc[i] << "\n";
             }
             out << "\n  SHOW BOARD <type> for a board's properties"
                    " (add UNITS for just the units)\n";
@@ -3524,13 +3614,13 @@ bool Monitor::exec(const std::string& line, std::ostream& out) {
     }
 
     if (cmd == "SET") {
-        if (!need(3, "SET <id>[:<unit>]|CONSOLE|DISPLAY|REG|BUS <key>=<value>")) return true;
+        if (!need(3, "SET <id>[:<unit>]|CONSOLE|DISPLAY|TERMINAL|MACHINE|REG|BUS <key>=<value>")) return true;
         // The target-KIND selector resolves by prefix -- `SET CON base=octal` reaches
         // CONSOLE -- built-ins first. An empty result is not one of these keywords: a[1]
         // is then a channel, unit or board id, and the paths below use the RAW a[1] to
         // look it up, so `SET acr0 ...` and `SET 6850 debug=...` are untouched.
         std::string setSel =
-            resolveKeyword(a[1], {"BUS", "REG", "CONSOLE", "DISPLAY", "TERMINAL"});
+            resolveKeyword(a[1], {"BUS", "REG", "CONSOLE", "DISPLAY", "TERMINAL", "MACHINE"});
         // Reject trailing junk, the same contract SHOW keeps: once the target and its
         // key=value are parsed, a leftover token is an error, not a silent drop. The
         // ceiling is 3 for the `key=value` form and 4 for the spaced `key value` form,
@@ -3642,7 +3732,7 @@ bool Monitor::exec(const std::string& line, std::ostream& out) {
                 if (tooMany(4)) return true;
             } else {
                 out << "usage: SET <id>[:<unit>] <key>=<value>  |  SET CONSOLE <key>=<value>"
-                       "  |  SET DISPLAY <key>=<value>\n";
+                       "  |  SET DISPLAY <key>=<value>  |  SET MACHINE name=<name>\n";
                 failed_ = true;
                 return true;
             }
@@ -3682,6 +3772,19 @@ bool Monitor::exec(const std::string& line, std::ostream& out) {
                 failed_ = true;
             } else {
                 out << "display: " << k << "=" << v << "\n";
+            }
+            return true;
+        }
+
+        // The machine itself -- its name, which is what CONFIG SAVE writes. Neither a
+        // board nor the host's, so it gets its own target.
+        if (setSel == "MACHINE") {
+            std::string err;
+            if (!setPropertyIn(machineProperties(m_), "machine", k, v, err)) {
+                out << err << "\n";
+                failed_ = true;
+            } else {
+                out << "machine: " << k << "=" << v << "\n";
             }
             return true;
         }
@@ -4166,9 +4269,12 @@ bool Monitor::exec(const std::string& line, std::ostream& out) {
             // problem and CREATE would not touch it.
             if (!create) {
                 std::error_code ec;
+                // tokenize() keeps a quoted path's opening `"` and drops the closing one;
+                // put it back so the suggestion pastes as it stands (#574).
+                const bool quoted = !a[2].empty() && a[2][0] == '"';
                 if (!std::filesystem::exists(b->resolvePath(mountPath), ec))
                     out << b->id << ": to make a blank one, add CREATE: MOUNT " << a[1] << " "
-                        << a[2] << " CREATE\n";
+                        << a[2] << (quoted ? "\"" : "") << " CREATE\n";
             }
             failed_ = true;
         } else {
@@ -4233,8 +4339,12 @@ bool Monitor::exec(const std::string& line, std::ostream& out) {
             out << b->id << ": " << err << "\n";
             failed_ = true;
         } else {
-            out << b->id << ":" << u.name
-                << ": unmounted (the socket is now EMPTY -- those pages float to FF)\n";
+            // Only a ROM socket has pages to float; a drive or a recorder is just empty (#577).
+            const char* now = u.kind == UnitKind::Rom
+                                  ? "the socket is now EMPTY -- those pages float to FF"
+                              : u.kind == UnitKind::Tape ? "the recorder is now empty"
+                                                         : "the drive is now empty";
+            out << b->id << ":" << u.name << ": unmounted (" << now << ")\n";
         }
         flush(out);  // ...and a sync-on-eject that complained must say so HERE. See MOUNT.
         return true;
@@ -5927,6 +6037,36 @@ std::string Monitor::resolveInput(const std::string& p) const {
     return resolveFrom(inputBase(), q);
 }
 
+int Monitor::runScript(std::istream& in, const std::string& file, std::ostream& out) {
+    // THE SAME FILE SCOPE runLines() opens for DO and a startup list: while the script
+    // runs, relative paths start at its directory, and a `~` in it stays literal. Only the
+    // line loop differs -- repl() keeps the `altairsim>` echo and the exit status that a
+    // -s transcript and its caller rely on, and lends the file to EDIT for its follow-up
+    // lines. Restored on every way out, so an -i session after it types at the machine's
+    // base again.
+    const std::string dir = dirOf(file);
+    std::error_code   cec;
+    std::string canon = std::filesystem::weakly_canonical(file, cec).generic_string();
+    if (cec || canon.empty()) canon = file;
+
+    struct Scope {
+        Monitor&    m;
+        std::string prevDir;
+        ~Scope() {
+            m.doStack_.pop_back();
+            --m.fileDepth_;
+            m.startupDir_ = prevDir;
+            for (const auto& b : m.m_.boards()) b->setConfigDir(prevDir);
+        }
+    } scope{*this, startupDir_};
+    doStack_.push_back(canon);  // a DO of this same file inside it is caught as a cycle
+    ++fileDepth_;
+    startupDir_ = dir;
+    for (const auto& b : m_.boards()) b->setConfigDir(dir);
+
+    return repl(in, out, false);
+}
+
 int Monitor::repl(std::istream& in, std::ostream& out, bool interactive) {
     std::string line;
     LineEditor ed;
@@ -6029,6 +6169,11 @@ int Monitor::repl(std::istream& in, std::ostream& out, bool interactive) {
             // `altairsim> ;...` for every comment, burying the commands. It runs nothing
             // either way; this just keeps the transcript to the lines that act.
             if (!tokenize(line).empty()) out << "altairsim> " << line << "\n";
+            // Inside a -s script (runScript), re-stamp every board with the script's
+            // directory before each line, as runLines() does: a board ADDED by an earlier
+            // line then resolves its own file paths against the script too.
+            if (fileDepth_ > 0)
+                for (const auto& b : m_.boards()) b->setConfigDir(startupDir_);
         }
         if (!exec(line, out)) break;
     }

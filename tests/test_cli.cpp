@@ -13,6 +13,7 @@
 #include "cli/lineedit.h"
 #include "cli/monitor.h"
 #include "config/toml.h"
+#include "core/debug.h"
 #include "core/machine.h"
 #include "cpu/cpu.h"
 #include "host/console.h"
@@ -22,7 +23,11 @@
 #include "host/stream.h"
 #include "test.h"
 
+#include <algorithm>
 #include <memory>
+#include <atomic>
+#include <chrono>
+#include <thread>
 #include <sstream>
 #include <filesystem>
 #include <fstream>
@@ -39,7 +44,69 @@ std::string R(const char* word) {
 
 } // namespace
 
+
+// A board that drops a ^C into one exact spot: between the monitor RUN loop's "was a stop
+// requested?" check and the slice it then runs. The loop reads the backplane's rxBytes()
+// between the two, so this board raises the stop request from there -- a window a few
+// instructions wide, reached without timing. (Same idea as test_mcp.cpp's GapBoard.)
+//
+// ONE-SHOT: armed before RUN starts, the first call is the pre-slice one. Raising on every
+// call would let a later raise stop the run however the slice treats the flag.
+class RunGapBoard : public Board {
+public:
+    mutable std::atomic<bool> armed{false};
+    std::string type() const override { return "test-gap"; }
+    bool decodes(const BusCycle&) const override { return false; }
+    std::vector<Property> properties() override { return {}; }
+    uint64_t rxBytes() const override {
+        if (armed.exchange(false)) Debugger::requestStop();
+        return 0;
+    }
+};
+
 void test_cli() {
+
+    SECTION("RUN -- a ^C that lands between the loop's check and the slice is not erased");
+    {
+        // Each slice used to clear the stop-request flag on entry, so a ^C arriving between
+        // slices -- the throttle's sleep, the pump, the keyboard poll -- was erased and RUN
+        // carried on. Measured with a signal sent mid-RUN: paced (clock_hz and a live wire),
+        // 54 of 100 lost on Windows and 92 of 100 on macOS; flat out, 7 in 1000 on Windows.
+        // RunGapBoard puts the ^C in that window every time, so this fails every time
+        // without the fix.
+        Machine m;
+        Monitor mon(m);
+        std::ostringstream sink;
+        mon.exec("BOARDS ADD 8080 cpu0", sink);
+        mon.exec("BOARDS ADD memory mem0", sink);
+        mon.exec("REGION ADD mem0 type=ram at=0 size=1K", sink);
+        mon.exec("DEPOSIT 0 C3 00 00", sink);  // JMP 0 -- runs until something stops it
+        auto gb = std::make_unique<RunGapBoard>();
+        gb->id  = "gap0";
+        RunGapBoard* gap = gb.get();
+        m.adopt(std::move(gb));
+
+        gap->armed = true;
+        std::atomic<bool>  done{false};
+        std::ostringstream o;
+        std::thread        t([&] { mon.exec("RUN 0", o); done = true; });
+        bool stopped = false;
+        for (int i = 0; i < 600 && !(stopped = done.load()); ++i)
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        // A failing RUN never ends on its own. Keep interrupting until it does, so a
+        // failure is a failed CHECK and not a hung test binary.
+        while (!done) {
+            Debugger::requestStop();
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        t.join();
+        Debugger::clearStopRequest();
+
+        CHECK(!gap->armed, "the board did fire -- RUN read rxBytes() before its first slice");
+        CHECK(stopped, "RUN stopped on the ^C that landed between its check and the slice");
+        CHECK(o.str().find("^C -- stopped") != std::string::npos,
+              "and it says it stopped on a ^C");
+    }
     SECTION("command abbreviation -- table order IS the ranking; first match wins");
 
     // ---- Patrick's ranking, 2026-07-11. These eight are listed first. ----
@@ -830,6 +897,8 @@ void test_cli() {
     // socket. The socket stays, empty, and keeps its name.
     std::ostringstream um;
     mon3.exec("UNMOUNT mem0:rom0", um);
+    CHECK(um.str().find("the socket is now EMPTY -- those pages float to FF") != std::string::npos,
+          "a ROM socket's UNMOUNT says its pages float");
     std::ostringstream b2;
     mon3.exec("BOARDS", b2);
     CHECK(b2.str().find("rom0(empty)") != std::string::npos, "the socket survives its chip");
@@ -922,7 +991,7 @@ void test_cli() {
         // The enum's choices, including every built-in profile name.
         // The enum header plus each built-in name -- the list can word-wrap across lines,
         // so assert the members individually rather than one contiguous string.
-        CHECK(s.find("values: custom | sior0 | tuart | imsai-sio2") != std::string::npos,
+        CHECK(s.find("values: custom | sior1 | sior0 | tuart") != std::string::npos,
               "the profile enum lists custom plus each built-in as its legal values");
         CHECK(s.find("compupro-if2") != std::string::npos, "compupro-if2 is a listed profile");
         CHECK(s.find("compupro-ss1") != std::string::npos, "compupro-ss1 is a listed profile");
@@ -938,6 +1007,50 @@ void test_cli() {
         CHECK(cAt != std::string::npos, "the connect property is listed");
         CHECK(s.find("values:", cAt) == std::string::npos,
               "a free-form string property advertises no values line of its own");
+    }
+
+    // -----------------------------------------------------------------------
+    // SHOW BOARDS is the catalog: ONE line per board type, alphabetical, its summary, inside the
+    // monitor's 78 columns. The full description belongs to SHOW BOARD <type>. A summary
+    // too long for the column would wrap the whole list back to pages -- this is the check
+    // that stops the next board from doing that.
+    // -----------------------------------------------------------------------
+    SECTION("cli: SHOW BOARDS lists one line per board, A-Z; SHOW BOARD has the full text");
+    {
+        Machine mc;
+        Monitor monC(mc);
+        std::ostringstream o;
+        monC.exec("SHOW BOARDS", o);
+        std::vector<std::string> rows;
+        {
+            std::istringstream catalog(o.str());
+            for (std::string l; std::getline(catalog, l);) rows.push_back(l);
+        }
+        // Alphabetical by type name, not registry (build) order.
+        auto types = boardTypes();
+        std::sort(types.begin(), types.end(),
+                  [](const BoardType& x, const BoardType& y) { return x.name < y.name; });
+        // TYPE header + rule, a row per type, a blank, the SHOW BOARD footer.
+        CHECK(rows.size() == types.size() + 4, "one catalog row per board type");
+        for (const auto& l : rows) {
+            std::string why = "catalog line fits 78 columns: '" + l + "'";
+            CHECK(l.size() <= 78, why.c_str());
+        }
+        for (size_t i = 0; i < types.size() && i + 2 < rows.size(); ++i) {
+            const auto& t   = types[i];
+            const auto& row = rows[i + 2];
+            std::string why = "board '" + t.name + "' has a one-line summary on its row";
+            CHECK(!t.summary.empty() && t.summary.find('\n') == std::string::npos &&
+                      row.starts_with("  " + t.name + " ") && row.ends_with(t.summary),
+                  why.c_str());
+        }
+        CHECK(o.str().find("two 6850 ACIAs, units 'a' and 'b'") == std::string::npos,
+              "the full description is not in the catalog");
+
+        std::ostringstream od;
+        monC.exec("SHOW BOARD 2sio", od);
+        CHECK(od.str().find("two 6850 ACIAs, units 'a' and 'b'") != std::string::npos,
+              "SHOW BOARD <type> still prints the full description");
     }
 
     // -----------------------------------------------------------------------
@@ -1269,6 +1382,60 @@ void test_cli() {
         CHECK(std::filesystem::exists(tmp, ec),
               "a pre-existing file that fails to mount is the operator's -- NOT removed");
         std::filesystem::remove(tmp, ec);
+    }
+
+    // -----------------------------------------------------------------------
+    // THE MOUNT AND UNMOUNT MESSAGES SAY WHAT IS TRUE OF THE UNIT (#574, #577).
+    //
+    // The CREATE hint is a command to paste back, so a quoted path must come back with
+    // BOTH its quotes. And UNMOUNT describes the unit it emptied: only a ROM socket has
+    // pages that float to FF -- a drive or a recorder just has nothing in it.
+    // -----------------------------------------------------------------------
+    SECTION("cli: the MOUNT hint and the UNMOUNT message fit what was typed and the unit");
+    {
+        setMediaResolver(openHostFile);
+        const auto dir = std::filesystem::temp_directory_path();
+        const std::string dskPath = (dir / "altairsim-574-577.dsk").string();
+        const std::string tapPath = (dir / "altairsim-574-577.tap").string();
+        std::error_code ec;
+        std::filesystem::remove(dskPath, ec);
+        std::filesystem::remove(tapPath, ec);
+
+        Machine            mm;
+        Monitor            mmon(mm);
+        std::ostringstream msink;
+        mmon.exec("BOARDS ADD dcdd dsk0", msink);
+        mmon.exec("BOARDS ADD acr acr0", msink);
+
+        std::ostringstream q;
+        mmon.exec("MOUNT dsk0:drive0 \"" + dskPath + "\"", q);
+        CHECK(q.str().find("add CREATE: MOUNT dsk0:drive0 \"" + dskPath + "\" CREATE\n") !=
+                  std::string::npos,
+              "a quoted path comes back in the CREATE hint with both quotes (#574)");
+
+        std::ostringstream p;
+        mmon.exec("MOUNT dsk0:drive0 no-such-574.dsk", p);
+        CHECK(p.str().find("add CREATE: MOUNT dsk0:drive0 no-such-574.dsk CREATE\n") !=
+                  std::string::npos,
+              "an unquoted path comes back as it was typed, with no quotes added");
+
+        std::ostringstream d;
+        mmon.exec("MOUNT dsk0:drive0 \"" + dskPath + "\" CREATE", msink);
+        mmon.exec("UNMOUNT dsk0:drive0", d);
+        CHECK(d.str().find("dsk0:drive0: unmounted (the drive is now empty)") != std::string::npos,
+              "UNMOUNT of a disk says the drive is empty (#577)");
+        CHECK(d.str().find("float") == std::string::npos, "...and nothing about pages floating");
+
+        std::ostringstream t;
+        mmon.exec("MOUNT acr0:tape \"" + tapPath + "\" CREATE", msink);
+        mmon.exec("UNMOUNT acr0:tape", t);
+        CHECK(t.str().find("acr0:tape: unmounted (the recorder is now empty)") !=
+                  std::string::npos,
+              "UNMOUNT of a tape says the recorder is empty (#577)");
+        CHECK(t.str().find("float") == std::string::npos, "...and nothing about pages floating");
+
+        std::filesystem::remove(dskPath, ec);
+        std::filesystem::remove(tapPath, ec);
     }
 
     // -----------------------------------------------------------------------
@@ -1695,6 +1862,138 @@ void test_cli() {
               "REMOVE past the end is refused and says how many there are");
         CHECK(sm.startup.empty(), "...and it removes nothing");
         CHECK(smon.failed(), "...and it trips failed()");
+    }
+
+    // ---------------------------------------------------------------------
+    // SET MACHINE name= -- the one [machine] line that could not be set at the prompt
+    // ---------------------------------------------------------------------
+    // The name was written only by the loader, so a machine built at the prompt saved as
+    // whatever it came from -- `none` after -n -- and the file had to be hand-edited to
+    // name it. The round trip must bring the name back byte for byte.
+    SECTION("SET MACHINE name= -- names the machine, and CONFIG SAVE carries it");
+    {
+        Machine nm;
+        nm.name = "none";  // what -n leaves
+        Monitor nmon(nm);
+        auto    nr = [&](const char* cmdline) {
+            std::ostringstream o;
+            nmon.exec(cmdline, o);
+            return o.str();
+        };
+
+        CHECK(nr("SET MACHINE name=mybox").find("machine: name=mybox") != std::string::npos,
+              "SET MACHINE name= says what it set");
+        CHECK(nm.name == "mybox", "...and the machine is renamed");
+        CHECK(nr("SHOW MACHINE").find("name      mybox") != std::string::npos,
+              "SHOW MACHINE reports the new name");
+        nr("SET MACHINE name other");
+        CHECK(nm.name == "other", "the spaced `key value` form works too");
+        nr("SET MAC NAME=box2");
+        CHECK(nm.name == "box2", "MAC resolves to MACHINE and the key is case-insensitive");
+
+        auto roundTrips = [&](const std::string& want) {
+            nm.name          = want;
+            std::string text = saveTomlText(nm);
+            Machine     back;
+            std::string err;
+            return loadTomlText(text, "name (saved)", back, err) && back.name == want;
+        };
+        CHECK(roundTrips("box2"), "CONFIG SAVE writes the name and CONFIG LOAD reads it back");
+        CHECK(roundTrips("my #1 C:\\box"),
+              "a name with a space, a '#' and a backslash survives the round trip");
+        CHECK(!nmon.failed(), "a run of valid SET MACHINE commands leaves failed() clear");
+
+        // The refusals, each on its own monitor because failed() is sticky.
+        auto refused = [](const char* cmdline, const char* expect) {
+            Machine            fresh;
+            Monitor            rmon(fresh);
+            std::ostringstream o;
+            rmon.exec(cmdline, o);
+            return rmon.failed() && o.str().find(expect) != std::string::npos;
+        };
+        CHECK(refused("SET MACHINE name=", "cannot be empty"), "an empty name is refused");
+        CHECK(refused("SET MACHINE name=\"a\\\"b\"", "double quote"),
+              "a name with a double quote is refused -- CONFIG SAVE could not write it back");
+        CHECK(refused("SET MACHINE bogus=1", "bogus"), "an unknown machine key is refused");
+        CHECK(refused("SET MACHINE name=a junk", "junk"), "trailing junk is refused");
+    }
+
+    // ---------------------------------------------------------------------
+    // CONFIG SAVE: a text value holding a '"' (issue #538)
+    // ---------------------------------------------------------------------
+    // A single string value resolves no escapes, so a '"' was written raw -- and a '#' after
+    // it started a comment, cutting the value short: `mount = "odd"name#1.dsk"` saved fine
+    // and would not load. A value with a '"' is now written '...', and one holding BOTH
+    // quote characters is refused rather than written into a file that will not load.
+    SECTION("CONFIG SAVE -- a value with a '\"' in it saves and loads back (#538)");
+    {
+        auto roundTrips = [](const std::string& want) {
+            Machine qm;
+            qm.name          = want;
+            std::string text = saveTomlText(qm);
+            Machine     back;
+            std::string err;
+            return loadTomlText(text, "quote (saved)", back, err) && back.name == want;
+        };
+        CHECK(roundTrips("odd\"name#1"), "a '\"' followed by a '#' survives the round trip");
+        CHECK(roundTrips("it's #1"), "...and so does a ' with a '#' after it");
+        CHECK(roundTrips("say \"hi\" #1"),
+              "...and a PAIR of '\"' before the '#' -- the reader has to know it is inside "
+              "'...', or the second '\"' reads as the string's end and the '#' cuts the line");
+
+        Machine plain;
+        plain.name = "my #1 C:\\box";
+        CHECK(saveTomlText(plain).find("name     = \"my #1 C:\\box\"\n") != std::string::npos,
+              "a value with no '\"' is written double-quoted exactly as before");
+
+        namespace fs = std::filesystem;
+        const fs::path dir = fs::temp_directory_path() / "altairsim-quotetest";
+        std::error_code ec;
+        fs::create_directories(dir, ec);
+        const std::string cfg = (dir / "both.toml").generic_string();
+        {
+            std::ofstream f(cfg);
+            f << "keep\n";
+        }
+        Machine both;
+        both.name = "a'b\"c";
+        std::string err;
+        CHECK(!saveToml(cfg, both, err), "a value holding both ' and '\"' is refused");
+        CHECK(err.find("machine name") != std::string::npos, "...and the message names it");
+        std::ifstream kept(cfg);
+        std::string   line;
+        std::getline(kept, line);
+        CHECK(line == "keep", "...and the file already there is left untouched");
+
+        // The issue's own repro, through MOUNT and CONFIG SAVE: a disk image whose name holds
+        // '"' and '#'. The disk is a MemoryMedia -- Windows forbids '"' in a real filename,
+        // and the bug is in the writer and the reader, not the host's filesystem.
+        setMediaResolver([](const std::string& path, bool ro, std::string&) {
+            return std::make_unique<MemoryMedia>(path, std::vector<uint8_t>(337568), ro);
+        });
+        const std::string save = (dir / "q.toml").generic_string();
+
+        Machine dm;
+        std::string derr;
+        CHECK(loadTomlText("[machine]\nname = \"q\"\nbase = \"default\"\n", "q", dm, derr),
+              "the default machine loads");
+        Monitor            dmon(dm);
+        std::ostringstream o;
+        dmon.exec("MOUNT dsk0:drive1 " + (dir / "odd\"name#1.dsk").generic_string(), o);
+        dmon.exec("CONFIG SAVE " + save, o);
+        CHECK(!dmon.failed(), ("MOUNT and CONFIG SAVE succeed: " + o.str()).c_str());
+
+        Machine     back;
+        std::string berr;
+        CHECK(loadToml(save, back, berr), ("the saved file loads back: " + berr).c_str());
+        Monitor            bmon(back);
+        std::ostringstream shown;
+        bmon.exec("SHOW MOUNTS", shown);
+        CHECK(shown.str().find("odd\"name#1.dsk") != std::string::npos,
+              "...with the disk mounted under its whole name");
+        setMediaResolver(openHostFile);
+        fs::remove(save, ec);
+        fs::remove(cfg, ec);
     }
 }
 
@@ -2726,6 +3025,11 @@ void test_achieved_hz() {
         CHECK(has(cmon.complete("SET CONSOLE base="), "octal"),
               "SET CONSOLE base= offers the console's enum values");
 
+        // MACHINE is a SET target, and its one key is the name.
+        CHECK(has(cmon.complete("SET MA"), "MACHINE"), "SET MA offers the MACHINE target");
+        Completions cmk = cmon.complete("SET MACHINE ");
+        CHECK(has(cmk, "name") && cmk.suffix == "=", "SET MACHINE offers name=");
+
         // SET word 1, a unit target: past the ':' the board's unit NAMES, replacing
         // only the run after the colon (so the id typed already stays put).
         Completions cu = cmon.complete("SET sio0:");
@@ -2885,6 +3189,58 @@ void test_achieved_hz() {
         run("SET disk0 NODEBUG=all");
         run("SET 6850 NODEBUG=all");
         run("SET CONSOLE DEBUG=stderr");
+    }
+
+    // -----------------------------------------------------------------
+    // SHOW CLOCK -- emulated time (issue #492). The machine has always counted
+    // T-states; before this nothing printed them, so "how long has the guest run,
+    // in its own seconds" could only be estimated from an instruction count.
+    // -----------------------------------------------------------------
+    SECTION("SHOW CLOCK reports emulated time, derived from the crystal");
+    {
+        Machine cm;
+        Monitor cmon(cm);
+        std::ostringstream setup;
+        cmon.exec("BOARDS ADD 8080 cpu0", setup);
+        cmon.exec("BOARDS ADD memory mem0", setup);
+        cmon.exec("REGION ADD mem0 type=ram at=0 size=1K", setup);  // RAM at the reset vector
+        auto run = [&](const std::string& l) {
+            std::ostringstream o;
+            cmon.exec(l, o);
+            return o.str();
+        };
+        const auto npos = std::string::npos;
+
+        CHECK(run("SHOW CLOCK").find("0.000000 s") != npos,
+              "a machine that has not run reports zero elapsed");
+
+        // NOPs are 4 T-states each on an 8080, so ten of them is exactly 40 -- and at the
+        // default 2 MHz crystal, 40 T-states is 20 microseconds. Both numbers are checked
+        // because the pair is the point: a count that cannot be converted is what #492 had.
+        cmon.exec("FILL 0-9 00", setup);   // ten NOPs at the reset vector
+        cmon.exec("SET REG PC=0", setup);
+        cmon.exec("STEP 10", setup);
+        const std::string after = run("SHOW CLOCK");
+        CHECK(after.find("(40 T-states)") != npos, "ten NOPs are 40 T-states");
+        CHECK(after.find("0.000020 s") != npos, "and 40 T-states at 2 MHz is 20 microseconds");
+        CHECK(after.find("2000000 Hz") != npos, "the crystal it divided by is named");
+
+        // The seconds follow the CRYSTAL, not the host: same T-states, a different divisor,
+        // a different answer. This is what keeps the figure true under replay.
+        cmon.exec("SET cpu0 clock_hz=4000000", setup);
+        CHECK(run("SHOW CLOCK").find("0.000010 s") != npos,
+              "doubling the crystal halves the elapsed seconds for the same T-states");
+
+        // Pacing is a separate axis from the divisor: clock_hz=0 runs flat out but STILL
+        // divides by a real rate, so the guest's seconds stay defined (clock.h: hz() is a
+        // divisor and is never 0, free() is the policy).
+        cmon.exec("SET cpu0 clock_hz=0", setup);
+        const std::string flat = run("SHOW CLOCK");
+        CHECK(flat.find("free") != npos, "clock_hz=0 reads as free-running");
+        CHECK(flat.find("(40 T-states)") != npos, "and the T-state count is unaffected by pacing");
+
+        CHECK(run("SHOW TIME").find("clock  (emulated time") != npos, "SHOW TIME is the same command");
+        CHECK(run("SHOW CLO").find("clock  (emulated time") != npos, "and it resolves by prefix");
     }
 
     // The RUN banner names WHERE the console is (issue #244 follow-up). A machine whose

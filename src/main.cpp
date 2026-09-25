@@ -2,6 +2,7 @@
 #include "boards/mits-884pio.h"
 #include "boards/mits-88c700.h"
 #include "boards/mits-88lpc.h"
+#include "boards/farmtek-fdcplus.h"
 #include "boards/mits-88pio.h"
 #include "boards/mits-88sio.h"
 #include "boards/mits-88uio.h"
@@ -87,7 +88,7 @@ static const char* kCwdConfig = "./altairsim.toml";
 static void usage(std::ostream& o) {
     o << kVersion << " -- an Altair 8800 / S-100 simulator\n"
          "\n"
-         "usage: altairsim [options] [machine]\n"
+         "usage: altairsim [machine] [options]\n"
          "\n"
          "  machine            a built-in name (altairsim original), or a config file if it\n"
          "                     has a '/' in it or ends in .toml. Omitted: ./altairsim.toml\n"
@@ -98,7 +99,8 @@ static void usage(std::ostream& o) {
          "  -n, --none         empty backplane. No boards, no memory, nothing.\n"
          "  -l, --list         list the built-in machines and exit.\n"
          "\n"
-         "  -s, --script <f>   run a command script, then exit with its status.\n"
+         "  -s, --script <f>   run a command script, then exit with its status. Paths in\n"
+         "                     it are relative to the script's folder.\n"
          "  -x, --exec <cmd>   run one monitor command (repeatable), then exit.\n"
          "  -i, --interactive  after --script/--exec, stay in the monitor.\n"
          "\n"
@@ -260,6 +262,7 @@ int main(int argc, char** argv) {
     CromemcoFdcBoard::setResolver(resolveEndpoint);  // the FDC family's TMS 5501 console (16/64FDC)
     FrontPanelBoard::setResolver(resolveEndpoint);   // the fp panel dials OUT to the graphical bridge
     Ss1Board::setResolver(resolveEndpoint);          // the System Support 1's 2651 serial channel
+    FdcPlusBoard::setResolver(resolveEndpoint);      // the FDC+ serial drive's line to its server
 
     // The video service, injected the same way (DESIGN.md 7.4): a graphics board
     // draws into a Display and never learns it is SDL. The shipping binary hands it
@@ -400,8 +403,11 @@ int main(int argc, char** argv) {
         }
         // The author's `#>` notes, to stdout, once the file is known good. Unlike the
         // discovery line above -- which is narration and goes to stderr -- these are the
-        // file's own message to whoever runs it, and are meant to be seen.
-        for (const std::string& note : notes) std::cout << note << "\n";
+        // file's own message to whoever runs it, and are meant to be seen. Except under
+        // --mcp: there stdout IS the JSON-RPC transport and carries nothing else, so the
+        // notes go to stderr, still in front of a human running the server (#459).
+        std::ostream& to = mcp ? std::cerr : std::cout;
+        for (const std::string& note : notes) to << note << "\n";
     } else {
         // -n: an empty backplane. Every read floats to FF, because nothing is
         // driving anything. That is not a broken machine, it is an empty one --
@@ -469,13 +475,12 @@ int main(int argc, char** argv) {
             std::cerr << "cannot open '" << script << "'\n";
             return 2;
         }
-        // -x and -s are the same thing (see above): commands given on the command line,
-        // run against the machine. Their paths root at the MACHINE's directory, exactly as
-        // what you type at the prompt does -- not at the script's own folder, which is what
-        // DO is for (a path written in a DO file is relative to that file). For a built-in
-        // machine that base is the launch directory, so a repo-relative test script run
-        // from the repo root resolves as it always has.
-        rc = mon.repl(f, std::cout, false);
+        // The script FILE is a command-line argument, so it is named from where you
+        // launched, like the machine file. The paths WRITTEN IN it are relative to the
+        // script's own folder -- a path written in a file is relative to that file, as in
+        // DO and a startup list -- so a shipped .ini runs from anywhere (#575). -x is the
+        // other kind: typed commands, rooted at the machine's directory.
+        rc = mon.runScript(f, script, std::cout);
         ran = true;
     }
 

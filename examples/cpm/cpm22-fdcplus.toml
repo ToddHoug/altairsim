@@ -1,0 +1,73 @@
+# CP/M from an FDC+ Serial Drive Server.
+#
+#     cd examples/cpm && altairsim cpm22-fdcplus.toml
+#     -> 56K CP/M 2.2b v2.3
+#        For Altair 8" Floppy
+#        A>
+#
+# THE DISKS ARE NOT IN THIS FOLDER. They are on a DRIVE SERVER -- the FDC+ Serial Drive Server
+# on a PC, or any program that speaks its protocol -- at the other end of a serial cable. The
+# `fdcplus` board below is the FDC+ in serial-drive mode: it asks the server for a whole track at
+# a time, and writes changed tracks back. Mount a bootable 8" CP/M image (this folder's
+# cpm22b23-56k.dsk will do) in the server's drive 0 BEFORE you start this machine.
+#
+# THIS FILE IS A DELTA. `base = "default"` brings the 56K Altair with the 2SIO console and the DBL
+# boot PROM at FF00. This file swaps its 88-DCDD for the FDC+, gives the processor a 10 MHz
+# crystal, and names the serial port. Set the port (below) and it is ready.
+
+#> 56K CP/M 2.2b, booting from drive 0 of an FDC+ Serial Drive Server.
+#> The server must be running, with a bootable 8" image in its drive 0.
+#> If the serial port will not open, set `connect` on fdc0 in this file (see its comment).
+
+[machine]
+name = "cpm22-fdcplus"
+base = "default"
+
+# The boot: EXAMINE FF00 / RUN, as on a real disk Altair. DBL at FF00 does not know that there is
+# no disk; to it, the FDC+ is an 88-DCDD.
+startup = ["RUN FF00"]
+
+# A modern Backspace key sends DEL; CP/M's line editor wants BS.
+[console]
+bsdel = "bs"
+
+# A CRYSTAL, AND IT IS NOT OPTIONAL HERE. A guest has no clock -- it counts instructions. The
+# CP/M BIOS gives up on a sector after a 65,536-pass loop: 1.4 s at 2 MHz, 0.28 s at 10 MHz. That
+# must be longer than a track takes to come down the line -- 0.19 s at 230400 baud, 1.14 s at
+# 38400. 10 MHz with 230400 fits, and runs five times as fast as a real Altair. At full speed
+# (clock_hz = 0, the default) the loop takes a few milliseconds, no track ever fits, and CP/M says
+# "Bad Sector" on the first new track. At a slower line, slow the crystal down too: 38400 wants
+# the real 2 MHz.
+[[board]]
+id       = "cpu0"
+clock_hz = 10000000
+
+# THE 88-DCDD GOES. It answers at 08-0A, the same ports as the FDC+, and a real Altair would not
+# have both controllers on the bus at once.
+[[board]]
+id     = "dsk0"
+remove = true
+
+# THE FDC+, IN SERIAL-DRIVE MODE.
+[[board]]
+type      = "fdcplus"
+id        = "fdc0"
+drivetype = 7          # 7 = serial drive as an Altair 8" drive (the 8 MB drive too); 6 = Minidisk
+
+# ============================================================================================
+# SET YOUR SERIAL PORT HERE.
+#
+# `connect` names the serial port the drive server is on. `baud` must be the SAME rate that the
+# server is set to, and one of the serial drive's rates: 9600, 19200, 38400, 57600, 76800,
+# 230400, 403200 (the FDC+'s preferred rate) or 460800.
+#
+#   macOS    connect = "serial:/dev/cu.usbserial-AL009KFH"   (ls /dev/cu.* to find yours)
+#   Linux    connect = "serial:/dev/ttyUSB0"
+#   Windows  connect = "serial:COM3"                         (Device Manager, Ports)
+#
+# A server on this same computer or across the network can also be reached through a TCP
+# bridge, with `connect = "socket:HOST:PORT"`. If the port will not open, the error lists the
+# serial ports this computer has.
+# ============================================================================================
+connect = "serial:/dev/cu.usbserial-AL009KFH"
+baud    = 230400

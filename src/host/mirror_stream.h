@@ -102,6 +102,16 @@ public:
     }
 
     std::vector<std::string> drainLog() override { return inner_->drainLog(); }
+    void greet(const std::string& owner) override { inner_->greet(owner); }
+
+    // Is a watcher on the line -- accepted by pump() and through its handshake? The one
+    // thing about the rider the mirror will say, since status() is deliberately the
+    // inner line's. A client whose connect() has completed is NOT yet a watcher: the
+    // kernel finishes the handshake into the listen backlog, and until pump() accept()s
+    // it the mirror has no session and guest output goes nowhere (queueToClient). So a
+    // caller that wants the watcher to see what comes next waits on THIS, not on its
+    // own end reporting connected.
+    bool watching() const { return conn_ && conn_->established() && !conn_->closed(); }
 
     // For the --mcp attachment (Phase 2): reach the wrapped line so the MCP server can
     // feed()/out() an inner ScriptedStream directly while the guest talks to the mirror.

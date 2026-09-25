@@ -1,7 +1,7 @@
 #pragma once
 //
 // SSM IO-4 (2P + 2S) -- the real, fully-emulated Solid State Music I/O board.
-// See docs/manual/boards.md and reference/SSM IO-4 2P+2S IO Board.md.
+// See docs/boards/ssm-io4.md, docs/manual/boards.md and reference/SSM IO-4 2P+2S IO Board.md.
 //
 // THIS IS NOT THE gsio STRAP BOARD. `gsio` (src/boards/gsio.h) is the generic
 // chip-LESS strap-serial engine -- "describe a status bit, read/write a data byte".

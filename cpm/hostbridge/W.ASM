@@ -10,10 +10,9 @@
 ;       ASM W                   -> W.HEX
 ;       LOAD W                  -> W.COM
 ;
-; THE NAME IS AltairZ80'S. THE CODE IS NOT -- see the same paragraph at the
-; top of R.ASM. Our W talks to a card of our own at 0B0H; theirs talks to a
-; "SIMH pseudo device" at 0FEH, which in a real Altair is the 88-VI/RTC's
-; control register.
+; The name is one letter because it is typed constantly -- see the same
+; paragraph at the top of R.ASM. W talks to the Host Bridge card at 0B0H
+; and to nothing else.
 ;
 ;-----------------------------------------------------------------------
 ; EVERY DISK OPERATION IN THIS PROGRAM IS A BDOS CALL, AND THAT IS THE
@@ -25,8 +24,7 @@
 ;
 ; AND BDOS CLOBBERS EVERY REGISTER (A,B,C,D,E,H,L -- only SP survives).
 ;-----------------------------------------------------------------------
-; B OR T, AND B IS THE DEFAULT. THIS IS DELIBERATE AND IT IS THE OPPOSITE
-; OF AltairZ80'S CHOICE.
+; B OR T, AND B IS THE DEFAULT. THAT IS DELIBERATE.
 ;
 ; CP/M stores whole 128-byte records and keeps NO BYTE COUNT anywhere, so a
 ; file's true length is simply not recorded: the last record is padded, by
@@ -42,11 +40,10 @@
 ;                binary file that happens to contain a 1AH byte comes out
 ;                TRUNCATED, which is why this is not the default.
 ;
-; AltairZ80's W defaults to text and keeps an exception list of extensions
-; (.COM, .REL, .DAT...) that it treats as binary instead. A file whose name
-; is not on the list and whose contents contain a 1AH is then silently
-; truncated. Defaulting to EXACT costs a few pad bytes. Defaulting to text
-; costs your data.
+; WE DO NOT GUESS FROM THE EXTENSION. Keeping a list of names that "are
+; really binary" (.COM, .REL, .DAT...) only moves the damage to the file
+; that is not on it: one 1AH and it is silently truncated. Defaulting to
+; EXACT costs a few pad bytes. Defaulting to text costs your data.
 ;-----------------------------------------------------------------------
 
         ORG     100H
@@ -99,8 +96,8 @@ CRESET  EQU     8
 ;=======================================================================
 START:  LXI     SP,STACK
 
-; RESET first -- ONE byte, not the 128-times-in-a-row ritual AltairZ80's
-; utilities open with. This card has no undefined state to climb out of.
+; RESET first -- ONE byte. This card has no undefined state to climb
+; out of.
         MVI     A,CRESET
         OUT     HBCMD
 
@@ -481,6 +478,7 @@ FCB2HN: LXI     H,FCB+1
         CALL    FLD
 
         LDA     FCB+9
+        ANI     7FH             ; an attribute bit, not a letter -- see FLD
         CPI     ' '
         JZ      F2Z             ; no extension: no dot either
         MVI     A,'.'
@@ -495,7 +493,14 @@ F2Z:    XRA     A
         RET
 
 ; Copy up to B characters from (HL) to (DE), stopping at the first blank.
+;
+; STRIP THE ATTRIBUTE BITS HERE TOO. STASH cleaned the name it put in the
+; FCB, but this runs AFTER the OPEN -- and CP/M 3's OPEN writes the file's
+; R/O, SYSTEM and ARCHIVE bits back into the high bit of the FCB's name
+; characters. A read-only HELP.COM came back as HELP.0C3H'OM', which is
+; no name a host will create.
 FLD:    MOV     A,M
+        ANI     7FH
         CPI     ' '
         RZ
         STAX    D
@@ -846,6 +851,7 @@ PF1:    LXI     H,FCB+1
         MVI     B,8
         CALL    PFLD
         LDA     FCB+9
+        ANI     7FH             ; an attribute bit, not a letter -- see FLD
         CPI     ' '
         RZ                      ; no extension: nothing to print
         MVI     A,'.'
@@ -853,6 +859,7 @@ PF1:    LXI     H,FCB+1
         LXI     H,FCB+9
         MVI     B,3
 PFLD:   MOV     A,M             ; print B characters at HL, skipping the
+        ANI     7FH             ; (no attribute bits -- see FLD)
         CPI     ' '             ; blanks an FCB pads with
         JZ      PFL2
         PUSH    B
@@ -965,7 +972,7 @@ MNOHB:  DB      CR,LF,'W: no host bridge at B0H.',CR,LF
         DB      'This machine has no `hostbridge` card in it, or it is at'
         DB      ' another port.',CR,LF,'$'
 
-MUSAGE: DB      CR,LF,'W -- copy a file from CP/M out to the host.  (1.0)',CR,LF,CR,LF
+MUSAGE: DB      CR,LF,'W -- copy a file from CP/M out to the host.  (1.1)',CR,LF,CR,LF
         DB      '   W <cpmfile> [hostfile] [B|T]',CR,LF
         DB      '   W <pattern>',CR,LF,CR,LF
         DB      'Examples',CR,LF

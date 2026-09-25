@@ -125,6 +125,13 @@ build and pass the suite. The Windows platform layer, once merely written, is fi
 Linux, macOS, and Windows are each a required check — so a regression on any of them shows up
 before it merges. The tests still run locally the same way, when someone types `ctest`.
 
+**A merge does not rebuild what its PR already tested.** Merging an up-to-date PR makes a commit
+whose files are identical to the PR head CI just passed, so the run on `master` skips the build
+and is green with nothing to download. When the merge did bring in something new — PDFs the
+docs bot committed while the PR was open, a resolved conflict — only that difference is judged,
+so a PDF-only difference runs the single documentation leg. For the binaries of a merged
+change, fetch them from its PR.
+
 Each of those jobs uploads the binary it built, so a green run leaves three executables on
 GitHub — including the two you cannot produce on your own machine. To fetch them:
 
@@ -145,7 +152,7 @@ this tree.
 ```sh
 ctest --test-dir build -LE slow     # unit + acceptance. About 30 seconds.
 ctest --test-dir build              # ...plus 8080EXM, the full exerciser.
-ctest --test-dir build -L hw        # modem control, against a real null-modem cable.
+ctest --test-dir build -L hw        # a real null-modem cable, and a real TNFS server.
 ```
 
 The acceptance tests are not unit tests. They **boot period software on the whole machine
@@ -207,14 +214,20 @@ So B raising DTR is a *carrier appearing* at A — to a 6850 strapped `dcd=wired
 indistinguishable from a modem, which is the whole point of the test. The wiring is
 restated at the top of `tests/serialtest.cpp`.
 
-## Catching lifetime bugs: `-DSANITIZE=on`
+**`tnfs-hw` needs a TNFS server instead of a cable.** It boots the CP/M example with its
+floppy mounted from a real `de-tnfsd` (a POSIX TNFS server, not part of this tree), `SAVE`s a
+file, and reads it back through a fresh mount. The script starts and stops the server itself,
+on a local port, serving a copy of the image. It runs when `de-tnfsd` is on `PATH` and
+skips (77) otherwise. On Windows it is not registered at all: `de-tnfsd` is POSIX-only.
+`tests/test_tnfs.cpp`, in `unit`, covers the same client against a fake server on every push.
 
-Twice now the `unit` suite has SEGFAULTed on **Windows CI only**, green on Mac and Linux, and
-both times the cause was a use-after-scope the macOS allocator silently tolerated — a board/chip
-test whose `Clock` was declared *after* the board, so the Clock died first and the board's
-destructor cancelled its wake event on freed memory. No compiler warning fires for it.
+## Catching memory bugs: `-DSANITIZE=on`
 
-`-DSANITIZE=on` is the local oracle. It threads AddressSanitizer + UndefinedBehaviorSanitizer
+A crash on one platform only — typically Windows CI red, macOS and Linux green — is usually a
+use-after-free or use-after-scope that one allocator tolerates and another does not. No compiler
+warning fires for it.
+
+`-DSANITIZE=on` finds it locally. It threads AddressSanitizer + UndefinedBehaviorSanitizer
 (just ASan on MSVC) through the whole binary, so the crash names its own `file:line` instead of
 you guessing from a block-buffered stack trace. Configure it in its **own build directory** — an
 instrumented binary is slower and is not what you ship:
@@ -225,10 +238,8 @@ cmake --build build-asan --target altair_tests
 ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1 ./build-asan/altair_tests
 ```
 
-It is off by default and not in CI — CI catches the Windows crash by running on Windows, and this
-is the tool you reach for once it does. Run it before merging anything that changes board or chip
-object lifetimes. **The rule it enforces:** in a board/chip test, declare `Clock c;` *before* the
-board it drives (`tests/test_dcdd.cpp` is the precedent).
+It is off by default and not in CI — CI catches a platform-only crash by running on that
+platform, and this is the tool you reach for once it does.
 
 ## The documentation is part of the build
 

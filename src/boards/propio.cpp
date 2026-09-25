@@ -15,7 +15,7 @@ SerialStraps propioProfile() {
 
 // ONE channel, named "serial", straps surfaced at board level -- the single-channel shape
 // that preserves the historical `[[board]] type="propio"` / `connect="console"` config. The
-// default profile is `sior0`; these are custom straps, so report the channel as `custom` for
+// default profile is `sior1`; these are custom straps, so report the channel as `custom` for
 // a coherent CONFIG SAVE (the individual straps are still written out).
 PropIoBoard::PropIoBoard() {
     setBoardLevelProperties(true);

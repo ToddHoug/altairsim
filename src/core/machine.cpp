@@ -5,6 +5,7 @@
 #include "core/crc32.h"
 #include "core/statefile.h"
 #include "host/media.h"
+#include "host/stream.h"
 
 #include <algorithm>
 #include <cstring>
@@ -45,6 +46,10 @@ Board* Machine::add(const std::string& type, const std::string& id, std::string&
         return nullptr;
     }
     b->id = id;
+    return adopt(std::move(b));
+}
+
+Board* Machine::adopt(std::unique_ptr<Board> b) {
     Board* raw = b.get();
     // Into the backplane, and onto the clock. A card that has nothing
     // time-dependent on it never looks at the clock; a UART cannot work without
@@ -57,6 +62,16 @@ Board* Machine::add(const std::string& type, const std::string& id, std::string&
 
 void Machine::pump() {
     for (auto& b : boards_) b->pump();
+
+    // A CALLER ANSWERED A LISTENER THAT GREETS, and only the backplane can say which
+    // line it rang: the board resolved the endpoint and never told the stream its name.
+    // So name them all here, and each stream that owes its caller a banner pays it
+    // (ByteStream::greet). Nobody owed one -- nearly every slice -- is one compare.
+    if (ByteStream::greetingsDue() == 0) return;
+    for (auto& b : boards_)
+        for (const auto& u : b->units())
+            if (u.kind == UnitKind::Serial)
+                if (ByteStream* s = b->unitStream(u.name)) s->greet(b->id + ":" + u.name);
 }
 
 // The operator started or stopped the machine (a RUN session began/ended). Fan it

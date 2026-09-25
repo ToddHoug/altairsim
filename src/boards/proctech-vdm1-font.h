@@ -9,12 +9,17 @@
 // one-dot gap between characters. Lowercase g/j/p/q/y put descenders in rows 11..13,
 // which is why the cell is a full 13 rows tall.
 //
+// WHICH ROM: the MCM6576 (VDM-1 manual, Figure 3-1C) -- boxy uppercase, real
+// lowercase with descenders, and graphics glyphs for the control codes 0x00-0x1F
+// (0x00 a box, 0x05 a box with an X, 0x07 an omega, 0x0D a left arrow...). The
+// manual offers the 6574 and 6575 as alternates; this is the one we emulate.
+//
 // Provenance: transcribed verbatim from the `vdm1_charset[128][13]` table in SIMH's
-// AltairZ80 `s100_vdm1.c` (a working VDM-1 emulation), which carries the period
-// glyph shapes -- boxy uppercase, real lowercase with descenders, and the VDM-1's
-// own graphics glyphs for codes 0x00-0x1F. The board blanks 0x00-0x1F (the common
-// SW5/SW6 control-character-blanking option); the graphics glyphs are retained here
-// so that option can be made switchable later without re-sourcing the ROM.
+// AltairZ80 `s100_vdm1.c` (a working VDM-1 emulation), and checked against Fig 3-1C.
+//
+// THE ROM BLANKS NOTHING. Every code has its glyph here, as on the chip. Whether a
+// control code is drawn is the SW5/SW6 switches' business, and they are on the
+// board (VdmBoard::render, the `blanking` property), not in the ROM.
 //
 // The board only calls glyphRow(); nothing else depends on the storage layout.
 
@@ -162,12 +167,9 @@ inline const uint8_t (&charset())[128][kRows] {
 }
 
 // One scan row of a glyph as an 8-bit column pattern (bit 7 = leftmost dot).
-// Control codes 0x00-0x1F render blank (SW5/SW6 control-character blanking, the
-// board's documented default); every other code returns its ROM glyph.
 inline uint8_t glyphRow(uint8_t code, int row) {
     if (row < 0 || row >= kRows) return 0;
     code &= 0x7F;
-    if (code < 0x20) return 0;          // control-character blanking
     return charset()[code][row];
 }
 

@@ -1,14 +1,15 @@
 # Processor Technology VDM-1 — Video Display Module
 
 **Status:** implemented, `type = "vdm1"` — memory-mapped text with the real VDM-1
-character-generator ROM; keyboard and CR/VT blanking are deferred (see *Limitations*).
+character-generator ROM (the MCM6576) and the SW5/SW6 blanking options; the keyboard is
+deferred (see *Limitations*).
 
 ## The real hardware
 
 The S-100 card that gave the Altair/IMSAI a video terminal (Processor Technology,
 1976; the display half of the Sol-20, and the board SOLOS/CUTER drives). The CPU
 writes ASCII into a **1 KB screen RAM** mapped into its own address space, and the
-card scans that RAM against an **MCM6574** character-generator ROM to paint **16
+card scans that RAM against a character-generator ROM to paint **16
 lines × 64 characters** of 1 V composite video. Eight 1024×1 static RAMs hold the
 screen; a 14.318 MHz dot clock and one-shot sync generators produce the raster.
 
@@ -17,6 +18,10 @@ the 1 KB **screen page** (default `0xCC00`), the same six bits set the **I/O por
 (default `0xCC`, low two bits forced zero), and SW1–SW6 pick video polarity, cursor
 behavior, and control-character blanking. The keyboard was a **separate parallel
 board**, not part of the VDM-1.
+
+The ROM socket takes an **MCM6574, MCM6575 or MCM6576** (manual Figures 3-1A–C); they
+are pin-compatible and differ in their glyphs. We emulate the **MCM6576**, which has a
+graphics glyph for every control code 0x00–0x1F (0x00 is a box, 0x0D a left arrow).
 
 ## Sources
 
@@ -30,7 +35,7 @@ board**, not part of the VDM-1.
 
 | Bit | Meaning |
 |---|---|
-| D0–D6 | Character code → MCM6574 glyph (128-char set) |
+| D0–D6 | Character code → MCM6576 glyph (128-char set) |
 | D7 | Cursor: this cell is shown inverted, and blinks if the blink option is on |
 
 **I/O:** one port at `port` (default `0xCC`, a multiple of 4).
@@ -64,12 +69,35 @@ board**, not part of the VDM-1.
 - **Status** (D0/D1) is derived from the `Clock`, never a poll-driven counter, so a
   spin loop sees it move because emulated time advanced (replay-safe).
 - **No media, no interrupt wire, no DMA.** `properties()`: `base`, `port`, `video`
-  (`normal`/`reverse`), `cursor` (`off`/`blink`/`steady`).
+  (`normal`/`reverse`), `cursor` (`off`/`blink`/`steady`), `blanking`
+  (`none`/`crvt`/`control`/`all`), `fill` (`zero`/`random`), `seed`.
+
+### Blanking (SW5/SW6)
+
+The ROM draws every code; blanking is the board's, in `render()`. The `blanking`
+property is Table 3-1's four switch settings:
+
+| `blanking` | SW5 | SW6 | Control codes 00–1F | CR/VT text blanking |
+|---|---|---|---|---|
+| `none` (default) | ON | ON | shown | off |
+| `crvt` | ON | OFF | shown | on |
+| `control` | OFF | ON | blanked | on |
+| `all` | OFF | OFF | every character blanked; only cursor blocks show | on |
+
+The default is the factory setting: the manual's installation note (§2.7.1) ships the
+board with "unblanked control characters". CR/VT blanking follows the manual's test
+(§2.7.5, Figures 2-13 and 2-14): a **CR** blanks from the next cell to the end of its
+line; a **VT** blanks from the next cell to the end of the screen. The CR or VT itself
+is drawn unless control codes are blanked too. Blanking works in **display order**,
+after the scroll, as the beam scans. A blanked cell still shows its cursor block.
 
 ### Reset
 
-- `Reset::PowerOn` (POC*, cold): clears screen RAM to 0x00, scroll to 0, timer off.
-  (Real RAM powers up random; we blank it so a cold machine shows an empty screen.)
+- `Reset::PowerOn` (POC*, cold): fills screen RAM by `fill`, scroll to 0, timer off.
+  The default `fill = random` is what real RAM does, and it shows: a cold screen is
+  junk until software clears it, as SOLOS and CUTER do. `seed` makes it repeatable,
+  like the RAM boards. `fill = zero` gives all 0x00, which is a screen of boxes, not
+  a blank one.
 - `Reset::Bus` (RESET*, warm): nothing — a warm reset does not clear the screen or
   move the scroll latch (RAM has no POC* pin).
 
@@ -87,15 +115,7 @@ board**, not part of the VDM-1.
 - **The keyboard is not here.** The VDM-1's keyboard was a separate parallel board;
   this card is output-only. A host-window keystroke path will arrive with that
   board and route through a `ByteStream` (DESIGN.md §7.4), not through the VDM-1.
-- **CR→end-of-line / VT→end-of-screen blanking is not modeled.** Control codes
-  0x00–0x1F render blank (the common SW5/SW6 setting); software relying on the
-  hardware's CR/VT erase would see stray blanks, not erasure. (The reference file
-  §5 has the exact behavior for when it is added.)
-- **Control codes 0x00–0x1F render blank.** The character-generator ROM
-  (`proctech-vdm1-font.h`) actually carries the VDM-1's own graphics glyphs for
-  those codes, but the board blanks them — the common SW5/SW6 control-blanking
-  option — so a cleared (0x00) screen is blank. Making that switchable is one flag;
-  the glyphs are already in the ROM.
+- **Only the MCM6576 is emulated.** The 6574 and 6575 glyph sets are not in the tree.
 - **SCAN ADVANCE (D1) is a time-derived approximation**, not a cycle-exact raster
   position. It cycles so a polling flicker-free writer sees it move; it is a hint,
   and no guest depends on its exact phase.
@@ -106,7 +126,9 @@ board**, not part of the VDM-1.
   the port, guest writes landing in screen RAM and reading back via `peek`, the
   render lighting the right cell for a written character and nothing elsewhere,
   hardware scroll moving the top row, the `OUT` one-shot (D0), the reverse-video
-  palette swap, and property validation (1 KB / 4-port alignment).
+  palette swap, property validation (1 KB / 4-port alignment), control codes drawn
+  by default, each `blanking` setting (CR/VT in display order, cursor blocks under
+  `all`), and the `fill`/`seed` power-on screen.
 - End-to-end: `altairsim vdm1` runs `roms/VDM1DEMO`, which writes a banner into
   `0xCC00`; `DUMP CC00` shows it, and with SDL3 the banner appears in a window.
 

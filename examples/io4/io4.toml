@@ -9,7 +9,7 @@
 # for the ride -- SHOW io40 lists them all.
 #
 # The console is the io4's default profile, altair-rev1 (DAV = D0, TBMT = D7,
-# status inverted), which is exactly the SIO-Rev-0 convention the monitor's own
+# status inverted), which is exactly the SIO-Rev-1 convention the monitor's own
 # console driver expects: status/data at ports 0/1, "ready" on bit 0.
 #
 # WHAT YOU SEE: the machine cold-starts the monitor (startup RUN F000) and prints

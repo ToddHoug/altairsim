@@ -1,6 +1,6 @@
 # MITS 88-SIO — Serial I/O Board
 
-**Status:** milestone 1b — implemented, `type = "sio"`
+**Status:** implemented, `type = "sio"`
 
 ## The real hardware
 

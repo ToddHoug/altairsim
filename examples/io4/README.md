@@ -22,7 +22,7 @@ CPU registers. `^E` returns to the `altairsim>` prompt.
 
 ## Why it just works — the console straps
 
-The SSM 8080 monitor's console driver expects a **MITS SIO Rev-0** serial port:
+The SSM 8080 monitor's console driver expects a **MITS SIO Rev-1** serial port:
 status and data at ports `0`/`1`, with "byte ready" on data bit 0 and the status
 byte inverted. That is exactly the IO-4's **default profile, `altair-rev1`** (DAV
 → D0, TBMT → D7, status inverted through the 74LS368 buffer), so this machine sets

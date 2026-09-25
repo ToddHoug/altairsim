@@ -1,6 +1,6 @@
 # Host Bridge — guest ⇄ host file transfer
 
-**Status:** built (milestone 7). **This is our own design, not a period card** — MITS never made it, nobody ever fabricated it, and it is the one board in the default machine that is an anachronism on purpose.
+**Status:** built. **This is our own design, not a period card** — MITS never made it, nobody ever fabricated it, and it is the one board in the default machine that is an anachronism on purpose.
 
 Type `hostbridge`. Two I/O ports, default base `0xB0`. In the default machine as `hb0`.
 
@@ -9,7 +9,7 @@ Type `hostbridge`. Two I/O ports, default base `0xB0`. In the default machine as
 A guest running under CP/M has no way to reach a file on the host, and the host has no way to reach a file inside a mounted disk image. Both directions were blocked:
 
 - **Host-side image surgery is deferred** (`DESIGN.md` §12.2). Reading a file out of a `.dsk` needs the *controller's* sector layout **and** the *image's* CP/M DPB and software skew, and nothing in the simulator can infer that pair from the bytes.
-- **AltairZ80's port-0xFE "SIMH pseudo device" is refused** (`DESIGN.md` §0.1, §12). It is another simulator's invention, not Altair hardware, and implementing its protocol would mean deriving from that simulator's source. It also sits on 0xFE — which in a real Altair is the **88-VI/RTC's control register**, a card we now have.
+- **A host-transfer pseudo-device at port 0xFE is refused** (`DESIGN.md` §0.1, §12). In a real Altair 0xFE is the **88-VI/RTC's control register**, a card we now have.
 
 So the Host Bridge is not a convenience. **It is the supported guest↔host file path**, which is why it ships in the default machine rather than off in an example, and why its sandbox is load-bearing rather than defensive.
 
@@ -17,9 +17,9 @@ It is also the first genuinely new card built against the board API, which makes
 
 ## The port, and why not 0x30
 
-`0x30` was the obvious pick and it is **wrong**: the WD179X floppy controller defaults to `0x30–0x33` and the Cromemco 64FDC puts its control register at `0x34`. Putting a host-transfer card on top of a widely-cloned S-100 disk address is precisely the mistake AltairZ80 made with 0xFE.
+`0x30` was the obvious pick and it is **wrong**: the WD179X floppy controller defaults to `0x30–0x33` and the Cromemco 64FDC puts its control register at `0x34`. A host-transfer card does not go on top of a widely-cloned S-100 disk address.
 
-A census of every default I/O base in both catalogs — this simulator's `src/boards/` and AltairZ80's ~35 S-100 devices — leaves exactly two empty 16-port holes: **`B0–BF`** and **`D0–DF`**. The card takes `0xB0–0xB1`.
+A census of every default I/O base in `src/boards/`, against the wider S-100 catalog, leaves exactly two empty 16-port holes: **`B0–BF`** and **`D0–DF`**. The card takes `0xB0–0xB1`.
 
 ```
 00-01 88-SIO   06-07 88-ACR   08-0A 88-DCDD/MDS   0E-0F Dazzler   10-13 88-2SIO
@@ -74,7 +74,7 @@ Error codes — these are on the wire, so they are published and will not be ren
 
 > **Any OUT to the command port abandons the stream in flight.**
 
-You can walk away from a half-finished transfer at any point, for any reason, and the next command simply works. That single invariant deletes the entire family of caveats AltairZ80's device carries — *"the calling program must request all bytes of the result, otherwise the pseudo device is left in an undefined state"* — and with it the reason its utilities open by sending a reset **128 times in a row**. Ours send it once.
+You can walk away from a half-finished transfer at any point, for any reason, and the next command simply works. That single invariant deletes the entire family of caveats that would otherwise attach to a streaming device — *the calling program must request every byte of a result, or the device is left in an undefined state* — and with it any reason for a utility to open by resetting the card repeatedly. Ours reset it once.
 
 The one thing a command does **not** abandon is the **directory enumerator**. That is not an exception — a listing is not a stream — and it is what lets `R *.ASM` do a whole `OPEN_READ` and transfer *between* two `DIR_NEXT`s without losing its place. `DIR_FIRST`, `DIR_LONG` and `RESET` are the only things that disturb it.
 
@@ -99,7 +99,7 @@ Refused with `0x03`:
 
 The symlink gate is a **component-wise** prefix check against the canonicalized root, not a string compare — a string compare would happily conclude that `/tmp/sandbox-evil` lives inside `/tmp/sandbox`. `tests/test_hostdir.cpp` is where that claim is proved, and it runs against a **real filesystem with real symlinks**, because a symlink escape cannot be tested against a fake one.
 
-**Subdirectories are supported** (`R SRC/FOO.ASM`), and **both separators work on every host**: `/` and `\` are accepted and normalized everywhere. So one assembled `R.COM` runs against a Mac, a Linux box and a Windows box without being told which. (AltairZ80's device has a command for asking the guest what the host's path separator is. The guest should not have to care, and here it does not.)
+**Subdirectories are supported** (`R SRC/FOO.ASM`), and **both separators work on every host**: `/` and `\` are accepted and normalized everywhere. So one assembled `R.COM` runs against a Mac, a Linux box and a Windows box without being told which. There is no command for asking which separator the host uses, because the guest should not have to care.
 
 ## Case
 
@@ -107,7 +107,9 @@ The CP/M CCP **folds the command tail to upper case before the program runs**. `
 
 So the card compensates. An **exact** match always wins. Failing that it folds case and looks again: if exactly one host file matches, that is the one; if **several** do, it refuses with `0x08` rather than guess. A *write* of a name nobody has creates it exactly as asked.
 
-AltairZ80 solves this with an `L` switch on its utilities, which puts the burden on the human to remember which of their files are in which case. The burden belongs here.
+The burden belongs on the card, not on the human: there is no switch to tell the utilities which case to look for, because nobody should have to remember which of their files are in which.
+
+The other direction is `R`'s job. A host name that comes back off a wildcard match keeps the host's case, and a CP/M directory entry holds upper case — so `R` folds the name it builds the FCB from. Without that, `R *.asm` stores `lower.asm`, and nothing in CP/M can name it again: the CCP upper-cases everything typed, so `ERA`, `DIR` and the assembler all look straight past it.
 
 ## Properties
 
@@ -117,7 +119,7 @@ AltairZ80 solves this with an `L` switch on its utilities, which puts the burden
 | `hostdir` | `""` | The sandbox root. **Empty means the directory you ran `altairsim` from.** |
 | `readonly` | `off` | Refuse `OPEN_WRITE` and `DELETE` — a one-way street, out of the host only |
 
-`hostdir = ""` is not a special case: it is exactly what `Board::resolvePath()` already does with an empty `configDir_` — *a path typed is relative to the shell*. Aim it somewhere else with the existing `-x`:
+`hostdir = ""` is the directory you launched from, even for a machine file loaded from somewhere else — so `R FOO.ASM` finds the file in the shell you are standing in. A relative `hostdir` you *write* is a path like any other, and resolves against the machine's directory (`docs/config.md`). Aim it somewhere else with the existing `-x`:
 
 ```
 altairsim -x 'SET hb0 HOSTDIR=/tmp/xfer' -i
@@ -143,7 +145,7 @@ W  <cpmfile> [hostfile] [B|T]   CP/M -> host      W *.HEX     W FOO.TXT T
 HDIR [pattern]                  what is on the host
 ```
 
-**The names are AltairZ80's; the code is not.** Its `R.COM` and `W.COM` talk to a pseudo-device at 0xFE and were written in SPL; ours talk to this card at 0xB0 and are 8080 assembler. Neither will run in the other simulator. The muscle memory is worth keeping; nothing else is shared. `HDIR` has no ancestor at all — AltairZ80 ships no way to see what is there to read, so you type a host name from memory, get it wrong, and cannot tell whether the file is missing or your spelling is.
+`R` and `W` are short because they are typed constantly. `HDIR` exists because without a way to see what is there to read, you type a host name from memory, get it wrong, and cannot tell whether the file is missing or your spelling is.
 
 ### Every disk operation is a BDOS call
 
@@ -151,14 +153,14 @@ No BIOS entry points. No `IN`/`OUT` to a disk controller. No assumption about a 
 
 That is what makes the same `R.COM` work on an 88-DCDD 8″ floppy, an 8 MB image, an 88-MDS minidisk, and any BIOS anybody writes later — and the acceptance test **proves** it rather than asserting it: it builds `R.COM` and `W.COM` on an 8 MB 88-DCDD image, then `LOAD`s the *same hex* on a 5.25″ minidisk behind a **different controller** and round-trips the same bytes.
 
-### `W` defaults to binary, and that is the opposite of AltairZ80
+### `W` defaults to binary
 
 CP/M stores whole 128-byte records and **keeps no byte count anywhere**, so a file's true length is simply not recorded — the last record is padded, by convention with `^Z`. Coming back out, those pad bytes are indistinguishable from data. Only the human knows whether the file was text.
 
 - **`B` (default)** — every byte of every record, exactly. A `.COM` survives the trip; a text file arrives with up to 127 trailing `^Z`.
 - **`T`** — stop at the first `^Z`. A text file comes back clean; **a binary file containing a `1AH` comes back truncated**, which is why it is not the default.
 
-AltairZ80's `W` defaults to text and keeps an exception list of extensions (`.COM`, `.REL`, `.DAT`…) it treats as binary instead — so a file whose name is not on the list and whose contents contain a `1AH` is silently truncated. Defaulting to exact costs a few pad bytes. Defaulting to text costs your data. (Same instinct as the `strip7out` scar.)
+`B` is the default because defaulting to exact costs a few pad bytes and defaulting to text costs your data — and because guessing from the extension is the same mistake either way: a `1AH` in a file the guess called text is gone. (Same instinct as the `strip7out` scar.)
 
 ### 8.3 mapping
 

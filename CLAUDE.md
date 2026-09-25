@@ -3,17 +3,54 @@
 A C++20 simulator of the MITS Altair 8800 and the S-100 bus. No dependencies beyond a C++20
 compiler and CMake; SDL3 is optional and detected, never required.
 
+## How work is done here
+
+**Every task follows two skills: `work-task` (plan → build → review) and `ship-change`
+(commit → PR → merge → issues).** Load the one that fits before acting. The rules hold
+whether or not a skill is loaded:
+
+1. **No work without a plan made in plan mode** and approved. No edits before approval.
+   A feature plan first shows the feature is needed — not already documented, not a docs gap.
+2. **Tests never work around a bug.** A test that exposes a bug gets the code fixed. Never
+   loosen an assertion, skip the test, dodge the input, or add a retry.
+3. **A bug related to the task is fixed in the same change. An unrelated bug gets a GitHub
+   issue** at once (signed `--AltairSim Claude`) and is left alone.
+4. **Docs are updated before the commit**, as part of the change under review.
+5. **No commit until the maintainer has reviewed and approved it.** Stop and report the diff.
+6. **No PR until the maintainer approves opening one.** More commits may come first.
+7. **No merge until CI is green** on all three platforms. Then merge without asking again.
+8. **After the merge, comment on the related issues.** Who closes one depends on who opened
+   it: an issue opened by `deltecent` is closed by `Fixes #N` in the PR. Anyone else's is never
+   closed by us — `Refs #N`, no closing keyword — and the person who opened it closes it.
+
+The three gates are **plan approved**, **commit approved** and **PR approved**. Each
+approval covers that one step only; it never carries over to the next. **A PR from anyone but
+`deltecent` goes through the `review-pr` skill: its merge needs green CI *and* the
+maintainer's approval.** **An incoming issue goes through the `review-issue` skill**, which
+reaches a verdict and stops there — it never builds anything.
+
+**A report that hands the next move to the maintainer ends with it.** The summary comes first;
+the last line says what is ready and what it is waiting on (*"Ready for your review on branch
+`fix/x`. Nothing is committed or pushed."*). That holds at every gate, in every skill.
+
 ## If you are here to build or ship a release
 
-**Read [`DISTRIBUTION.md`](DISTRIBUTION.md) and follow it.** It is written to be executed
-step by step on a machine that has never seen this repository — literal commands, the exact
-output to check after each, and a STOP condition on every check.
+**Use the release skills; they are the procedure.** Each is written to be executed step by
+step on a machine that has never seen this repository — literal commands, the exact output to
+check after each, and a STOP condition on every check. [`DISTRIBUTION.md`](DISTRIBUTION.md) is
+the reasoning behind them.
 
-**If you are on the Intel Mac, the Windows box, or the Linux box, your job is §4.2 and
-nothing else.** Build, test, package, upload to the draft release. **A build machine never
-tags, never publishes, and never decides a version number.** If a check in §4.2 fails, stop
-and report it — do not work around it and do not judge it probably fine. Nothing gates a
-package after you upload it.
+| | |
+|---|---|
+| `release-worker` | **Any build machine.** Build, test, package, deliver one archive — nothing else. |
+| `release-coordinator` | **The coordinator only.** Version, changelog, tag, draft, drive the builds, publish. |
+| `release-verify` | Prove an archive works as downloaded. |
+
+**A build machine never tags, never publishes, and never decides a version number.** If a
+check fails, stop and report it — do not work around it and do not judge it probably fine.
+Nothing gates a package after you deliver it. **This site's addresses, paths and serial ports
+are in `distribution.conf`** (gitignored; `distribution.conf.example` is the template) — never
+in a tracked file.
 
 **On Windows, you do not need a Developer shell.** With CMake's default Visual Studio
 generator, MSBuild finds the toolchain itself — a plain PowerShell works. Remember that your
@@ -45,7 +82,7 @@ needs no environment at all.
 
 ## Rules that bite
 
-- **Every change goes on a branch off `master` and is merged when done.**
+- **Every change goes on a branch off `master`** — and through the gates above.
 - **`TODO.md` is untracked** — a local, fast-moving working doc, not in the tree. Its edits
   never go through git, so they need no branch and no PR. Anything in it meant for the public
   becomes a GitHub issue instead.
@@ -108,7 +145,8 @@ to success if you are only checking for the word "error".
 adds `-Werror` on GCC/Clang and `/WX` on MSVC, so a warning on any of them reds a PR before
 merge. It is off by default locally; reproduce the gate before pushing a code change with
 `cmake -B build -DWERROR=on && cmake --build build -j`. GCC/Clang run `-Wall -Wextra -Wpedantic
--Wshadow`; MSVC runs `/W4` with two intentional classes suppressed tree-wide (`/wd4244 /wd4267`,
+-Wshadow` (plus `-Wshadow-uncaptured-local` on Clang, so a Mac build catches the lambda-local
+shadowing GCC flags); MSVC runs `/W4` with two intentional classes suppressed tree-wide (`/wd4244 /wd4267`,
 the 8-bit emulator's integer narrowing — issue #238 closed that backlog). Because macOS is the
 only leg that builds SDL3 and MSVC skips it, a warning in SDL-guarded code only reds macOS.
 

@@ -48,7 +48,7 @@ endif()
 # going into the recorder is audio. MOUNT is still "press PLAY".
 file(WRITE "${cmd}"
 "MOUNT acr0:tape \"${wav}\"\n"
-"LOAD \"examples/basic/LDR4K31.HEX\"\n"
+"LOAD \"${SRC}/examples/basic/LDR4K31.HEX\"\n"
 "RUN 0\n")
 
 # The same off-switch and the same sacrificial NUL as basic4k.cmake -- see the long note

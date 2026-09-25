@@ -2,7 +2,7 @@
 
 **Status: BUILT, 2026-07-11.** `src/boards/mits-2sio.cpp`, `tests/test_sio2.cpp`. **The 6850 itself moved out to `src/chips/mc6850.cpp` on 2026-07-12** (DESIGN.md §7.8) — a chip is not a card, and the next card with a 6850 on it inherits the DCD latch and the CTS-inhibits-TDRE rule already right. What is left in `mits-2sio.cpp` is what the *card* does: where the ports are, where the IRQ is jumpered, which chip answers which address.
 
-**The proof vehicle** — a fully-modeled 2SIO exercises every interface in the design (console, TCP socket, host serial, interrupts, multi-unit boards, multiple instances), which is why it is the only peripheral in milestone 1.
+**The proof vehicle** — a fully-modeled 2SIO exercises every interface in the design (console, TCP socket, host serial, interrupts, multi-unit boards, multiple instances), which is why it was the only peripheral the machine shipped with at first.
 
 **It runs ALTMON.** `altairsim altmon`, then `CONSOLE`: Mike Douglas's 1K monitor PROM prints its banner, takes commands, and dumps memory — through this card, over a real 6850, on the real bus. That is not a test we wrote; it is a program someone wrote for real hardware, and it either works or it does not.
 
@@ -61,7 +61,7 @@ What it **corrected**, and the data sheet won every time (§0.1):
 | 5–6 | Transmit control: `00` RTS low + **TIE off**; `01` RTS low + **TIE on** (transmit interrupt enable); `10` RTS high + TIE off; `11` RTS low + transmit break |
 | 7 | **RIE** — receive interrupt enable |
 
-Period software writes `0x03` (master reset) then `0x11` (÷16, 8N2). An **interrupt-driven** driver sets bit 7 and/or the `01` transmit-control field — that is the path milestone 1 must prove.
+Period software writes `0x03` (master reset) then `0x11` (÷16, 8N2). An **interrupt-driven** driver sets bit 7 and/or the `01` transmit-control field — that is the path the interrupt model has to prove.
 
 **Why it is always *two* writes, and never one.** The divide field is not a pulse, it is a **latch**: `11` sits there *holding the chip in reset* until a second write selects a real ratio. And a chip held in reset has its transmitter inhibited — the data sheet lists the reset condition alongside `/CTS` as a thing that suppresses TDRE. So a guest that master-resets and then polls for TDRE without programming the word format **waits forever**, on the real chip and on this one. That is why ALTMON's `MVI A,3 / OUT 10h` is only half an initialization sequence, and why every 6850 driver ever written does two `OUT`s.
 
@@ -229,7 +229,7 @@ So the receiver is still **paced at the baud rate** — that part is real, it is
 
 The **host serial port** endpoint has since landed, and an overrun there is a genuine hardware event — so the stream can report one, from the place that actually knows, which is not this board.
 
-## Verification (milestone 1 acceptance)
+## Verification
 
 | | | |
 |---|---|---|

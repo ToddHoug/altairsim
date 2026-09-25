@@ -734,10 +734,10 @@ the guest cannot see it: the 6850 clocks bytes the same way whether the wire end
 at your terminal, a telnet session, a real RS-232 port, or nothing at all. No board
 in the machine knows what any of these words mean.
 
-Endpoints: console | null | loopback | scripted | socket:PORT | socket:HOST:PORT |
-telnet:PORT | telnet:HOST:PORT | serial:DEVICE | in:PATH | out:PATH |
-terminal[?emulation=vt100&size=80x24] | printer:QUEUE | <endpoint>|FILE |
-<endpoint>|socket:PORT
+Endpoints: console | null | loopback | scripted | socket:PORT[?banner] | socket:HOST:PORT |
+telnet:PORT[?banner=off] | telnet:HOST:PORT | serial:DEVICE | in:PATH |
+out:PATH | terminal[?emulation=vt100&size=80x24] | printer:QUEUE |
+<endpoint>|FILE | <endpoint>|socket:PORT
 
 
 ```
@@ -746,11 +746,13 @@ null        a cable to nowhere: writes vanish, reads never yield a byte
 loopback    the unit's own transmit wired back to its receive, for testing
 scripted    a terminal with a caller in place of a human -- what the MCP tools
             and the test suite type into. No tty need exist.
-socket:     PORT alone LISTENS: that is the telnet-in case. HOST:PORT CALLS OUT.
-            A RAW pipe -- no echo, no protocol.
+socket:     PORT alone LISTENS; HOST:PORT CALLS OUT. A RAW pipe -- no echo, no
+            protocol -- for a PROGRAM at the far end (another machine, a
+            transfer). ?banner greets each caller to a listening port.
 telnet:     the same, but speaks the Telnet protocol, so a stock `telnet` client
             gets the terminal-server handshake: no double echo, keys sent one at a
-            time. Use it in place of socket: when a HUMAN telnets in to a BBS.
+            time. Use it when a PERSON telnets in. A listening port greets each
+            caller with the machine, line and port; ?banner=off stops it.
 serial:     a real port on this host. It is opened at 9600 8N1 and then
             immediately re-programmed by the board, which is the only thing that
             knows what it is strapped to.
@@ -884,7 +886,8 @@ lines and `;` or `#` comments are skipped, so a DO file reads like a script.
 It runs against whatever machine is loaded, so a DO file usually opens with MACHINE
 to pick its own base -- `MACHINE default` then MOUNT/RUN, or `MACHINE none` then
 BOARDS ADD to build one from scratch. On the command line, `altairsim -s FILE` runs
-the same file at startup and exits with its status.
+the same file at startup and exits with its status. FILE is named from where you
+launched, and the paths in it are relative to it, as in a DO file.
 
 It is a LINE RUNNER, not SIMH's scripting language: no arguments, no IF or GOTO.
 For conditional or interactive automation, drive a live guest over --mcp.
@@ -997,7 +1000,7 @@ RESTORE before-boot.snap
 ### SET — `SE[T]`
 
 ```
-SET <id>[:<u>]|CONSOLE|DISPLAY|REG|BUS <k>=<v>
+SET <id>[:<u>]|CONSOLE|DISPLAY|TERMINAL|MACHINE|REG|BUS <k>=<v>
 ```
 Each property has a base of its own -- a port is hex, a baud rate is decimal.
 SHOW <id> lists them all, with each value.
@@ -1009,6 +1012,8 @@ than the controller. SHOW <id> prints both tables, the board's and each unit's.
 CONSOLE and DISPLAY are the HOST's terminal and video window rather than
 boards, and they take settings the same way. REG is a CPU register (see REGS),
 and BUS is the backplane's own diagnostics rather than anything plugged into it.
+MACHINE is the machine itself: its name is what SHOW MACHINE prints, the video
+window's title, and what CONFIG SAVE writes.
 
 ```
 SET mem0 fill=zero
@@ -1017,6 +1022,7 @@ SET acr0:tape mode=record   the tape in the recorder, not the recorder
 SET vdm0 width=1024      how wide the video window opens, in pixels (auto = ~half the screen)
 SET DISPLAY focus=on     the video window takes the keyboard, not the terminal
 SET DISPLAY crt=on       paint the window like the period tube: soft phosphor and 4:3
+SET MACHINE name=mybox   what CONFIG SAVE calls the machine
 SET REG A=3F             a register in the CPU that is in the socket
 SET BUS UNCLAIMED=WARN   warn on a cycle no board answered
                          (also CONTENTION=WARN|ERROR|SILENT, UNCLAIMED=WARN|HALT|SILENT)
@@ -1026,7 +1032,7 @@ SET BUS UNCLAIMED=WARN   warn on a cycle no board answered
 ### SHOW — `SH[OW]`
 
 ```
-SHOW <id>|BOARDS|BOARD <type> [UNITS]|MACHINES|MACHINE [<name>]|BUS [MAP|IO|IRQ|CONTENTION]|ROMS|MOUNTS|PATHS|CONSOLE|DISPLAY|SYMBOLS|VERSION
+SHOW <id>|BOARDS|BOARD <type> [UNITS]|MACHINES|MACHINE [<name>]|BUS [MAP|IO|IRQ|CONTENTION]|ROMS|MOUNTS|PATHS|CONSOLE|DISPLAY|SYMBOLS|CLOCK|VERSION
 ```
 
 ```
@@ -1044,6 +1050,7 @@ SHOW DISPLAY     the host video window: keyboard focus, and the CRT look
 SHOW TERMINAL    the built-in terminal's transforms (strip7out, cr, bsdel, ...)
 SHOW JOYSTICKS   the host game controllers a D+7A can read (SDL builds)
 SHOW SYMBOLS     the loaded symbols (SHOW SYMBOLS SIO* filters); load them with SYMBOLS
+SHOW CLOCK       emulated time: T-states since POWER, and what they are in seconds
 SHOW ROMS        the ROM images built into this binary, and where each came from
 SHOW VERSION     which build this is, and the commit it was built from
 ```
@@ -1094,8 +1101,9 @@ STA ADD RUN FF00
 ```
 UNMOUNT <id>:<u>
 ```
-The socket is then EMPTY -- those pages float to FF, exactly as a card with
-no chip in it does.
+Takes the disk, tape or ROM out of the unit. A drive or a tape recorder is then
+empty. A ROM socket is then empty too: those pages float to FF, as on a board
+with no chip in the socket.
 
 ```
 U dsk0:drive0
