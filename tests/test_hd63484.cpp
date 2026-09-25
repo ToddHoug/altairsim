@@ -71,6 +71,19 @@ struct Rig {
     // The word holding pixel (x, y) of that screen, and the nibble for it.
     uint32_t wordAt(int x, int y) const { return (uint32_t)((int)kOrg + x / 4 - y * 0x10); }
     int      nib(int x, int y) const { return (c.peekWord(wordAt(x, y)) >> ((x % 4) * 4)) & 0xF; }
+    bool     lit(int x, int y) const { return nib(x, y) != 0; }
+    // Every lit pixel of the screen's x 0..63, y -16..16, for comparing whole drawings.
+    std::vector<bool> picture() const {
+        std::vector<bool> v;
+        for (int y = -16; y <= 16; ++y)
+            for (int x = 0; x < 64; ++x) v.push_back(lit(x, y));
+        return v;
+    }
+    int count() const {
+        int n = 0;
+        for (bool b : picture()) n += b;
+        return n;
+    }
 };
 
 } // namespace
@@ -715,11 +728,173 @@ void test_hd63484() {
     {
         Rig g;
         g.screen4bpp();
-        g.cmd(0xA800, {5});                       // CRCL r = 5: recognized, not drawn
+        g.cmd(0xE000, {1, 2, 3, 4});              // AGCPY: recognized, not drawn
         CHECK((g.sr() & 0x80) != 0, "CER");
         CHECK((g.sr() & 0x20) != 0, "CED: free again");
         g.cmd(0x8000, {2, 0});                    // the next command is parsed as a command...
         CHECK(g.c.cpx() == 2, "...not as a stray parameter: the stream stayed in step");
+    }
+
+    SECTION("HD63484 -- CRCL: from (A+r, B) once round, the start drawn once, CP back at the center (CRCL-1/2)");
+    {
+        Rig g;
+        g.screen4bpp();
+        g.cmd(0x8000, {20, 8});
+        g.cmd(0xA800, {7});                       // CRCL r = 7, counter-clockwise
+        CHECK((g.sr() & 0xA0) == 0x20, "executed: CED, no CER");
+        CHECK(g.lit(27, 8), "Ps = (A + r, B) is drawn");
+        CHECK(g.c.cpx() == 20 && g.c.cpy() == 8, "CP is the center again");
+        bool sym = true, near = true, inside = true;
+        for (int y = -16; y <= 16; ++y)
+            for (int x = 0; x < 64; ++x) {
+                if (!g.lit(x, y)) continue;
+                const int dx = x - 20, dy = y - 8;
+                if (dx < -7 || dx > 7 || dy < -7 || dy > 7) inside = false;
+                else if (!g.lit(20 - dx, y) || !g.lit(x, 8 - dy) || !g.lit(20 + dy, 8 + dx)) sym = false;
+                const int e = dx * dx + dy * dy - 49;
+                if (e < -7 || e > 7) near = false;
+            }
+        CHECK(inside && near, "every pixel within half a pixel of the circle");
+        CHECK(sym, "and the circle is 8-way symmetric");
+
+        Rig e;
+        e.screen4bpp();
+        e.cmd(0x8000, {20, 8});
+        e.cmd(0xA803, {7});                       // EOR
+        CHECK(e.picture() == g.picture(), "EOR-drawn it is the same picture: no pixel was drawn twice");
+        Rig k;
+        k.screen4bpp();
+        k.cmd(0x8000, {20, 8});
+        k.cmd(0xA900, {7});                       // C = 1: clockwise
+        CHECK(k.picture() == g.picture(), "clockwise draws the same pixels");
+    }
+
+    SECTION("HD63484 -- ELPS: a : b = dX^2 : dY^2, the manual's example a = 9 b = 4 dX = 9 (ELPS-3)");
+    {
+        Rig g;
+        g.screen4bpp();
+        g.cmd(0x8000, {16, 10});
+        g.cmd(0xAC00, {9, 4, 9});                 // "9 : 4 = 9^2 : 6^2" -> dY = 6
+        CHECK(g.lit(25, 10) && g.lit(7, 10), "the X extremes, dX = 9 either side");
+        CHECK(g.lit(16, 16) && g.lit(16, 4), "the Y extremes, dY = 6 either side");
+        CHECK(!g.lit(16, 17) && !g.lit(26, 10), "and no further");
+        CHECK(g.c.cpx() == 16 && g.c.cpy() == 10, "CP back at the center");
+        bool sym = true;
+        for (int y = 4; y <= 16; ++y)
+            for (int x = 7; x <= 25; ++x)
+                if (g.lit(x, y) && (!g.lit(32 - x, y) || !g.lit(x, 20 - y))) sym = false;
+        CHECK(sym, "symmetric about both axes");
+        g.cmd(0xAC00, {0, 4, 9});
+        CHECK((g.sr() & 0x80) != 0, "a = 0 is an invalid parameter: CER");
+    }
+
+    SECTION("HD63484 -- AARC: from CP round the center to Pe, Pe not drawn, CP = Pe (AARC-2)");
+    {
+        Rig g;
+        g.screen4bpp();
+        g.cmd(0x8000, {12, 4});
+        g.cmd(0xB000, {12, 10, 6, 10});           // CC (12,10), Pe (6,10), counter-clockwise
+        CHECK(g.lit(12, 4), "the start, CP, is drawn");
+        CHECK(g.lit(18, 10) && g.lit(12, 16), "through the right and the top");
+        CHECK(!g.lit(6, 10), "Pe is not drawn");
+        bool lowerLeft = false;
+        for (int y = 3; y < 10; ++y)
+            for (int x = 5; x < 12; ++x) lowerLeft |= g.lit(x, y);
+        CHECK(!lowerLeft, "the lower-left quarter, the way not taken, is empty");
+        CHECK(g.c.cpx() == 6 && g.c.cpy() == 10, "CP = Pe");
+
+        Rig k;
+        k.screen4bpp();
+        k.cmd(0x8000, {12, 4});
+        k.cmd(0xB100, {12, 10, 6, 10});           // C = 1: clockwise, the short way
+        bool ll = false;
+        for (int y = 3; y < 10; ++y)
+            for (int x = 5; x < 12; ++x) ll |= k.lit(x, y);
+        CHECK(ll && !k.lit(18, 10) && !k.lit(12, 16) && !k.lit(6, 10),
+              "clockwise goes through the lower-left quarter only");
+
+        Rig m;
+        m.screen4bpp();
+        m.cmd(0x8000, {12, 4});
+        m.cmd(0xB000, {0x2000 | 12, 10, 0x2000 | 6, 10});   // bit 13 set: "only the low order 13 bits are effective"
+        CHECK(m.picture() == g.picture(), "the bits above 13 are ignored");
+    }
+
+    SECTION("HD63484 -- RARC: center and end both relative to CP (RARC-2)");
+    {
+        Rig g;
+        g.screen4bpp();
+        g.cmd(0x8000, {6, 10});
+        g.cmd(0xB400, {6, 0, 6, 6});              // CC = CP + (6,0) = (12,10); Pe = CP + (6,6) = (12,16)
+        CHECK(g.lit(6, 10) && g.lit(12, 4) && g.lit(18, 10), "left, bottom, right");
+        CHECK(!g.lit(12, 16), "Pe (12,16) not drawn");
+        bool upperLeft = false;
+        for (int y = 11; y <= 16; ++y)
+            for (int x = 5; x < 12; ++x) upperLeft |= g.lit(x, y);
+        CHECK(!upperLeft, "the upper-left quarter is empty");
+        CHECK(g.c.cpx() == 12 && g.c.cpy() == 16, "CP = Pe");
+    }
+
+    SECTION("HD63484 -- AEARC/REARC: an arc of the ELPS ellipse, a quarter from (25,10) to (16,16)");
+    {
+        Rig full;
+        full.screen4bpp();
+        full.cmd(0x8000, {16, 10});
+        full.cmd(0xAC00, {9, 4, 9});
+
+        Rig g;
+        g.screen4bpp();
+        g.cmd(0x8000, {25, 10});
+        g.cmd(0xB800, {9, 4, 16, 10, 16, 16});    // AEARC a b Xc Yc Xe Ye
+        bool subset = true, quarter = true;
+        for (int y = -16; y <= 16; ++y)
+            for (int x = 0; x < 64; ++x)
+                if (g.lit(x, y)) {
+                    if (!full.lit(x, y)) subset = false;
+                    if (x < 16 || y < 10) quarter = false;
+                }
+        CHECK(subset, "every pixel is a pixel of the whole ellipse");
+        CHECK(quarter && g.lit(25, 10) && !g.lit(16, 16), "the upper-right quarter, Pe excluded");
+        CHECK(g.c.cpx() == 16 && g.c.cpy() == 16, "CP = Pe");
+
+        Rig r;
+        r.screen4bpp();
+        r.cmd(0x8000, {25, 10});
+        r.cmd(0xBC00, {9, 4, (uint16_t)-9, 0, (uint16_t)-9, 6});   // REARC: the same, relative to CP
+        CHECK(r.picture() == g.picture() && r.c.cpx() == 16 && r.c.cpy() == 16, "REARC draws the same arc");
+    }
+
+    SECTION("HD63484 -- curves in drawing order: the pattern runs along them, AREA stops where they cross");
+    {
+        Rig full;
+        full.screen4bpp();
+        full.cmd(0x8000, {20, 8});
+        full.cmd(0xA800, {7});
+        const int n = full.count();
+
+        Rig d;
+        d.screen4bpp();
+        d.cmd(0x1800, {2, 0x0005});
+        d.cmd(0x0807, {0x0010});                  // PEX = 1: on, off, on, off...
+        d.cmd(0x8000, {20, 8});
+        d.cmd(0xA800, {7});
+        CHECK(d.lit(27, 8) && d.count() == (n + 1) / 2, "a dashed circle: every other pixel, from the start");
+
+        Rig a;
+        a.screen4bpp();
+        a.cmd(0x0808, {20});                      // the area: x 20..40, y 0..16 -- the right half
+        a.cmd(0x080A, {40});
+        a.cmd(0x0809, {0});
+        a.cmd(0x080B, {16});
+        a.cmd(0x8000, {20, 8});
+        a.cmd(0xA820, {7});                       // AREA 001: stop on leaving
+        CHECK((a.sr() & 0x60) == 0x60, "ARD and CED");
+        CHECK(a.lit(27, 8) && a.lit(20, 15) && !a.lit(19, 15), "drawn up over the top as far as x = 20");
+        bool lower = false;
+        for (int y = 0; y < 8; ++y)
+            for (int x = 12; x <= 28; ++x) lower |= a.lit(x, y);
+        CHECK(!lower, "and never round to the lower half");
+        CHECK(a.c.cpx() == 19 && a.c.cpy() == 15, "CP where it crossed");
     }
 
     SECTION("HD63484 -- scan-out: HDW, SP1, SAR1/MWR1, low dot address leftmost");
