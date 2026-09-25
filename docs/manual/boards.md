@@ -970,9 +970,10 @@ successive writes), the address again, and three overlay colors. What the ACRTC 
 picks its colors by loading the table, and repainting the table recolors the picture without
 redrawing it.
 
-**The monitor is part of the board.** `mode` picks a fixed-frequency VESA display — `640x400`,
-`640x480` (the default), `800x600` or `1024x768` — and the window is always that size, exactly
-as a real monitor's frame is. The ACRTC's picture lands in it where the chip's timing registers
+**The monitor is part of the board.** `mode` picks a fixed-frequency VESA display — one of the
+three primary VESA resolutions, `640x480`, `800x600` or `1024x768` (the default), settable in
+the machine file or with `SET` — and the window is always that size, exactly as a real
+monitor's frame is. The ACRTC's picture lands in it where the chip's timing registers
 put it: a program that starts its display where the mode's back porch ends fills the frame, one
 that starts a cycle early or late is shifted and clipped. The board's shift register is wired for
 **8 bits per pixel and 8 words per fetch**, so a program sets the ACRTC to 8 bpp and an address

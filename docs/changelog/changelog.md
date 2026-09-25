@@ -15,8 +15,9 @@ processor and its own frame memory — and Brooktree's **Bt453** 256-entry color
 I/O ports and no memory. The CPU draws by command through the ACRTC's FIFO (lines, rectangles,
 polylines, filled rectangles, dots, block clears and word transfers, in every operation, color and
 area mode), the picture scans out at 8 bits per pixel through the Bt453's table onto a **fixed VESA
-monitor** the board carries (`mode`: 640x400, 640x480, 800x600 or 1024x768), in single or
-interleaved access, out of a fixed 2 MB of its own frame memory, and the window is the same host display the Dazzler and VDM-1 draw into. Both chips are models in their own right
+monitor** the board carries (`mode`: the three primary VESA resolutions, 640x480, 800x600 or
+1024x768 -- the default), in single or interleaved access, out of a fixed 2 MB of its own frame
+memory, and the window is the same host display the Dazzler and VDM-1 draw into. Both chips are models in their own right
 (`src/chips/`), built from the Hitachi and Brooktree data sheets, so the next board that carries one
 gets it for free. Circles, arcs, paint, patterns and copies are recognized but not drawn yet.
 
