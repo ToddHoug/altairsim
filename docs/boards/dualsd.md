@@ -118,7 +118,7 @@ See `reference/dual-sd-card.md` for the complete command tables and firmware fra
 
 ## Verification
 
-- **Unit** (`tests/test_dualsd.cpp`, `Clock c;` first): drives the 80H/81H protocol over a
+- **Unit** (`tests/test_dualsd.cpp`): drives the 80H/81H protocol over a
   `cardimg`/`MemoryMedia` fixture — INIT/SELECT, SET_TRK_SEC, WRITE-then-READ a sector, the
   FORMAT `0xE5` fill with sector 0 skipped, the DI7/write-busy handshake, the card-detect status
   bits, RESET, and the past-media read error.

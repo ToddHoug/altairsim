@@ -382,6 +382,17 @@ build_single docs/manual/ref/cheatsheet.md altairsim-cheatsheet "altairsim — Q
 build_single docs/QUICK-START.md QUICK-START "altairsim — Quick Start"
 build_single docs/migrating.md    migrating   "altairsim — Migrating from AltairZ80 and z80pack"
 
+# The recipes, each to a sibling PDF of the same basename -- cpm-from-scratch.md ->
+# cpm-from-scratch.pdf. They are NOT a book: a recipe is a walkthrough somebody opens on its own,
+# so each one is rendered alone (build_readme, the same path the examples' READMEs take) rather
+# than concatenated the way `build` does a chapter list. docs/recipes/ORDER is the list, and it
+# is alphabetical -- read it rather than globbing, so that a .md nobody put in ORDER stays
+# unrendered and tests/acceptance/docs-manual.cmake can say so.
+while read -r recipe; do
+  case $recipe in ''|\#*) continue ;; esac
+  build_readme "docs/recipes/$recipe"
+done < "$root/docs/recipes/ORDER"
+
 # The examples' READMEs, each to a sibling PDF. The index first, then one per directory.
 # Glob against $root, not the caller's cwd -- this script may be run from anywhere.
 for abs in "$root"/examples/README.md "$root"/examples/*/README.md; do

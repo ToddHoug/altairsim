@@ -1,7 +1,8 @@
 #pragma once
 //
 // PropIo -- the S100Computers Console IO Board (a Parallax-Propeller console).
-// See reference/Console IO Board.md and docs/devguide/serial-io.md.
+// See docs/boards/s100computers-propio.md, reference/Console IO Board.md and
+// docs/devguide/serial-io.md.
 //
 // This is NOT a new serial engine. It is a thin SUBTYPE of the strap-configurable serial
 // engine (StrapSerialBoard, src/boards/strapserial.h) with a SINGLE channel. The Console

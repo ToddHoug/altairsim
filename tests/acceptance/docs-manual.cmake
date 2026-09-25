@@ -20,10 +20,15 @@
 
 # THE SHIPPED, SELF-CONTAINED DOCUMENTS. The manual, plus the two documents split out of it
 # that ALSO ship in the package -- docs/monitor/ (altairsim-monitor.pdf) and docs/debugger/
-# (altairsim-debugger.pdf). Each is handed to a reader who has only the zip, so each must name
+# (altairsim-debugger.pdf) -- and docs/recipes/, the typed-along walkthroughs, which ship as a
+# recipes/ folder of PDFs. Each is handed to a reader who has only the zip, so each must name
 # nothing outside the package, and each has its OWN ORDER. The Developer Guide is deliberately
 # NOT here: it is repo-only and may talk about the source.
-set(shipdirs manual monitor debugger)
+#
+# docs/recipes/ORDER is not a sequence -- it is alphabetical, and each line is rendered as its
+# own document. What this test wants from it is the SAME thing it wants from a chapter list: a
+# .md that is not in it is a document nobody renders and nobody misses.
+set(shipdirs manual monitor debugger recipes)
 
 # What must never appear in a chapter. Each is a thing the reader cannot open.
 set(forbidden

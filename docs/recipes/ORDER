@@ -1,0 +1,19 @@
+# The recipes. ONE LINE PER RECIPE, AND EACH LINE IS ITS OWN DOCUMENT.
+#
+# A recipe is not a chapter. Unlike docs/manual/ORDER -- which declares the sequence of chapters
+# that are concatenated into one book -- nothing here is joined to anything. tools/build-docs.sh
+# reads this file and renders each line on its own, to a PDF sitting beside its Markdown and
+# carrying the same basename: cpm-from-scratch.md -> cpm-from-scratch.pdf. The package ships the
+# folder with the PDFs in it.
+#
+# SO THE ORDER IS ALPHABETICAL, and that is all it is. There is no first recipe and no last one;
+# a reader opens the one whose name is what they want to do. Keep the list sorted so that adding
+# one is obvious and nobody has to wonder where it goes.
+#
+# THE LIST IS STILL LOAD-BEARING. tests/acceptance/docs-manual.cmake fails if a .md in this
+# folder is missing from this file -- a recipe that is written, committed and never rendered is
+# worse than one that does not exist, because everything looks fine.
+
+cpm-from-scratch.md
+dazzler-from-scratch.md
+from-a-builtin.md

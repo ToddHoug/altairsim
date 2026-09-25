@@ -1,10 +1,10 @@
 # S100Computers V2 Z80 CPU Board — onboard monitor EEPROM & Power-On-Jump
 
-Distilled hardware reference for the part of the **S100Computers (John Monahan) V2 Z80 CPU
-board** that `altairsim` models as the `v2z80` board: its **onboard paged monitor EEPROM** and
-its **Power-On-Jump (POJ)** circuit. The Z80 processor itself is a separate card in this
-simulator (`mits-z80cpu`); this board contributes only the boot ROM and the reset vectoring
-that live on the same physical S-100 card.
+Distilled hardware reference for two parts of the **S100Computers (John Monahan) V2 Z80 CPU
+board**: its **onboard paged monitor EEPROM** and its **Power-On-Jump (POJ)** circuit.
+`altairsim` models only the EEPROM, as the `v2z80rom` board (`docs/boards/s100computers-v2z80rom.md`).
+The POJ is documented here for completeness and is not modelled: a machine starts the monitor
+with `RUN F000` instead. The Z80 processor itself is a separate board in this simulator (`z80`).
 
 ## Provenance & licensing
 
@@ -41,7 +41,7 @@ Ports **`D2H`** and **`D3H`** (default; relocatable via jumper `P2 5-6`) are the
 memory-manager / ROM-control registers. `D2H` maps a 16K window at `0000`–`3FFF` and `D3H`
 maps one at `4000`–`7FFF` for the companion 20-bit memory manager — **`altairsim` does not
 model the memory manager** (the Dual SD target is *non-banked* CP/M 3 in a flat 64K). Only two
-bits of `D3H` concern the onboard EEPROM, and those are what `v2z80` implements:
+bits of `D3H` concern the onboard EEPROM, and those are what `v2z80rom` implements:
 
 | `OUT D3H` bit | Meaning | Values |
 |---|---|---|
@@ -75,13 +75,12 @@ the boot address, so ordinary RAM at `0000`–`EFFF` is reachable during normal 
 the same class of circuit as the MITS Turnkey Auto-Start, which instead *jams a 3-byte `JMP`*;
 the V2 board genuinely NOP-slides the full distance (≈`F000` fetches).
 
-### How `altairsim` models it (`v2z80`)
+### How `altairsim` models it (`v2z80rom`)
 
-- **Armed at reset** (`pojArmed_`). While armed, for a `MemRead` **opcode fetch** below
-  `F000` the board **decodes the cycle, returns `0x00` (NOP), and asserts `PHANTOM*`** so no RAM
-  board contends — exactly U18 forcing the bus.
-- The first fetch at or above `F000` is answered by the EEPROM (not a NOP); `snoop()` then
-  **disarms** the POJ (U18 off, `ROM_SELECT*` latched). Low memory reads normally thereafter.
+- **The POJ is not modelled.** The machine file's `startup = ["RUN F000"]` puts the Z80 at the
+  monitor instead, which is where the NOP slide ends up. The difference shows only after a
+  RESET* on a running machine: the real board slides to `F000` again, and the simulator starts
+  at `0000`.
 - The EEPROM decodes `MemRead` in `F000`–`FFFF` while enabled (bit 0 = 0), returning the
   selected page's byte and asserting `PHANTOM*` for reads so it shadows any RAM mapped there.
   Writes are **not** decoded (it is ROM) and fall through to the RAM underneath. Setting bit 0

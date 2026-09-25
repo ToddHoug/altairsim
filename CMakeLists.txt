@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(altairsim VERSION 1.0.0 LANGUAGES CXX)
+project(altairsim VERSION 1.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -19,7 +19,11 @@ endif()
 #
 #   * Variable shadowing (MSVC C4456/C4457) is FIXED at the source -- the shadowing locals
 #     were renamed. -Wshadow on GCC/Clang keeps the class from creeping back on every CI leg,
-#     not just on Windows.
+#     not just on Windows. The two do not flag the same set: GCC's -Wshadow reports a local
+#     declared inside a lambda that hides a local of the enclosing function even when the
+#     lambda does not capture it; Clang keeps that case in -Wshadow-uncaptured-local. Without
+#     that flag a Mac build passes code that reds the Linux leg (issue #548), so Clang gets it
+#     too. GCC rejects the flag as unknown, hence Clang only.
 #   * Integer narrowing (MSVC C4244/C4267 -- uint32->uint8/16, size_t->uint32) is SUPPRESSED
 #     tree-wide with /wd4244 /wd4267. It is the daily bread of an 8-bit emulator's byte/word
 #     masking; GCC/Clang do not flag it at -Wall -Wextra either (only -Wconversion would), so
@@ -39,6 +43,9 @@ if(MSVC)
   endif()
 else()
   add_compile_options(-Wall -Wextra -Wpedantic -Wshadow)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    add_compile_options(-Wshadow-uncaptured-local)
+  endif()
   if(WERROR)
     add_compile_options(-Werror)
   endif()
@@ -47,18 +54,10 @@ endif()
 # ---------------------------------------------------------------------------
 # SANITIZE -- AddressSanitizer + UndefinedBehaviorSanitizer, in one flag.
 #
-# This is the LOCAL ORACLE for the lifetime bugs that only crash on Windows. Twice
-# now (the SNAPSHOT 0xC0000409, then the VersaFloppy FDC test) the `unit` suite has
-# SEGFAULTed on Windows CI while Mac and Linux stayed green -- because the macOS
-# allocator silently tolerates a use-after-scope that MSVC's does not. The cause each
-# time was a board/chip test whose locals destroy in the wrong order: the Clock dies
-# first, then the board's destructor calls clock_->cancel() on freed memory. No
-# compiler warning fires; only a sanitizer names the exact file:line.
-#
-# Reproducing that used to be a hand-typed recipe -- a fresh build dir, an explicit
-# generator, and the -fsanitize flags threaded through BOTH CMAKE_CXX_FLAGS and
-# CMAKE_EXE_LINKER_FLAGS. This is that recipe as one word. Configure a side tree with
-# it and the whole binary (library, tools, tests) is instrumented:
+# For memory and undefined-behaviour bugs that one platform's allocator hides and another's
+# does not -- a use-after-free that is harmless on macOS can crash only on Windows. No
+# compiler warning fires for those; a sanitizer names the exact file:line. Configure a side
+# tree with it and the whole binary (library, tools, tests) is instrumented:
 #
 #   cmake -S . -B build-asan -DSANITIZE=on
 #   cmake --build build-asan --target altair_tests
@@ -66,8 +65,8 @@ endif()
 #
 # Keep it in its OWN build directory -- an instrumented binary is slower and is not
 # what you ship. It is deliberately NOT on by default and NOT wired into CI: CI catches
-# the Windows crash by running on Windows, and this is the tool you reach for once it
-# does. On a board/chip lifetime change, run it before merging.
+# a platform-only crash by running on that platform, and this is the tool you reach for
+# once it does.
 #
 # GCC/Clang get both sanitizers. MSVC has had /fsanitize=address since VS2019 and it
 # catches the same use-after-free class, so honour the flag there too -- it just has no
@@ -248,9 +247,7 @@ configure_file("${CMAKE_SOURCE_DIR}/cmake/version.h.in"
 #
 # The win32 half is FIELD-PROVEN, not merely written: serial against two real FTDI
 # ports, socket against the real TCP stack, terminal against a real console, each a
-# leg of `ctest -L hw` (docs/porting-notes.md has the counts). This comment used to
-# say it was written-but-unbuilt and cite that same file as agreeing; the file has
-# said the opposite since 2026-07-15.
+# leg of `ctest -L hw`. docs/porting-notes.md records the traps that turned up.
 #
 # MSVC is the ONLY supported Windows toolchain -- it is what CI builds and what is shipped.
 # Nothing here is knowingly MSVC-only (no _MSC_VER anywhere in src/, lowercase Windows headers,
@@ -462,6 +459,12 @@ add_library(altair_core STATIC
   src/boards/mits-hardsector.cpp
   src/boards/mits-88dcdd.cpp
   src/boards/mits-88mds.cpp
+  # The FarmTek FDC+ serial drive (drive types 6 and 7). NOT a HardSectorFdc: no medium turns,
+  # a PIC's firmware drives the registers, and a drive server on a serial line fills one track
+  # buffer. See src/boards/farmtek-fdcplus.h.
+  src/boards/farmtek-fdcplus.cpp
+  # ...and drive type 5, the 1.5 MB floppy: a whole track per read, one byte every 16 us.
+  src/boards/farmtek-fdcplus-hdf.cpp
   # The 88-HDSK Datakeeper hard disk -- a "controller does the work" card (Board
   # directly, not HardSectorFdc): it decodes A0h-A7h and serves 256-byte sectors from
   # a linear .DSK through a command/handshake protocol. See src/boards/mits-88hdsk.h.
@@ -487,6 +490,7 @@ add_library(altair_core STATIC
   # SerialBoardBase -- the reusable 88-SIO B serial engine (UART, inverted status word, VI
   # straps, interrupt enables, decode, connector, snapshot). Not a registered board; the
   # 88-SIO is it plus a name, the cassette engine extends it. See serial-board-base.h.
+  src/boards/scitronics-rtc100.cpp
   src/boards/serial-board-base.cpp
   # SD Systems SBC-100/200 -- the 8251 serial console (Phase 1). Structural twin of
   # the 88-SIO, embedding one Intel8251. See src/boards/sd-sbc.h.
@@ -812,6 +816,7 @@ add_executable(altair_tests
   tests/test_spindle.cpp
   tests/test_dcdd.cpp
   tests/test_mds.cpp
+  tests/test_fdcplus.cpp
   tests/test_hdsk.cpp
   tests/test_icom.cpp
   tests/test_dualsd.cpp
@@ -821,6 +826,7 @@ add_executable(altair_tests
   tests/test_turnkey.cpp
   tests/test_lamp.cpp
   tests/test_virtc.cpp
+  tests/test_rtc100.cpp
   tests/test_ss1.cpp
   tests/test_hostdir.cpp
   tests/test_hostbridge.cpp
@@ -904,6 +910,21 @@ else()
   endif()
   add_test(NAME terminal-hw COMMAND altair_terminaltest)
   set_tests_properties(terminal-hw PROPERTIES LABELS hw SKIP_RETURN_CODE 77)
+endif()
+
+# ---------------------------------------------------------------------------
+# CP/M off a REAL TNFS server. test_tnfs.cpp (in `unit`) proves the client against a fake
+# server in RAM; this boots the CP/M example with its floppy mounted over UDP from de-tnfsd,
+# SAVEs a file, and reads it back through a fresh mount. de-tnfsd is POSIX-only and not ours,
+# so the script SKIPs (77) unless it is on PATH -- installing it turns the test on. `hw` for
+# the same reason as serial-hw: it needs something outside the tree.
+# ---------------------------------------------------------------------------
+if(NOT WIN32)
+  add_test(NAME tnfs-hw
+           COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/tests/acceptance/tnfs-hw.sh
+                   $<TARGET_FILE:altairsim> ${CMAKE_CURRENT_SOURCE_DIR}
+                   ${CMAKE_CURRENT_BINARY_DIR}/tnfs-hw-work)
+  set_tests_properties(tnfs-hw PROPERTIES LABELS hw SKIP_RETURN_CODE 77 TIMEOUT 120)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -1073,6 +1094,17 @@ add_test(NAME acceptance-hostbridge
 # error. A test with a generous timeout is a test that can waste an hour of your evening.
 set_tests_properties(acceptance-hostbridge PROPERTIES LABELS acceptance TIMEOUT 60)
 
+# W ON CP/M 3, WHERE OPEN HANDS A FILE'S R/O/SYS/ARCHIVE BITS BACK IN THE FCB. Runs the committed
+# W.COM on the banked SD Systems CP/M 3 master against a file with an attribute set, and checks
+# the host file is named plainly. ~4s.
+add_test(NAME acceptance-hostbridge-attrs
+         COMMAND ${CMAKE_COMMAND}
+                 -DSIM=$<TARGET_FILE:altairsim>
+                 -DSRC=${CMAKE_CURRENT_SOURCE_DIR}
+                 -DBIN=${CMAKE_CURRENT_BINARY_DIR}
+                 -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/acceptance/hostbridge-attrs.cmake)
+set_tests_properties(acceptance-hostbridge-attrs PROPERTIES LABELS acceptance TIMEOUT 120)
+
 # THE `build` MODE IS NOT REGISTERED, and that is deliberate (2026-07-19).
 #
 # It needs the 8 MB image, which is an 8.6 MB download and is not in git -- so as a test it
@@ -1111,6 +1143,15 @@ add_test(NAME acceptance-history
                  -DBIN=${CMAKE_CURRENT_BINARY_DIR}
                  -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/acceptance/history.cmake)
 set_tests_properties(acceptance-history PROPERTIES LABELS acceptance TIMEOUT 60)
+
+# Under --mcp, stdout is the JSON-RPC transport: a machine file's `#>` notes must go to
+# stderr, not ahead of the `initialize` reply where a strict client chokes on them (#459).
+add_test(NAME acceptance-mcp-stdout
+         COMMAND ${CMAKE_COMMAND}
+                 -DSIM=$<TARGET_FILE:altairsim>
+                 -DBIN=${CMAKE_CURRENT_BINARY_DIR}
+                 -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/acceptance/mcp-stdout.cmake)
+set_tests_properties(acceptance-mcp-stdout PROPERTIES LABELS acceptance TIMEOUT 60)
 
 # ---------------------------------------------------------------------------
 # SNAPSHOT / RESTORE through the real monitor -- the command wiring (DESIGN.md 13).
@@ -1749,6 +1790,9 @@ if(EXPECT_EXECUTABLE)
   set_tests_properties(acceptance-diskbasic PROPERTIES LABELS acceptance TIMEOUT 180)
 
 else()
-  message(STATUS "expect not found -- SKIPPING the interactive CLI test (acceptance-cli). "
-                 "The tty paths (prompt echo, ATTN, clock pacing) will not be covered.")
+  message(STATUS "expect not found -- SKIPPING every interactive (pty-driven) acceptance "
+                 "test, not just acceptance-cli: none of the tests that type at a guest are "
+                 "registered without expect (as on Windows). The tty and mid-run paths "
+                 "(prompt echo, ATTN, clock pacing, typed guest commands, interrupt-driven "
+                 "console input) go uncovered here.")
 endif()

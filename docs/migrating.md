@@ -303,7 +303,7 @@ you have; `SHOW MOUNTS` and `SHOW PATHS` will tell you what landed where.
 | `SAVE f` / `RESTORE f` | `SNAPSHOT f` / `RESTORE f` | state, not machine shape — build the machine first |
 | `SHOW CONFIGURATION` / `SHOW DEVICES` | `BOARDS`, `SHOW MACHINE` | `BOARDS` is the backplane |
 | `SET REMOTE TELNET=n` | `CONNECT sio0:a socket:n` (console), or `--mcp` | different mechanisms for different jobs |
-| `DO script.ini` | `DO script.ini` (at the prompt) or `altairsim -s script.ini` (at startup) | same command — one line at a time, as if typed; paths inside a `DO` file are relative to the file |
+| `DO script.ini` | `DO script.ini` (at the prompt) or `altairsim -s script.ini` (at startup) | same command — one line at a time, as if typed; paths inside a `DO` or `-s` file are relative to the file |
 | `EXPECT`/`SEND` | `altairsim <machine> --mcp` (`run {input:…, until:…}`) | drive a live guest; see `docs/manual/mcp.md` |
 | an `altairz80.ini` startup file | a TOML machine file (auto-loads `./altairsim.toml`), or a `DO`-able `.ini` of commands | the TOML is declarative; the `.ini` is the batch-of-commands path, closest to what you have |
 

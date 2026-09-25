@@ -12,7 +12,10 @@ rem
 rem   VERIFIED on Windows 10 (MSVC 2022 Build Tools), 2026-07-22: a from-scratch run built
 rem   and installed a static SDL3 3.4.12 in ~3.5 min (exit 0 -- SDL3-static.lib, headers,
 rem   cmake config, version marker), and the idempotent "already installed" path works too.
-rem   See DISTRIBUTION.md 8. Written 2026-07-20 from the working macOS script.
+rem   Written 2026-07-20 from the working macOS script.
+rem   RE-VERIFIED with Visual Studio 2026 (MSVC 19.51), 2026-09-21: from scratch into a fresh
+rem   prefix, exit 0, and altairsim built against it came out windowed. It uses whatever
+rem   Visual Studio the cmake on PATH picks -- the newest that cmake knows.
 rem
 rem WHY A .BAT AND NOT A .PS1. PowerShell's execution policy blocks unsigned .ps1 files by
 rem default, so a script somebody just cloned will not run without them changing a machine
@@ -106,7 +109,7 @@ exit /b 0
 :printusage
 echo.
 echo Build altairsim against it with ^(the CRT setting must match this script's^):
-echo     cmake -B build -DCMAKE_PREFIX_PATH="%prefix%" ^^
+echo     cmake -B build -G "Visual Studio 18 2026" -DCMAKE_PREFIX_PATH="%prefix%" ^^
 echo           -DCMAKE_MSVC_RUNTIME_LIBRARY=%MSVC_RUNTIME%
 echo     cmake --build build --config Release
 echo.

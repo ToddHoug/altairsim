@@ -99,11 +99,12 @@ The result is `build/altairsim`.
 At configure time you may see:
 
 ```
--- expect not found -- SKIPPING the interactive CLI test (acceptance-cli).
+-- expect not found -- SKIPPING every interactive (pty-driven) acceptance test, ...
 ```
 
-That only disables one optional *test*; it does not affect building the binary.
-Install `expect` if you want that test. The build compiles with
+That disables the interactive acceptance *tests* (the ones that type at a
+guest); it does not affect building the binary. Install `expect` if you want
+them. The build compiles with
 `-Wall -Wextra -Wpedantic` and may print warnings under GCC. By default warnings
 do not fail the build, but configuring with `-DWERROR=on` promotes them to errors
 (adds `-Werror`) — and **CI builds every leg with `-DWERROR=on`**, so a warning
@@ -151,7 +152,7 @@ A full `-j$(nproc)` is fine *only* on a machine with ample RAM.
 ## 3. Smoke test
 
 ```bash
-./build/altairsim --version      # prints "AltairSim 1.0.0-…"
+./build/altairsim --version      # prints the version and the commit
 ./build/altairsim --list         # lists built-in machines (original, default, minidisk, ...)
 ./build/altairsim -x "help" default   # boots the default machine, runs one monitor command, exits
 ./build/altairsim                # interactive: the default machine's front panel + monitor

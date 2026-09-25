@@ -49,8 +49,8 @@ The rest of this file is the session that unfolds, so you can follow along or ch
 ## 1 — Build it and watch it misbehave
 
 The disk already carries `HELLO.ASM`, CP/M's `ASM` and `LOAD`, and the host-bridge utilities. The
-assistant boots the machine (`run {from: 0xFF00}` — under `--mcp` the startup is not run, so it
-boots the disk itself), then assembles, loads and runs the program:
+assistant boots the machine (`run {from: 65280}`, which is `FF00` — under `--mcp` the
+startup is not run, so it boots the disk itself), then assembles, loads and runs the program:
 
 ```
 run {input: "ASM HELLO\r",  until: "A>"}      ->  END OF ASSEMBLY

@@ -198,7 +198,7 @@ void schemaTable(std::ostream& o, std::vector<Property>& props) {
 const char* boardCategory(const std::string& n) {
     if (n == "8080" || n == "z80" || n == "8085" || n == "6800") return "CPU";
     if (n == "memory" || n == "bankmem" || n == "v2z80rom") return "Memory";
-    if (n == "dcdd" || n == "mds" || n == "hdsk" || n == "versafloppy" ||
+    if (n == "dcdd" || n == "mds" || n == "fdcplus" || n == "hdsk" || n == "versafloppy" ||
         n == "tarbell" || n == "tarbelldd" || n == "16fdc" || n == "64fdc" ||
         n == "icom" || n == "dualsd" || n == "dualide") return "Disk";
     if (n == "2sio" || n == "sio" || n == "sbc" || n == "pmmi" ||
@@ -209,7 +209,8 @@ const char* boardCategory(const std::string& n) {
     if (n == "vdm1" || n == "dazzler" || n == "vdb8024" || n == "cadzilla") return "Video";
     if (n == "sol") return "Systems";  // a whole machine's I/O on one card -- more will come
     if (n == "pb1") return "PROM programmer";
-    if (n == "fp" || n == "virtc" || n == "hostbridge" || n == "ss1") return "Other";
+    if (n == "fp" || n == "virtc" || n == "hostbridge" || n == "ss1" || n == "rtc100")
+        return "Other";
     return nullptr;
 }
 
@@ -255,7 +256,7 @@ const char* commandSummary(const std::string& n) {
     if (n == "MACHINE") return "Load a built-in machine by name (MACHINE none empties the backplane).";
     if (n == "STARTUP") return "Edit the machine's boot list (the commands CONFIG SAVE writes as startup = [...]).";
     if (n == "DO") return "Run a file of monitor commands, one per line, as if typed.";
-    if (n == "SET") return "Change a property of a board, the console, display, a register, or the bus.";
+    if (n == "SET") return "Change a property of a board, the console, display, a register, the bus, or the machine.";
     if (n == "SHOW") return "Display the state of a board, the bus, or the machine.";
     if (n == "DEPOSIT") return "Write bytes into memory at an address.";
     if (n == "EXAMINE") return "Point the front panel at an address (and show that byte).";
@@ -334,7 +335,7 @@ void boards(const std::string& dir) {
         if (group.empty()) continue;
         o << "**" << g << "**\n\n| Type | What it is |\n|---|---|\n";
         for (const auto& t : group)
-            o << "| [`" << t.name << "`](#" << t.name << ") | " << cell(t.description) << " |\n";
+            o << "| [`" << t.name << "`](#" << t.name << ") | " << cell(t.summary) << " |\n";
         o << "\n";
     }
 
@@ -548,7 +549,7 @@ void cheatsheet(const std::string& dir) {
 
     o << "## Command line\n\n"
          "```\n"
-         "altairsim [options] [machine]\n"
+         "altairsim [machine] [options]\n"
          "\n"
          "  machine            a built-in name, or a config file (has a '/' or ends .toml).\n"
          "                     Omitted: ./altairsim.toml if there is one, else `default`.\n"
@@ -556,10 +557,13 @@ void cheatsheet(const std::string& dir) {
          "  -f, --file <path>  ALWAYS a file -- never a built-in name.\n"
          "  -n, --none         empty backplane: no boards, no memory, nothing.\n"
          "  -l, --list         list the built-in machines and exit.\n"
-         "  -s, --script <f>   run a command script, then exit with its status.\n"
+         "  -s, --script <f>   run a command script, then exit with its status. Paths in\n"
+         "                     it are relative to the script's folder.\n"
          "  -x, --exec <cmd>   run one monitor command (repeatable), then exit.\n"
          "  -i, --interactive  after --script/--exec, stay in the monitor.\n"
          "      --mcp          MCP server on stdio.\n"
+         "      --mirror <sock>  with --mcp: mirror the console to socket:PORT so a person\n"
+         "                     can telnet in to watch and take over. Add ?ro for watch-only.\n"
          "  -v, --version      print the version and exit.\n"
          "  -h, --help         print this help and exit.\n"
          "```\n\n";
@@ -608,7 +612,7 @@ void cheatsheet(const std::string& dir) {
                       [](const BoardType& a, const BoardType& b) { return a.name < b.name; });
             o << "**" << g << "**\n\n| Type | What it is |\n|---|---|\n";
             for (const auto& t : group)
-                o << "| `" << t.name << "` | " << cell(t.description) << " |\n";
+                o << "| `" << t.name << "` | " << cell(t.summary) << " |\n";
             o << "\n";
         }
     }
@@ -655,8 +659,12 @@ void cheatsheet(const std::string& dir) {
          "| `null` | nowhere. Writes vanish, reads never come. |\n"
          "| `loopback` | itself — what you write comes back. |\n"
          "| `scripted` | a caller in place of a human — what MCP and the tests type into. |\n"
-         "| `socket:PORT` | **listens** — this is telnet-in. |\n"
-         "| `socket:HOST:PORT` | **calls out**. |\n"
+         "| `socket:PORT` | **listens**, as a raw pipe — for a program at the far end. "
+         "`?banner` greets each caller. |\n"
+         "| `socket:HOST:PORT` | **calls out**, as a raw pipe. |\n"
+         "| `telnet:PORT` | **listens**, speaking Telnet — this is telnet-in for a person. "
+         "Greets each caller; `?banner=off` stops it. |\n"
+         "| `telnet:HOST:PORT` | **calls out**, taking the telnet client's part. |\n"
          "| `serial:DEVICE` | a real serial port on this host. |\n"
          "| `in:PATH` | a host file as a reader (paper tape). `?cps=N` paces it. |\n"
          "| `out:PATH` | a host file as a punch — 8-bit clean, never truncating. |\n"

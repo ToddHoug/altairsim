@@ -89,20 +89,20 @@ void test_gsio() {
         CHECK(err.find("tty") != std::string::npos, "and the error names the bad unit");
     }
 
-    SECTION("GSIO -- the default 4-port block: a at 0/1, b at 2/3, both sior0");
+    SECTION("GSIO -- the default 4-port block: a at 0/1, b at 2/3, both sior1");
     {
         // The default serial block is 0-3: Serial A at 0/1, Serial B at 2/3
-        // (reference/SSM IO-4 2P+2S IO Board.md). Both come up as MITS SIO Rev 0.
+        // (reference/SSM IO-4 2P+2S IO Board.md). Both come up as MITS SIO Rev 1.
         Rig g;
         CHECK(g.get("a", "status_port") == 0x00, "a: status at 0");
         CHECK(g.get("a", "data_port") == 0x01, "a: data at 1");
-        CHECK(g.get("a", "dav") == 0, "a: DAV is bit 0 (sior0)");
-        CHECK(g.get("a", "tbmt") == 7, "a: TBMT is bit 7 (sior0)");
+        CHECK(g.get("a", "dav") == 0, "a: DAV is bit 0 (sior1)");
+        CHECK(g.get("a", "tbmt") == 7, "a: TBMT is bit 7 (sior1)");
 
         CHECK(g.get("b", "status_port") == 0x02, "b: status at 2");
         CHECK(g.get("b", "data_port") == 0x03, "b: data at 3");
-        CHECK(g.get("b", "dav") == 0, "b: DAV is bit 0 (sior0 shape)");
-        CHECK(g.get("b", "tbmt") == 7, "b: TBMT is bit 7 (sior0 shape)");
+        CHECK(g.get("b", "dav") == 0, "b: DAV is bit 0 (sior1 shape)");
+        CHECK(g.get("b", "tbmt") == 7, "b: TBMT is bit 7 (sior1 shape)");
     }
 
     SECTION("GSIO -- decodes ONLY its four strapped ports, and no memory");
@@ -126,7 +126,7 @@ void test_gsio() {
         // Different straps AND different data on each channel; each must answer only for
         // itself. This is the whole point of a two-channel board.
         Rig g;
-        // Leave a at sior0 (0/1). Move b well away and give it an active-high shape.
+        // Leave a at sior1 (0/1). Move b well away and give it an active-high shape.
         g.set("b", "status_port", "20");
         g.set("b", "data_port", "21");
         g.set("b", "dav", "1");
@@ -234,15 +234,17 @@ void test_gsio() {
     {
         const auto& bi = serialBuiltins();
         CHECK(bi.size() >= 2, "the built-ins ship");
-        bool sior0 = false, tuart = false, imsai = false, if2 = false, ss1 = false;
+        bool sior1 = false, sior0 = false, tuart = false, imsai = false, if2 = false, ss1 = false;
         for (auto& e : bi) {
+            if (e.name == "sior1") sior1 = true;
             if (e.name == "sior0") sior0 = true;
             if (e.name == "tuart") tuart = true;
             if (e.name == "imsai-sio2") imsai = true;
             if (e.name == "compupro-if2") if2 = true;
             if (e.name == "compupro-ss1") ss1 = true;
         }
-        CHECK(sior0 && tuart && imsai && if2 && ss1, "all five profiles ship");
+        CHECK(sior1 && sior0 && tuart && imsai && if2 && ss1, "all six profiles ship");
+        CHECK(bi.front().name == "sior1", "sior1 is first -- the default");
 
         Rig g;
         // Select a profile on channel a; the straps preset.
@@ -259,6 +261,26 @@ void test_gsio() {
         // An explicit strap AFTER the profile wins.
         g.set("a", "status_port", "50");
         CHECK(g.get("a", "status_port") == 0x50, "an override after the profile is honored");
+    }
+
+    SECTION("GSIO -- sior1 is the Rev 1 layout, sior0 the Rev 0 layout");
+    {
+        // reference/88-SIO Rev 0 & 1.pdf (errata) and the IO-4 manual agree: a Rev 1 board
+        // carries DAV/TBMT at bits 0/7, inverted; a Rev 0 board carries them at bits 5/1,
+        // TRUE sense (issue #552).
+        Rig g;
+        // Default (sior1), idle line: TBMT asserted -> bit 7 reads 0; no byte -> bit 0 reads 1.
+        CHECK(g.statusOf("a") == 0x01, "sior1 idle: bit 0 high (no byte), bit 7 low (ready)");
+
+        g.set("a", "profile", "sior0");
+        CHECK(g.get("a", "status_port") == 0x00, "sior0: status at BASE+0");
+        CHECK(g.get("a", "data_port") == 0x01, "sior0: data at BASE+1");
+        CHECK(g.get("a", "dav") == 5, "sior0: DAV is bit 5");
+        CHECK(g.get("a", "tbmt") == 1, "sior0: TBMT is bit 1");
+        CHECK(g.statusOf("a") == 0x02, "sior0 idle: bit 1 high (TBMT, true sense), bit 5 low");
+        g.a->feed("R");
+        CHECK(g.statusOf("a") == 0x22, "sior0 with a byte waiting: bit 5 high (DAV, true sense)");
+        CHECK(g.dataOf("a") == 'R', "and the byte reads from the data port");
     }
 
     SECTION("GSIO -- connectStream installs a pre-built line on a named channel");

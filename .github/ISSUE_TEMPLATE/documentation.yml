@@ -1,0 +1,23 @@
+name: Documentation
+description: The manual, the developer guide or the built-in help is wrong, unclear or missing something
+labels: ["documentation"]
+body:
+  - type: input
+    id: where
+    attributes:
+      label: Where
+      description: The chapter, section or command (for example the manual's MCP chapter, or `HELP SET`).
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is wrong or missing
+      description: What it says now, and what it should say.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: altairsim version
+      description: The output of `altairsim --version`, or the manual's release.

@@ -29,7 +29,7 @@ keyboard = "none"   # display-only: the Dazzler has no keyboard, so window keys 
 # The processor at 4 MHz (the Cromemco Z-1 speed) so the animation runs at an authentic
 # pace instead of flat out. SET cpu0 clock_hz=0 for maximum speed.
 [[board]]
-type     = "8080"
+type     = "z80"
 id       = "cpu0"
 clock_hz = 4000000
 
@@ -41,7 +41,6 @@ port = 10
 
   [board.unit.a]
   connect = "console"
-  baud    = 9600
 
   [board.unit.b]
   connect = "null"

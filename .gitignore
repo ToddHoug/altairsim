@@ -125,6 +125,7 @@ examples/**
 !examples/**/README.md
 !examples/cdos/CDOS258-8IN-DSDD.DSK
 !examples/cpm/cpm22b23-56k.dsk
+!examples/cpm/CPM22-48K-HDF.dsk
 !examples/hdsk/HDCPM22v16-48K.DSK
 !examples/diskbasic/Disk BASIC 4.1.dsk
 !examples/basic/4K BASIC Ver 3-1.tap
@@ -191,12 +192,15 @@ examples/**
 # by CI) so a file manager with no Markdown viewer can read it, and so it travels in the
 # package. One glob covers all of them, at any depth.
 !examples/**/README.pdf
+# The Dazzler example is KSCOPE and nothing else: the program, its listing, and the Intel HEX
+# the machine file LOADs. The disks that used to live here -- a CP/M system disk and two disks
+# of period Dazzler software, plus a CDOS disk and its scanned game manuals -- were removed
+# with the machine files that mounted them, so their allowlist lines went too. An entry for a
+# file that is not there is worse than no entry: it reads as a promise that something is
+# tracked.
 !examples/dazzler/KSCOPE.ASM
 !examples/dazzler/KSCOPE.PRN
 !examples/dazzler/KSCOPE.HEX
-!examples/dazzler/cpm22b23-56k.dsk
-!examples/dazzler/dazzler_graphics_altair.dsk
-!examples/dazzler/dazzler_stuff_altair.dsk
 !examples/printing/PRINT.ASM
 !examples/printing/PRINT.HEX
 !examples/pmmi/PMMITERM.ASM
@@ -250,10 +254,28 @@ printout.txt
 # connects the 88-PIO's `out` line to `file:parallel-out.txt`.
 parallel-out.txt
 
-# Agent scratch worktrees -- not repository content.
-.claude/worktrees/
+# .claude/ IS MOSTLY LOCAL, AND ONE DIRECTORY IN IT IS NOT.
+#
+# settings.local.json is this machine's permission grants, scheduled_tasks.lock is a runtime
+# file, and worktrees/ is agent scratch -- none of it is repository content, and a `git add -A`
+# would sweep every one of them into a commit (the same mistake printout.txt records above).
+# So the default is EXCLUDE, and the exception is named.
+#
+# .claude/skills/ IS TRACKED ON PURPOSE. It holds the altairsim skill -- the briefing an
+# assistant reads to drive a guest over MCP -- and Claude Code discovers a project skill at
+# exactly that path, so committing it is what makes a fresh clone work with no setup. It is
+# also the packaged skill's source (docs/package.map ships it as `skills/`).
+#
+# The pattern must exclude the CONTENTS (`.claude/*`), not the directory (`.claude/`): git
+# does not descend into an excluded directory, so a `!` re-include underneath one never fires.
+.claude/*
+!.claude/skills/
 
 # TODO.md is an internal, fast-moving brainstorming/working document, not a
 # shipped artifact. Anything in it that is meant for the public becomes a GitHub
 # issue instead; the file itself stays out of the tree. (Untracked 2026-07-22.)
 TODO.md
+
+# This site's release machines: addresses, ssh users, serial port names. The tracked
+# distribution.conf.example is the template; each site keeps its own copy under this name.
+distribution.conf

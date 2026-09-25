@@ -37,7 +37,7 @@ seconds are **write-ignored, not read-as-zero**, and the Hours-10 / Days-10 mode
 
 ## Register reference
 
-The whole board occupies 16 ports from `base` (default 50H). This milestone implements the four
+The whole board occupies 16 ports from `base` (default 50H). What is implemented is the four
 8259A ports, the four timer ports, the two clock ports and the four UART ports:
 
 | Addr (base 50H) | OUT (write) | IN (read) |

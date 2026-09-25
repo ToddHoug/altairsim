@@ -11,10 +11,9 @@
 ;       ASM HDIR                -> HDIR.HEX
 ;       LOAD HDIR               -> HDIR.COM
 ;
-; THIS ONE HAS NO ANCESTOR. AltairZ80 ships an R and a W and nothing that
-; shows you what is there to read -- so you type a host name from memory,
-; get it wrong, and cannot tell whether the file is missing or your spelling
-; is. HDIR is the answer to "what can I say to R".
+; WITHOUT THIS THERE IS NO WAY TO SEE WHAT IS THERE TO READ -- you type a
+; host name from memory, get it wrong, and cannot tell whether the file is
+; missing or your spelling is. HDIR is the answer to "what can I say to R".
 ;
 ;-----------------------------------------------------------------------
 ; IT PRINTS TRUE HOST NAMES, AND THAT IS THE POINT OF IT.
@@ -68,8 +67,8 @@ CRESET  EQU     8
 ;=======================================================================
 START:  LXI     SP,STACK
 
-        MVI     A,CRESET        ; ONE byte, not the 128 AltairZ80's utilities
-        OUT     HBCMD           ; send. This card has no undefined state.
+        MVI     A,CRESET        ; ONE byte -- this card has no undefined
+        OUT     HBCMD           ; state to climb out of.
 
         CALL    IDENT           ; is there even a card there? (exits if not)
         CALL    PARSE           ; the tail -> PAT (which may be empty, and an

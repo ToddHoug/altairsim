@@ -132,17 +132,22 @@ Each screen byte is latched (IC5/6) and split:
   period). Inversion is a per-character XOR of the video (IC14→IC12), independent
   of the whole-screen polarity in §5.
 
-The MCM6574 is the standard VDM-1 font (Figure 3-1A); the MCM6575 (Fig 3-1B) and
-MCM6576 (Fig 3-1C) are pin-compatible alternates with different glyph sets. For
-emulation, embed a 6574 ROM dump (128 glyphs) via `cmake/embed_roms.cmake`, or
-transcribe the pattern figures. The **cursor is bit 7**, not a separate register —
+The ROM socket takes an MCM6574 (Figure 3-1A), MCM6575 (Fig 3-1B) or MCM6576
+(Fig 3-1C); the parts list gives all three, and they are pin-compatible with
+different glyph sets. The manual's own test photos (Figures 2-12 to 2-14) happen to
+use a 6574. The emulation uses the **MCM6576**, which has a graphics glyph for every
+control code (0x00 a box, 0x0D a left arrow). The **cursor is bit 7**, not a separate register —
 so the "blinking underscore/block" a terminal shows is just a byte with D7 set.
 
 **Control characters.** Codes `0x00–0x1F` are control characters. Whether they
 paint a glyph, blank to a space, or trigger line/screen blanking is switch-set
 (§5). Two are special when the CR/VT option is enabled:
-- **CR (`0x0D`)** blanks the rest of that character **row** (erase-to-end-of-line).
-- **VT (`0x0B`)** blanks all **following rows** to end of screen (erase-to-end).
+- **CR (`0x0D`)** blanks the rest of that character **row** (erase-to-end-of-line),
+  from the next cell: "from, but not including, the CR" (§2.7.5).
+- **VT (`0x0B`)** blanks from the next cell to the end of the **screen** (the rest of
+  its row and all following rows).
+The CR or VT itself is displayed unless control characters are blanked too. Blanking
+acts on **display** rows, as the beam scans, so it follows the scroll.
 
 ---
 
@@ -150,8 +155,9 @@ paint a glyph, blank to a space, or trigger line/screen blanking is switch-set
 
 Six DIP switches (board area B-1,2) configure the display. These are **hardware
 straps** — for emulation expose them as board `properties()` (e.g. `video`,
-`cursor`, `blanking`) so a machine file can set them, defaulting to the common
-"normal video / blinking cursor / control-chars-blanked" combination.
+`cursor`, `blanking`) so a machine file can set them. The installation note
+(§2.7.1) gives the factory setting for SW5/SW6 as "unblanked control characters"
+(both ON), and that is the `blanking` default.
 
 **SW1 / SW2 — video polarity:**
 

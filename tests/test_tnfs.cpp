@@ -7,7 +7,7 @@
 // a connector that hands back a FakeServer: a UdpSocket whose send()/recv() are a TNFS
 // server reduced to one file held in a vector. Deterministic, cross-platform, nothing to
 // flake. The real socket path is smoke-checked in tests/sockettest.cpp; the live boot
-// off a real tnfsd is the acceptance layer's job.
+// off a real tnfsd, with a write-back, is tests/acceptance/tnfs-hw.sh (`hw`, needs de-tnfsd).
 
 #include "test.h"
 

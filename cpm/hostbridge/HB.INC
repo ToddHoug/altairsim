@@ -37,8 +37,8 @@ HBDATA  EQU     HBBASE+1        ; OUT = data         IN = data
 ;---- Status bits (IN HBCMD) -------------------------------------------
 ;
 ; An IN from HBCMD is ALWAYS the status register. Never a result code,
-; never "the second byte of the thing you asked for". That is the whole
-; difference between this card and the SIMH pseudo-device it replaces.
+; never "the second byte of the thing you asked for". A guest can read
+; status at any moment, mid-transfer, and learn nothing but status.
 ;
 ; BITS 5-7 ALWAYS READ ZERO, so a status of 0FFH means THERE IS NO CARD
 ; THERE -- an IN from an undecoded port floats the bus high. Do not lean
@@ -58,8 +58,8 @@ HERR    EQU     10H             ; the last operation failed -- ask CERROR
 ;
 ; You can walk away from a half-finished transfer at any point, for any
 ; reason, and the next command simply works. There is no "the device is
-; now in an undefined state", and therefore no need for the 128-resets-in-
-; a-row incantation that AltairZ80's R.COM and W.COM open with.
+; now in an undefined state", and therefore no reason for a utility to
+; open by resetting the card more than once.
 ;
 ; The one thing a command does NOT abandon is the directory enumerator.
 ; That is not an exception -- a listing is not a stream -- and it is what
@@ -99,9 +99,8 @@ EAMBIG  EQU     8               ; several host files differ only in case
 ; Host names resolve against the card's `hostdir` and CANNOT LEAVE IT.
 ; A name may be a relative path -- SRC/FOO.ASM -- and BOTH separators work
 ; on every host, so one assembled .COM runs against a Mac, a Linux box and
-; a Windows box without being told which. (AltairZ80's device has a "what
-; is your path separator?" command for this. The guest should not have to
-; care, and here it does not.)
+; a Windows box without being told which. There is no "what is your path
+; separator?" command, because the guest should not have to care.
 ;
 ; Refused with EOUTSID: an absolute path, a drive letter, a `..` component,
 ; and a symlink that resolves out of the root. There is no way to talk the
