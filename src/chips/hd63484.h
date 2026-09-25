@@ -73,13 +73,13 @@
 // WHAT IS MODELED, AND WHAT IS NOT (docs/boards/cadzilla.md has the honest list)
 //
 //   Register file: all of it, with the auto-increment rule.       FIFOs and SR: all.
-//   Commands: ORG WPR RPR WPTN RPTN / RD WT MOD DRD DWT DMOD CLR SCLR / AMOVE RMOVE
+//   Commands: ORG WPR RPR WPTN RPTN / RD WT MOD DRD DWT DMOD CLR SCLR CPY SCPY / AMOVE RMOVE
 //             ALINE RLINE ARCT RRCT APLL RPLL APLG RPLG AFRCT RFRCT DOT, with every
 //             OPM, every COL and every AREA mode, the pattern pointer and its zoom
-//             counters stepping live (RPR reads them back). The remaining opcodes (CPY
-//             SCPY CRCL ELPS arcs PAINT PTN AGCPY RGCPY) are RECOGNIZED -- their
-//             parameters are consumed so the stream stays in step -- but not executed, and
-//             they set CER so a guest can tell.
+//             counters stepping live (RPR reads them back). The remaining opcodes
+//             (CRCL ELPS arcs PAINT PTN AGCPY RGCPY) are RECOGNIZED -- their parameters
+//             are consumed so the stream stays in step -- but not executed, and they set
+//             CER so a guest can tell.
 //   Reads:    a read that does not fit the read FIFO waits for room, and the command
 //             stream waits behind it (manual RD-1).
 //   Scan-out: the three background screens (upper/base/lower) stacked by SP0/SP1/SP2 and
@@ -252,6 +252,7 @@ private:
     uint16_t applyOpm(uint16_t data, uint16_t color, uint32_t addr, int shift, int bpp) const;
     void     fillRect(int x1, int y1);                          // AFRCT/RFRCT body
     void     clearBlock(uint16_t d, int16_t ax, int16_t ay, bool masked, int mm);
+    void     copyBlock(uint32_t src, int16_t ax, int16_t ay, bool s, int dsd, bool masked, int mm);
     uint16_t modify(uint16_t data, uint16_t d, int mm) const;   // MM under MASK
 
     // THE PATTERN POINTER (manual 5.10.2.6, 6.8.3-6.8.4) is live state: PPX/PPY name the

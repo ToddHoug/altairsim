@@ -554,6 +554,76 @@ void test_hd63484() {
         CHECK(g.c.param(0x0D) == 0x0560 && g.c.param(0x0C) == 0x4000, "DN changed, the address did not");
     }
 
+    SECTION("HD63484 -- CPY: the manual's example, S = 1 DSD = 000 -- a 4 x 7 source lands transposed (CPY-5/6)");
+    {
+        Rig g;
+        g.reg(0xC2, 0x0010);                      // MWR0: MW = $10
+        // The source, Pss = $89, AX = 3, AY = 6: four words wide, seven rasters UP (+Y is
+        // MW lower), so Pse = $89 + 3 - 6 x $10 = $2C. Each word holds its own address.
+        for (int y = 0; y < 7; ++y)
+            for (int x = 0; x < 4; ++x) {
+                uint32_t a = (uint32_t)(0x89 + x - y * 0x10);
+                g.c.pokeWord(a, (uint16_t)a);
+            }
+        g.cmd(0x080C, {0x0000});
+        g.cmd(0x080D, {0x0B00});                  // RWP = $B0 on screen 0
+        g.cmd(0x6800, {0x0000, 0x0890, 3, 6});    // CPY S = 1, DSD = 000: SA = $89
+        CHECK((g.sr() & 0xA0) == 0x20, "executed: CED, no CER");
+        // S = 1 scans COLUMNS of the source (upward); DSD = 000 writes ROWS rightward,
+        // successive rows upward: source column x becomes destination row x.
+        bool ok = true;
+        for (int x = 0; x < 4; ++x)
+            for (int y = 0; y < 7; ++y)
+                if (g.c.peekWord((uint32_t)(0xB0 + y - x * 0x10)) != (uint16_t)(0x89 + x - y * 0x10)) ok = false;
+        CHECK(ok, "four destination rows of seven words at $B0, $A0, $90, $80");
+        CHECK(g.c.peekWord(0xB7) == 0 && g.c.peekWord(0x70) == 0, "and nothing past them");
+        CHECK(g.c.param(0x0D) == 0x0700, "RWPe = $B0 - 3 x $10 - $10 = $70 (manual CPY-6)");
+    }
+
+    SECTION("HD63484 -- SCPY: MM under MASK, the manual's example $F0F0 (SCPY-6/7)");
+    {
+        Rig g;
+        g.reg(0xC2, 0x0010);
+        for (int y = 0; y < 7; ++y)
+            for (int x = 0; x < 2; ++x) g.c.pokeWord((uint32_t)(0x85 + x - y * 0x10), 0xAAAA);
+        for (int y = 0; y < 2; ++y)
+            for (int x = 0; x < 7; ++x) g.c.pokeWord((uint32_t)(0xB0 + x - y * 0x10), 0x5555);
+        g.cmd(0x0804, {0xF0F0});                  // MASK
+        g.cmd(0x080C, {0x0000});
+        g.cmd(0x080D, {0x0B00});
+        g.cmd(0x7800, {0x0000, 0x0850, 1, 6});    // SCPY S = 1, DSD = 000, MM = 00: SA = $85
+        bool ok = true;
+        for (int y = 0; y < 2; ++y)
+            for (int x = 0; x < 7; ++x)
+                if (g.c.peekWord((uint32_t)(0xB0 + x - y * 0x10)) != 0xA5A5) ok = false;
+        CHECK(ok, "only the MASK bits took the source: $5555 -> $A5A5");
+        CHECK(g.c.param(0x0D) == 0x0900, "RWPe = $90 (manual SCPY-7)");
+
+        g.cmd(0x0804, {0xFFFF});
+        g.cmd(0x080D, {0x0B00});
+        g.c.pokeWord(0x85, 0x0F0F);
+        g.cmd(0x7003, {0x0000, 0x0850, 0, 0});    // SCPY S = 0, one word, MM = 11: EOR
+        CHECK(g.c.peekWord(0xB0) == (0xA5A5 ^ 0x0F0F), "MM = 11 EORs the source into the destination");
+    }
+
+    SECTION("HD63484 -- CPY directions: negative AX runs the source leftward; DSD = 011 writes leftward, downward");
+    {
+        Rig g;
+        g.reg(0xC2, 0x0010);
+        g.c.pokeWord(0x40, 0x1111);
+        g.c.pokeWord(0x3F, 0x2222);
+        g.c.pokeWord(0x30, 0x3333);               // the raster ABOVE $40 (+Y)
+        g.c.pokeWord(0x2F, 0x4444);
+        g.cmd(0x080C, {0x0000});
+        g.cmd(0x080D, {0x0B00});
+        g.cmd(0x6300, {0x0000, 0x0400, 0xFFFF, 1});   // CPY S = 0, DSD = 011: AX = -1, AY = +1
+        CHECK(g.c.peekWord(0xB0) == 0x1111 && g.c.peekWord(0xAF) == 0x2222,
+              "first line: the source leftward from $40, written leftward from $B0");
+        CHECK(g.c.peekWord(0xC0) == 0x3333 && g.c.peekWord(0xBF) == 0x4444,
+              "second line: the source's raster above, written one raster DOWN (MW higher)");
+        CHECK(g.c.param(0x0D) == 0x0D00, "RWPe one more raster down, at the line start: $D0");
+    }
+
     SECTION("HD63484 -- CPY with MM bits is undefined: CER, and the stream stays in step");
     {
         Rig g;

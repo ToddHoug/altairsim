@@ -248,6 +248,7 @@ and the same three for *inside*).
 | A DRD "goes into an indefinite wait state after the last transfer" — CED never sets; ABT ends it (manual 6.5) | a driver waiting on CED after a DRD hangs on real silicon and would not here |
 | A read that does not fit the 8-word read FIFO (RPTN *n* > 8, RD or RPR onto a full FIFO) **waits for room** (RD-1), and the commands behind it wait in the write FIFO; CED sets when its last word is in | an RPTN of the whole pattern RAM returns half of it, and the command after it runs early |
 | **RWP is one register**; DN rides in its high word, so rewriting Pr0C to change screens keeps RWPL (5.10.2.8) | a driver that selects the screen after setting the address transfers to address 0 |
+| CPY/SCPY scan the source by **S** (rows or columns, from the corner the signs of AX/AY name) and write the destination from RWP in **DSD**'s order — bit 2 columns, bit 1 leftward, bit 0 downward (Tables C14-1/C14-2, read from the scan) — so S ≠ DSD bit 2 transposes the block; RWPe ends **one line past** the last on the slow axis (CPY-6: `$B0` → `$70`), unlike CLR's | a rotated or mirrored copy comes out in the wrong orientation, or a chained copy overlaps its predecessor by a line |
 | DRD/DWT/DMOD with **negative AX/AY** walk the block the way CLR does: leftward, and down in Y (up in memory) (DRD-2, DWT-2) | a bottom-up block transfer is rejected, or lands mirrored |
 | The shift register is 8 bpp × 8 words whatever CCR/OMR say: a wrong GBM packs pixels the board will not unpack, a wrong GAI makes each fetch overlap the last | an off-spec program shows a coherent picture here and garbage on the card, or the reverse |
 | **MODE AMODE, not OMR ACM, governs the board's own fetch pattern** — the two are independent straps a driver must agree, and only `wiring` compares them | a driver that sets the ACRTC to interleaved but forgets `port+1` gets a SINGLE-access picture out of doubled registers: half the frame, or a picture that never fills |
@@ -262,7 +263,7 @@ and the same three for *inside*).
   wait state. A guest that times a command, or that syncs to the raster to avoid flicker, sees
   an infinitely fast chip and an unmoving beam. The status bits a guest *polls* (the FIFO
   flags, CED) are exact.
-- **Commands not executed**: CPY, SCPY, CRCL, ELPS, AARC, RARC, AEARC, REARC, PAINT, PTN,
+- **Commands not executed**: CRCL, ELPS, AARC, RARC, AEARC, REARC, PAINT, PTN,
   AGCPY, RGCPY. They are recognized and their parameters consumed — the command stream stays in
   step — and **CER is set**, so a guest can tell. DRD/DWT/DMOD run only in the manual's
   "under program control" mode (no DMAC on the board).
