@@ -279,7 +279,6 @@ id   = "mem0"
   [[board.region]]
   type  = "rom"
   at    = 0xFF00
-  size  = 256
   mount = "turnmon.bin"    # relative to this file
 ```
 
@@ -287,7 +286,7 @@ id   = "mem0"
 |---|---|
 | `type` | **required.** `ram` or `rom` |
 | `at` | the address where the region starts. **Hex** |
-| `size` | the size. **Decimal**. You can use the `K` and `M` suffixes |
+| `size` | the size of a `ram` region. **Decimal**. You can use the `K` and `M` suffixes. A `rom` region takes its size from its image, rounded up to a page, so it ignores `size` |
 | `mount` | a ROM image: a file path, or `builtin:<name>` |
 
 A size with a suffix needs quotes, as in `size = "56K"`, because TOML does not accept `56K` as a
@@ -295,8 +294,8 @@ number. A plain number needs no quotes: `size = 256`.
 
 ### An empty socket
 
-**A `rom` region with no `mount` is an empty socket.** It decodes nothing, so a read there gets
-`FF`. That is what an S-100 bus gives when no board drives it. It is not zero, and it is not an
+**A `rom` region with no `mount` is an empty socket**, even when it has a `size`. It decodes
+nothing, so a read there gets `FF`. That is what an S-100 bus gives when no board drives it. It is not zero, and it is not an
 error. A real board with an empty PROM socket gives the same result.
 
 ## `[[board.drive]]`: disks
