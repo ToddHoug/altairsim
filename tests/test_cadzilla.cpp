@@ -374,6 +374,51 @@ void test_cadzilla() {
               "superimposed mode is not wired");
     }
 
+    SECTION("cadzilla -- a circle, PAINTed, and AGCPY'd across the screen: the whole picture");
+    {
+        Rig g;
+        std::string err;
+        CHECK(setProperty(*g.cad, "mode", "640x480", err), "the mode strap takes 640x480");
+        g.programMode();
+        g.lut(1, 0xFF, 0, 0);
+        g.lut(2, 0, 0xFF, 0);
+
+        // The center on the 32-pixel sampling grid (frame y = 479 - Y), the radius 98 so no
+        // grid point is within a pixel of the outline: the grid sees the PAINTed inside only.
+        g.color(1);
+        g.cmd(0x8000, {160, 223});
+        g.cmd(0xA800, {98});                       // CRCL r = 98, outline in 1
+        g.cmd(0x0803, {0x0101});                   // EDG = 1
+        g.cmd(0x0800, {0x0202});                   // CL0 = CL1 = 2
+        g.cmd(0x0801, {0x0202});
+        g.cmd(0xC800);                             // PAINT from the center
+        g.cmd(0x8000, {286, 125});                 // the copy's bottom-left corner: 224 to the right
+        g.cmd(0xE000, {62, 125, 196, 196});        // AGCPY S = 0 DSD = 000: the disk's bounding box
+        CHECK((g.sr() & 0x80) == 0, "no command error on the way");
+
+        g.cad->pump();
+        TextGridOpts every32;
+        every32.xStep = 32;
+        every32.yStep = 32;
+        CHECK_FRAME_OPTS(g.disp, g.cad, R"(
+....................
+....................
+....................
+....................
+....................
+.....2......2.......
+...22222..22222.....
+...22222..22222.....
+..22222222222222....
+...22222..22222.....
+...22222..22222.....
+.....2......2.......
+....................
+....................
+....................
+)", every32, "sampled every 32nd pixel: the painted disk, and its copy 224 pixels to the right");
+    }
+
     SECTION("cadzilla -- 1024x768 in interleaved mode: doubled horizontal registers, 8 pixels a cycle");
     {
         Rig g;
