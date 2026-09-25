@@ -75,10 +75,13 @@
 //   Register file: all of it, with the auto-increment rule.       FIFOs and SR: all.
 //   Commands: ORG WPR RPR WPTN RPTN / RD WT MOD DRD DWT DMOD CLR SCLR / AMOVE RMOVE
 //             ALINE RLINE ARCT RRCT APLL RPLL APLG RPLG AFRCT RFRCT DOT, with every
-//             OPM, every COL and every AREA mode. The remaining opcodes (CPY SCPY CRCL
-//             ELPS arcs PAINT PTN AGCPY RGCPY) are RECOGNIZED -- their parameters are
-//             consumed so the stream stays in step -- but not executed, and they set
-//             CER so a guest can tell.
+//             OPM, every COL and every AREA mode, the pattern pointer and its zoom
+//             counters stepping live (RPR reads them back). The remaining opcodes (CPY
+//             SCPY CRCL ELPS arcs PAINT PTN AGCPY RGCPY) are RECOGNIZED -- their
+//             parameters are consumed so the stream stays in step -- but not executed, and
+//             they set CER so a guest can tell.
+//   Reads:    a read that does not fit the read FIFO waits for room, and the command
+//             stream waits behind it (manual RD-1).
 //   Scan-out: the three background screens (upper/base/lower) stacked by SP0/SP1/SP2 and
 //             the window over them, graphic screens only, non-interlaced, GAI +1/+2/+4/+8.
 //   Timing:   NONE. Drawing is instantaneous at the moment the last parameter lands, the
@@ -223,6 +226,13 @@ private:
     void updateFifoStatus();
     void abort();
 
+    // Words a command owes the read FIFO that did not fit (RD, RPR, RPTN): the chip "enters
+    // a wait state until space becomes available" (manual RD-1), and so does the command
+    // stream behind it. feedRead() moves them in as the host drains.
+    void queueRead(uint16_t w);
+    void feedRead();
+    bool readStalled() const { return !rpending_.empty() || xferRead_; }
+
     // ---- the command engine ----
     void processFifo();                      // consume words from the write FIFO
     void commandWord(uint16_t w);            // one word of command or parameter
@@ -233,19 +243,34 @@ private:
 
     // ---- drawing (manual 6.6-6.8) ----
     void     drawLine(int x0, int y0, int x1, int y1);          // excludes (x1, y1)
-    void     drawPixel(int x, int y, int patX, int patY);       // through COL/OPM/AREA
+    void     drawPixel(int x, int y);                           // through COL/OPM/AREA, at the pattern pointer
     bool     areaAllows(int x, int y);                          // false = suppressed/stopped
-    bool     stopped_ = false;                                  // AREA 001/101 fired
+    bool     stopped_ = false;                                  // AREA 001/101 fired...
+    int16_t  stopX_ = 0, stopY_ = 0;                            // ...at this point, where CP ends
     void     wordAddress(int x, int y, uint32_t& addr, int& shift) const;
-    uint16_t colorFor(int x, int patX, int patY, bool& draw) const;
+    uint16_t colorFor(bool& draw) const;
     uint16_t applyOpm(uint16_t data, uint16_t color, uint32_t addr, int shift, int bpp) const;
     void     fillRect(int x1, int y1);                          // AFRCT/RFRCT body
     void     clearBlock(uint16_t d, int16_t ax, int16_t ay, bool masked, int mm);
     uint16_t modify(uint16_t data, uint16_t d, int mm) const;   // MM under MASK
 
+    // THE PATTERN POINTER (manual 5.10.2.6, 6.8.3-6.8.4) is live state: PPX/PPY name the
+    // pattern-RAM bit in use, PZCX/PZCY count the zoom repeats of it. Every logical pixel
+    // position a drawing visits steps X once -- drawn, suppressed by COL, or clipped by
+    // AREA alike -- and a plane command steps Y once per row. What is left is what RPR Pr05
+    // reads and where the next command's pattern picks up ("pattern continuity", 5.10.1).
+    void     stepPatternX();
+    void     stepPatternY();
+
+    // DRD/DWT/DMOD: the word the transfer cursor is on (signed AX/AY walk, like CLR).
+    uint32_t xferAddr() const {
+        return xferBase_ + (uint32_t)(xferX_ * xferSx_) - (uint32_t)(xferY_ * xferSy_) * mw(rwpDn_);
+    }
+    void     xferAdvance();
+
     // RWP / DP as 20-bit word addresses plus the screen number they carry.
-    uint32_t rwp() const { return rwp_[rwpDn_]; }
-    void     setRwp(uint32_t a) { rwp_[rwpDn_] = a & 0xFFFFF; }
+    uint32_t rwp() const { return rwp_; }
+    void     setRwp(uint32_t a) { rwp_ = a & 0xFFFFF; }
     uint32_t mw(int dn) const { return regWord((uint8_t)(0xC2 + dn * 8)) & 0x0FFF; }
     uint32_t sar(int dn) const;
 
@@ -277,15 +302,17 @@ private:
     // DWT/DMOD/DRD under program control: words still to move after the parameters.
     int      xferLeft_ = 0;
     int      xferAx_ = 0, xferAy_ = 0, xferX_ = 0, xferY_ = 0;
+    int      xferSx_ = 1, xferSy_ = 1;  // the signs of AX and AY: which way the block runs
     uint32_t xferBase_ = 0;
     bool     xferRead_ = false;
+    std::vector<uint16_t> rpending_;  // read-FIFO words waiting for space (queueRead)
 
     // Drawing parameter registers (Pr00..Pr13) and the pattern RAM.
     uint16_t cl0_ = 0, cl1_ = 0, ccmp_ = 0, edg_ = 0, mask_ = 0xFFFF;
     uint8_t  ppx_ = 0, ppy_ = 0, pzcx_ = 0, pzcy_ = 0;
     uint8_t  psx_ = 0, psy_ = 0, pex_ = 0, pey_ = 0, pzx_ = 0, pzy_ = 0;
     int16_t  xmin_ = 0, ymin_ = 0, xmax_ = 0, ymax_ = 0;
-    uint32_t rwp_[4] = {};
+    uint32_t rwp_ = 0;              // ONE register; DN rides in its high word (manual 5.10.2.8)
     uint8_t  rwpDn_ = 0;
     uint32_t orgDpa_ = 0;           // ORG: the origin's word address...
     uint8_t  orgDpd_ = 0;           // ...and dot address

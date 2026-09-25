@@ -20,6 +20,9 @@ monitor** the board carries (`mode`: the three primary VESA resolutions, 640x480
 memory, and the window is the same host display the Dazzler and VDM-1 draw into. Both chips are models in their own right
 (`src/chips/`), built from the Hitachi and Brooktree data sheets, so the next board that carries one
 gets it for free. Circles, arcs, paint, patterns and copies are recognized but not drawn yet.
+The drawing pattern behaves as the chip's own does: a dash carries on around the corners of a
+rectangle, polyline or polygon, zoom counters start where a driver sets them, and the pattern
+pointer reads back where drawing left it.
 
 The board is one 8-port I/O block: the ACRTC at `port`/`port+2`, a write-only **MODE register**
 at `port+1` between the ACRTC's own two ports (the board's own glue, not a chip register --

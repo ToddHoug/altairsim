@@ -327,6 +327,8 @@ void test_hd63484() {
         CHECK(g.nib(4, 0) == 0xF && g.nib(5, 0) == 0, "pixels 0-4 drawn, drawing stopped at x = 5");
         CHECK((g.sr() & 0x40) != 0, "ARD set");
         CHECK((g.sr() & 0x20) != 0, "and CED: the command was terminated");
+        CHECK(g.c.cpx() == 5 && g.c.cpy() == 0,
+              "CP is left where the drawing crossed out, not at Pe (manual 6.6.3: 'as long as the CP resides in the area')");
         g.cmd(0x0C00);                            // any RPR
         g.readWord();
         CHECK((g.sr() & 0x40) == 0, "RPR clears ARD (manual Table 5.1)");
@@ -345,6 +347,220 @@ void test_hd63484() {
         g.cmd(0x8800 | 0xC0, {0, 3});             // AREA = 110: suppress INSIDE
         CHECK(g.nib(6, 3) == 0xF && g.nib(5, 3) == 0xF && g.nib(4, 3) == 0 && g.nib(1, 3) == 0,
               "drawn outside the area only");
+    }
+
+    SECTION("HD63484 -- AREA 101 stops on ENTERING the area; 111 suppresses inside and sets ARD");
+    {
+        Rig g;
+        g.screen4bpp();
+        g.cmd(0x0808, {4});                       // XMIN = 4
+        g.cmd(0x080A, {8});                       // XMAX = 8
+        g.cmd(0x0809, {0});
+        g.cmd(0x080B, {8});
+
+        g.cmd(0x8800 | 0xA0, {12, 0});            // AREA = 101: stop on entry
+        CHECK(g.nib(3, 0) == 0xF && g.nib(4, 0) == 0 && g.nib(10, 0) == 0, "pixels 0-3 drawn, stopped at x = 4");
+        CHECK((g.sr() & 0x60) == 0x60, "ARD and CED");
+        CHECK(g.c.cpx() == 4 && g.c.cpy() == 0, "CP at the crossing");
+
+        g.cmd(0x0C00);
+        g.readWord();                             // RPR: clear ARD
+        g.cmd(0x8000, {0, 1});
+        g.cmd(0x8800 | 0xE0, {12, 1});            // AREA = 111: suppress inside, say so
+        CHECK(g.nib(3, 1) == 0xF && g.nib(4, 1) == 0 && g.nib(8, 1) == 0 && g.nib(9, 1) == 0xF,
+              "drawn on both sides, suppressed inside");
+        CHECK((g.sr() & 0x40) != 0, "ARD set: the pointer went inside");
+        CHECK(g.c.cpx() == 12, "and the line ran to Pe");
+    }
+
+    SECTION("HD63484 -- the pattern pointer is live: it carries across segments and commands");
+    {
+        Rig g;
+        g.screen4bpp();
+        g.cmd(0x1800, {2, 0x0005});               // row 0 = ...0101
+        g.cmd(0x0807, {0x0010});                  // PEX = 1: a two-bit dash
+        g.cmd(0x9800, {2, 3, 0, 3, 3});           // APLL (0,0)->(3,0)->(3,3)
+        CHECK(g.nib(0, 0) == 0xF && g.nib(1, 0) == 0 && g.nib(2, 0) == 0xF, "first segment: on off on");
+        CHECK(g.nib(3, 0) == 0 && g.nib(3, 1) == 0xF && g.nib(3, 2) == 0,
+              "the second segment continues the dash (off on off) instead of restarting it (manual 6.8.3)");
+
+        Rig h;
+        h.screen4bpp();                           // PEX = 15, PPX = 0
+        h.cmd(0x8800, {5, 0});                    // five pixels
+        h.cmd(0x0C05);                            // RPR Pr05
+        CHECK(h.readWord() == 0x0050, "RPR Pr05 reads PPX = 5 after a five-pixel line");
+        h.cmd(0x8800, {9, 0});                    // four more
+        h.cmd(0x0C05);
+        CHECK(h.readWord() == 0x0090, "and the next line picks up where the last one left it");
+    }
+
+    SECTION("HD63484 -- pattern zoom: PZX repeats each bit; PZCX is the counter's starting value");
+    {
+        Rig g;
+        g.screen4bpp();
+        g.cmd(0x1800, {2, 0x0005});
+        g.cmd(0x0807, {0x0011});                  // PEX = 1, PZX = 1: each bit twice
+        g.cmd(0x8800, {8, 0});
+        CHECK(g.c.peekWord(Rig::kOrg) == 0x00FF && g.c.peekWord(Rig::kOrg + 1) == 0x00FF,
+              "on on off off, on on off off (manual 6.8.3: '1111101010' zoomed is each bit scanned twice)");
+
+        g.cmd(0x0805, {0x0001});                  // PPX = 0, PZCX = 1: the first bit is already half used
+        g.cmd(0x8000, {0, 1});
+        g.cmd(0x8800, {8, 1});
+        CHECK(g.c.peekWord(Rig::kOrg - 0x10) == 0xF00F && g.c.peekWord(Rig::kOrg - 0x0F) == 0xF00F,
+              "PZCX = 1 shifts the phase by one pixel: on off off on");
+    }
+
+    SECTION("HD63484 -- COL 10 and COL 11 (Pattern RAM direct, a 4x4 color tile)");
+    {
+        Rig g;
+        g.screen4bpp();
+        g.cmd(0x1800, {2, 0x0005});
+        g.cmd(0x0807, {0x0010});
+        g.cmd(0x0800, {0xAAAA});                  // CL0 = A
+        g.c.pokeWord(Rig::kOrg, 0x2222);
+        g.cmd(0x8810, {4, 0});                    // COL 10: bit 1 suppressed, bit 0 -> CL0
+        CHECK(g.c.peekWord(Rig::kOrg) == 0xA2A2, "COL 10 draws CL0 on the off bits and leaves the on bits");
+
+        Rig h;
+        h.screen4bpp();
+        // Pattern RAM direct (manual 6.6.2, Figure 6.11(d)): words 0-3 are row 0 of the tile,
+        // 4-7 row 1, each a color replicated across the word.
+        h.cmd(0x1800, {16, 0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888});
+        h.cmd(0x0807, {0x1030});                  // PEX = 3, PEY = 1
+        h.cmd(0x8818, {8, 0});                    // ALINE COL 11
+        CHECK(h.c.peekWord(Rig::kOrg) == 0x4321 && h.c.peekWord(Rig::kOrg + 1) == 0x4321,
+              "a line cycles through row PPY of the tile: 1 2 3 4 1 2 3 4");
+        h.cmd(0x8000, {0, 2});
+        h.cmd(0x0805, {0x0000});
+        h.cmd(0xC018, {3, 3});                    // AFRCT COL 11, 4 x 2
+        CHECK(h.c.peekWord(Rig::kOrg - 0x20) == 0x4321 && h.c.peekWord(Rig::kOrg - 0x30) == 0x8765,
+              "a plane fill steps PPY per row: row 0 then row 1 of the tile");
+    }
+
+    SECTION("HD63484 -- AFRCT leaves PPY on the next row, so a stacked fill continues the tiling");
+    {
+        Rig g;
+        g.screen4bpp();
+        g.cmd(0x1800, {4, 0x0005, 0x000A});       // row 0 = 0101, row 1 = 1010
+        g.cmd(0x0807, {0x1030});                  // PEX = 3, PEY = 1
+        g.cmd(0xC000, {3, 0});                    // one raster: row 0
+        CHECK(g.c.peekWord(Rig::kOrg) == 0x0F0F, "first fill uses pattern row 0");
+        CHECK(g.c.cpy() == 1, "CP is on the next raster");
+        g.cmd(0xC000, {3, 1});                    // one more raster from CP: row 1
+        CHECK(g.c.peekWord(Rig::kOrg - 0x10) == 0xF0F0, "the second fill picks up at pattern row 1");
+        g.cmd(0x0C05);
+        CHECK(g.readWord() == 0x0000, "PPY wrapped back to PSY; PPX back where the rows start");
+    }
+
+    SECTION("HD63484 -- the other straight-edge commands: RRCT, RPLL, RPLG, RFRCT");
+    {
+        Rig g;
+        g.screen4bpp();
+        g.cmd(0x8000, {1, 1});
+        g.cmd(0x9400, {2, 1});                    // RRCT: (1,1)-(3,2)
+        CHECK(g.nib(1, 1) == 0xF && g.nib(2, 1) == 0xF && g.nib(3, 1) == 0xF && g.nib(1, 2) == 0xF &&
+                  g.nib(3, 2) == 0xF,
+              "the relative rectangle's perimeter");
+        CHECK(g.nib(0, 1) == 0 && g.nib(4, 1) == 0 && g.nib(1, 3) == 0, "and nothing outside it");
+        CHECK(g.c.cpx() == 1 && g.c.cpy() == 1, "CP unchanged");
+
+        Rig h;
+        h.screen4bpp();
+        h.cmd(0x9C00, {2, 3, 0, 0, 2});           // RPLL: (0,0)->(3,0)->(3,2), each relative to the last
+        CHECK(h.nib(2, 0) == 0xF && h.nib(3, 1) == 0xF && h.nib(3, 2) == 0, "relative polyline, end excluded");
+        CHECK(h.c.cpx() == 3 && h.c.cpy() == 2, "CP at its end");
+
+        Rig k;
+        k.screen4bpp();
+        k.cmd(0xA400, {2, 3, 0, 0, 2});           // RPLG: the same, closed
+        CHECK(k.nib(3, 2) == 0xF && k.nib(1, 1) == 0xF, "the closing edge");
+        CHECK(k.c.cpx() == 0 && k.c.cpy() == 0, "CP back at the start");
+
+        Rig m;
+        m.screen4bpp();
+        m.cmd(0x8000, {1, 0});
+        m.cmd(0xC400, {1, 1});                    // RFRCT: (1,0)-(2,1)
+        CHECK(m.c.peekWord(Rig::kOrg) == 0x0FF0 && m.c.peekWord(Rig::kOrg - 0x10) == 0x0FF0, "2 x 2 filled");
+        CHECK(m.c.cpx() == 1 && m.c.cpy() == 2, "CP = (A, Y+1)");
+    }
+
+    SECTION("HD63484 -- SCLR and DMOD: the modify operations under MASK");
+    {
+        Rig g;
+        g.reg(0xC2, 0x0010);
+        g.c.pokeWord(0x56, 0x1234);
+        g.c.pokeWord(0x57, 0x1234);
+        g.cmd(0x080C, {0x0000});
+        g.cmd(0x080D, {0x0560});
+        g.cmd(0x0804, {0x00FF});                  // MASK: the low byte only
+        g.cmd(0x5C01, {0xFFFF, 1, 0});            // SCLR (OR) $FFFF, AX = 1, AY = 0
+        CHECK(g.c.peekWord(0x56) == 0x12FF && g.c.peekWord(0x57) == 0x12FF, "SCLR ORs under the mask");
+
+        g.cmd(0x0804, {0xFFFF});
+        g.cmd(0x080D, {0x0560});
+        g.cmd(0x2C03, {1, 0});                    // DMOD (EOR) AX = 1, AY = 0
+        g.word(0x0F0F);
+        g.word(0xF0F0);
+        CHECK(g.c.peekWord(0x56) == (0x12FF ^ 0x0F0F) && g.c.peekWord(0x57) == (0x12FF ^ 0xF0F0),
+              "DMOD EORs each data word into the block");
+        CHECK((g.sr() & 0x20) != 0, "and ends with the last one");
+    }
+
+    SECTION("HD63484 -- DWT/DRD with negative AX/AY run the other way (manual DRD-2, DWT-2)");
+    {
+        Rig g;
+        g.reg(0xCA, 0x0010);
+        g.cmd(0x080C, {0x4000});
+        g.cmd(0x080D, {0x1000});                  // RWP = $100 on the base screen
+        g.cmd(0x2800, {0xFFFF, 0xFFFF});          // DWT AX = -1, AY = -1
+        CHECK((g.sr() & 0x80) == 0, "no CER: negative sizes are legal");
+        g.word(0xAAAA);
+        g.word(0xBBBB);
+        g.word(0xCCCC);
+        g.word(0xDDDD);
+        CHECK(g.c.peekWord(0x100) == 0xAAAA && g.c.peekWord(0x0FF) == 0xBBBB, "leftward along the first raster");
+        CHECK(g.c.peekWord(0x110) == 0xCCCC && g.c.peekWord(0x10F) == 0xDDDD,
+              "then DOWN in Y: one MW higher in memory, as CLR walks it");
+        CHECK(g.c.param(0x0D) == 0x1100, "RWPe on the last raster");
+
+        g.cmd(0x080D, {0x1000});
+        g.cmd(0x2400, {0xFFFF, 0});               // DRD AX = -1: $100 then $0FF
+        CHECK(g.readWord() == 0xAAAA && g.readWord() == 0xBBBB, "DRD reads leftward too");
+    }
+
+    SECTION("HD63484 -- a read bigger than the FIFO waits for room, and so does the command stream");
+    {
+        Rig g;
+        g.cmd(0x1800, {24, 0x100, 0x101, 0x102, 0x103, 0x104, 0x105, 0x106, 0x107, 0x108, 0x109, 0x10A, 0x10B});
+        g.cmd(0x1C00, {12});                      // RPTN n = 12 words
+        CHECK(g.c.readFifoWords() == 8 && (g.sr() & 0x08) != 0, "8 words in, RFF");
+        CHECK((g.sr() & 0x20) == 0, "CED clear: the command is still delivering");
+        g.cmd(0x0800, {0x7777});                  // WPR CL0 behind it
+        CHECK(g.c.param(0) != 0x7777, "the next command waits in the write FIFO");
+        CHECK((g.sr() & 0x01) == 0, "so the write FIFO is not empty");
+        bool inOrder = true;
+        for (uint16_t i = 0; i < 12; ++i)
+            if (g.readWord() != (uint16_t)(0x100 + i)) inOrder = false;
+        CHECK(inOrder, "all twelve words, in order (manual RD-1: 'a wait state until space becomes available')");
+        CHECK(g.c.param(0) == 0x7777 && (g.sr() & 0x21) == 0x21, "then the stalled command ran, and the chip is idle");
+    }
+
+    SECTION("HD63484 -- RWP is ONE register: rewriting its high word keeps the low bits");
+    {
+        Rig g;
+        g.cmd(0x080D, {0x0560});                  // RWPL = $056
+        g.cmd(0x080C, {0x4000});                  // DN = 01, RWPH = 0
+        CHECK(g.c.param(0x0D) == 0x0560 && g.c.param(0x0C) == 0x4000, "DN changed, the address did not");
+    }
+
+    SECTION("HD63484 -- CPY with MM bits is undefined: CER, and the stream stays in step");
+    {
+        Rig g;
+        g.word(0x6001);
+        CHECK((g.sr() & 0xA0) == 0xA0, "CER, CED");
+        g.cmd(0x8000, {3, 0});
+        CHECK(g.c.cpx() == 3, "the next word was a command");
     }
 
     SECTION("HD63484 -- AFRCT tiles the pattern over the rectangle; CP ends one raster past it");

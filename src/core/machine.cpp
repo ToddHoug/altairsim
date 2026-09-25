@@ -208,7 +208,9 @@ namespace {
 constexpr char     kMagic[8]     = {'A', 'L', 'T', 'R', 'S', 'N', 'P', '1'};
 // 2: the ACR/Sol tape decks gained an auto-stop mark (`stopAt_`) in their state. A v1
 // snapshot lacks it and is rejected with the format-mismatch message rather than misread.
-constexpr uint32_t kFormatVersion = 2;
+// 3: the HD63484 (cadzilla) keeps one RWP instead of four, and gained its read-FIFO wait
+// queue, the transfer direction and the AREA stop point.
+constexpr uint32_t kFormatVersion = 3;
 }  // namespace
 
 bool Machine::snapshot(const std::string& path, std::string& err) const {
