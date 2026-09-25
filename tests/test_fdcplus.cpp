@@ -302,6 +302,20 @@ void test_fdcplus() {
         CHECK(r.srv->got.back().p2 == 0, "on track 0");
     }
 
+    SECTION("FDC+ -- only a TRACK counts as bytes arriving; STAT replies do not");
+    {
+        // The run loop treats any arrival as "not at a prompt", so a STAT reply counted here
+        // would keep a machine sitting at A> from ever resting -- a whole core, forever.
+        Rig r;
+        const uint64_t was = r.b.rxBytes();
+        for (int i = 0; i < 20; ++i) r.statRound();
+        CHECK(r.srv->count("STAT") > 20, "twenty STAT round trips");
+        CHECK(r.b.rxBytes() == was, "and not one of their bytes counted");
+        r.ready(0);
+        CHECK(r.find(0), "a track read");
+        CHECK(r.b.rxBytes() == was + kLen8 + 2, "counts: 4384 bytes and the checksum");
+    }
+
     SECTION("FDC+ -- a drive the server has no image for is NOT READY: status FF");
     {
         Rig r;

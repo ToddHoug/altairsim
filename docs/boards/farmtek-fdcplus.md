@@ -124,10 +124,11 @@ and a change in the server's mount map).
 - **The sector interrupt is not wired.** Interrupt enable/disable are stored, but the card never
   asserts an interrupt, and the INTE status bit (the bus PINTE line) always reads de-asserted.
   Period CP/M does not use the disk interrupt.
-- **The machine needs its real crystal** (`SET cpu0 clock_hz=2000000`) — the same rule as any
-  guest that times something outside the machine. The period BIOS gives up on a sector hunt
-  after a 65,536-pass loop (1.4 s at 2 MHz, `dNxtSec` in BIOS.ASM). Flat out, that loop takes a
-  few milliseconds, and every track transfer is longer.
+- **The machine needs a crystal, not full speed** — the same rule as any guest that times
+  something outside the machine. The period BIOS gives up on a sector hunt after a 65,536-pass
+  loop (`dNxtSec` in BIOS.ASM): 1.4 s at 2 MHz, 0.28 s at 10 MHz. Flat out, that loop takes a
+  few milliseconds, and every track transfer is longer. The crystal can be faster than 2 MHz when
+  the line is fast too: the shipped example runs 10 MHz with 230400 baud (a track in 0.19 s).
 - **`baud` takes the serial drive's rates and no others:** 9600, 19200, 38400, 57600, 76800,
   230400, 403200 (preferred) and 460800. The v1.8 firmware's monitor offered only the last three;
   the slow rates came later, with Serial Drive Server v1.4 (9.6K–76.8K) and v1.41 (57.6K), and
@@ -147,7 +148,8 @@ and a change in the server's mount map).
 - **Real hardware** (2026-09-24): an ESP32 FDC+ Serial Drive Server at 38,400 baud, with
   `cpm22b23-56k.dsk`, `games.dsk` and `zork1.dsk` in drives 0–2. `default` machine, `dsk0`
   replaced by `fdcplus`, `clock_hz = 2000000`, DBL at `FF00`: CP/M 2.2b booted to `A>`, and
-  `DIR B:` and `DIR C:` listed the games and Zork disks.
+  `DIR B:` and `DIR C:` listed the games and Zork disks. The shipped example
+  `examples/cpm/cpm22-fdcplus.toml` is that machine as a file; it boots the same way.
 
 ## References
 

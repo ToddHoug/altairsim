@@ -422,7 +422,12 @@ void FdcPlusBoard::step() {
         const size_t n = stream_->read(in, sizeof in);
         if (n == 0) break;
         rx_.insert(rx_.end(), in, in + n);
-        rxBytes_ += n;
+        // ONLY A TRACK COUNTS as bytes arriving for the guest (Board::rxBytes). The run loop
+        // reads any arrival as "the guest is receiving, this is not a prompt" -- so counting the
+        // STAT reply that comes ten times a second kept a machine at A> from ever resting,
+        // and it burned a whole core. STAT, WRIT and WSTA are the card talking to the server;
+        // the 8080 never sees a byte of them.
+        if (link_ == Link::Read) rxBytes_ += n;
         deadline_ = hostNs() + kTimeoutNs;
     }
     const bool timedOut = tx_.empty() && hostNs() >= deadline_;

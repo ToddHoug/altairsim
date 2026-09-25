@@ -78,7 +78,7 @@ public:
     bool connect(const std::string& unit, const std::string& endpoint, std::string& err) override;
     bool disconnect(const std::string& unit, std::string& err) override;
     ByteStream* unitStream(const std::string& unit) override;
-    uint64_t    rxBytes() const override { return rxBytes_; }
+    uint64_t    rxBytes() const override { return rxBytes_; }  // track data only -- see step()
 
     std::vector<std::string> drainLog() override;
 

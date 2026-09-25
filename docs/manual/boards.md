@@ -897,9 +897,10 @@ and a real FDC+ Altair, or to test a drive server.
 **The server mounts the images, not the simulator.** `MOUNT` on this board gives an error. A drive
 that has no image on the server is not ready, as an empty drive is.
 
-**Give the machine its real crystal.** A guest counts instructions to measure time, and CP/M
-stops looking for a sector after 1.4 seconds of its time. At full speed, that is a few
-milliseconds, and a track takes longer than that to arrive.
+**Do not run the machine at full speed.** A guest counts instructions to measure time, and CP/M
+stops looking for a sector after 1.4 seconds of its time at 2 MHz. At full speed, that is a few
+milliseconds, and a track takes longer than that to arrive. A faster crystal is possible if the
+line is fast too: 10 MHz with 230400 baud works, and 38400 baud needs 2 MHz.
 
 To use a server on `/dev/cu.usbserial-AL009KFH` at 38400 baud in the `default` machine:
 
@@ -915,6 +916,9 @@ altairsim> RUN FF00
 The `default` machine's `dcdd` uses the same ports, so remove it first. On Windows, the device is
 a name such as `serial:COM3`. `CONFIG SAVE` writes the machine to a file, so that you do the
 setup only once.
+
+The package has this machine as a file: `examples/cpm/cpm22-fdcplus.toml`. Set your serial port
+and speed in it, and run it.
 
 A slower line makes a slower disk. At 38400 baud, a track takes about one second. When the machine
 is not using the disk, the board writes changed tracks back to the server after about one second.

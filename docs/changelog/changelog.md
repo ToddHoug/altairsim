@@ -15,7 +15,8 @@ drive server on another computer keeps the disk images, and the board gets them 
 over a serial line, as a real FDC+ does. Now the simulator and a real FDC+ Altair can use the same
 images through one server, and you can test a drive server without a real FDC+. Type 7 is an 8″
 drive, including the 8 MB disk, and type 6 is a minidisk. The boards chapter tells you how to set
-it up (#560).
+it up, and `examples/cpm/cpm22-fdcplus.toml` boots CP/M from a server: set your serial port in the
+file and run it (#560).
 
 ### The VDM-1 shows its whole character set
 
