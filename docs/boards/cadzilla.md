@@ -4,7 +4,9 @@
 fixed VESA monitor. Built 2026-09-18; the monitor model and the 8 bpp / GAI +8 wiring added
 2026-09-19; the MODE register and the single 8-port I/O map added 2026-09-21; the I/O map
 reordered (MODE between the ACRTC's two ports), interrupts (SW1-8), and 2 MB of fixed SRAM
-added 2026-09-23.
+added 2026-09-23; the monitor modes narrowed to the three primary VESA resolutions (640x400
+dropped -- it was never a VESA standard, just a VGA text-mode timing) and the default raised
+to 1024x768, 2026-09-24.
 
 ## The real hardware
 
@@ -33,7 +35,7 @@ The board's own decisions, which no chip made — and every one of them is visib
 | **I/O map** | ONE 8-port block from `port` (default `0x70`, a multiple of 8): `+0` the ACRTC's RS=0, `+1` the board's own **MODE register** (write-only), `+2` the ACRTC's RS=1, `+3` undecoded, `+4`..`+7` the Bt453. The ACRTC's own two ports are **not adjacent** — MODE sits between them. There is no separate DAC strap — the RAMDAC always sits four ports above `port` |
 | **MODE register** (`port+1`, write-only) | the board's own glue-logic strap, not a register on either chip: `HSPOL`/`VSPOL` sync polarity, `AMODE` the access mode the board's *own* fetch logic runs (single/interleaved — must agree with the ACRTC's own OMR ACM bit, or `wiring` says so), `OLEN` overlay enable (TBD, wired to nothing). Bit layout below |
 | **Shift register** | wired for **8 bits per pixel and 8 words per display fetch**: each display cycle the board fetches eight consecutive words (128 bits) at the address the ACRTC puts on MAD and shifts them out as sixteen 8-bit pixels, low byte of the low word first. This is a hardware fact, not a register — see *Programming model* below |
-| **Monitor** | a fixed-frequency VESA display chosen by the `mode` strap: **640x400, 640x480 (default), 800x600, 1024x768**. The frame is always the mode's size; the ACRTC's picture is placed in it by HDS/VDS against the mode's porches |
+| **Monitor** | a fixed-frequency VESA display chosen by the `mode` strap: the three primary VESA resolutions -- **640x480, 800x600, 1024x768 (default)** -- settable in the machine file or with `SET`. The frame is always the mode's size; the ACRTC's picture is placed in it by HDS/VDS against the mode's porches |
 | **Access modes** | single and interleaved, selected by **MODE AMODE** (not read from the ACRTC's own OMR ACM bit — the two are independent straps a driver must set in agreement). Superimposed is not wired |
 | **Frame memory** | **fixed at 2 MB of SRAM** — the reference design's own fit, the full 1 M words the ACRTC addresses. Not a strap: the real card has no jumper for it, and needs none, since it never refreshes |
 | Pixel bus to the DAC | P0–P7 from the shift register; the Bt453 sees exactly the byte the frame memory holds |
@@ -78,7 +80,6 @@ keeps the line total, as a timing PROM on a real card would.
 
 | `mode` | Pixel clock | H: sync / back porch / active / front porch (cycles) | V: sync / back porch / active / front porch (rasters) |
 |---|---|---|---|
-| `640x400` | 25.175 MHz | 6 / 3 / 40 / 1 = 50 | 2 / 35 / 400 / 12 = 449 |
 | `640x480` | 25.175 MHz | 6 / 3 / 40 / 1 = 50 | 2 / 33 / 480 / 10 = 525 |
 | `800x600` | 40.000 MHz | 8 / 6 / 50 / 2 = 66 | 4 / 23 / 600 / 1 = 628 |
 | `1024x768` | 65.000 MHz | 8 / 10 / 64 / 2 = 84 | 6 / 29 / 768 / 3 = 806 |
@@ -90,7 +91,6 @@ ACM = `10`:
 
 | `mode` | `HSR` r82 (HC, HSW) | `HDR` r84 (HDS, HDW) | `VSR` r86 (VC) | `VDR` r88 (VDS, VSW) | `SSW` r8A (SP1) | `MWR1` rCA |
 |---|---|---|---|---|---|---|
-| `640x400` | `$3106` (49, 6) | `$0227` (2, 39) | `$01C1` (449) | `$2202` (34, 2) | `$0190` (400) | `$0140` (320) |
 | `640x480` | `$3106` (49, 6) | `$0227` (2, 39) | `$020D` (525) | `$2002` (32, 2) | `$01E0` (480) | `$0140` (320) |
 | `800x600` | `$4108` (65, 8) | `$0531` (5, 49) | `$0274` (628) | `$1604` (22, 4) | `$0258` (600) | `$0190` (400) |
 | `1024x768` | `$5308` (83, 8) | `$093F` (9, 63) | `$0326` (806) | `$1C06` (28, 6) | `$0300` (768) | `$0200` (512) |
@@ -263,7 +263,7 @@ and the same three for *inside*).
 - **Scan-out**: graphic screens only (CHR = 1 character screens are scanned as graphic), the
   three background screens stacked and the window over them, non-interlaced; single and
   interleaved access only (superimposed mode's second phase is not fetched). The monitor is the
-  four listed VESA modes, each at the one refresh rate in the table; the ACRTC's own HC/VC and
+  three listed VESA modes, each at the one refresh rate in the table; the ACRTC's own HC/VC and
   the sync widths are accepted but not checked against the mode — a timing a real monitor would
   lose lock on shows here as a picture in the wrong place. No zoom, no cursors, no light pen,
   no blink, no smooth scroll (SDA is ignored), no DISP/CUD skew.
@@ -310,7 +310,8 @@ pending state, `interrupt=int`/`vi0`..`vi7` (SW1-8 on) raises that line exactly 
 own CED bit is still pending.
 
 No period software exists for this board; the register table above is what a program would
-load, and `machines/cadzilla.toml`'s header walks the 640x480 case from the monitor prompt.
+load, and `machines/cadzilla.toml`'s header walks the default 1024x768 case from the monitor
+prompt.
 
 ## References
 

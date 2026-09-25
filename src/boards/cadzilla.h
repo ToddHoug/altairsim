@@ -24,7 +24,7 @@
 //              through the FIFO, never by poking a byte. The opposite reason from the
 //              Dazzler's for decoding no address.
 //   DISPLAY -- once per pump() the board builds the MONITOR'S frame -- a fixed VESA raster
-//              chosen by the `mode` strap, 640x480 by default -- by running its own shift
+//              chosen by the `mode` strap, 1024x768 by default -- by running its own shift
 //              register over the addresses the ACRTC puts out, and hands the host the
 //              Bt453's 256-entry look-up table as the palette. Never touches SDL: the
 //              Display is injected at the composition root (setDisplay), a headless build
@@ -48,8 +48,9 @@
 //   differently gets what the hardware would give -- a scrambled picture, not an error --
 //   and SHOW's `wiring` line says which register is off.
 //
-//   THE MONITOR IS A FIXED-FREQUENCY VESA DISPLAY, chosen by `mode`: 640x400, 640x480
-//   (default), 800x600 or 1024x768. The frame the window shows and the tests capture is
+//   THE MONITOR IS A FIXED-FREQUENCY VESA DISPLAY, chosen by `mode`: the three primary VESA
+//   resolutions -- 640x480, 800x600 or 1024x768 (default), settable in the machine file or
+//   with SET. The frame the window shows and the tests capture is
 //   ALWAYS the mode's size. The ACRTC's programmed display area is placed in it exactly as
 //   a monitor would place it: its horizontal display start (HDS) is counted in memory
 //   cycles from HSYNC's rising edge and the mode's back porch is a fixed number of those,
@@ -200,7 +201,7 @@ private:
 
     // ---- Straps ----
     uint8_t   port_ = 0x70;       // the 8-port block's BASE; a multiple of 8
-    int       mode_ = 1;          // index into the VESA mode table: 640x480
+    int       mode_ = 2;          // index into the VESA mode table: 1024x768
     int       videoWidth_ = 0;    // host window width in px, 0 = auto
     IrqJumper irq_ = IrqJumper::None;   // SW1-8: where IRQ* lands, if anywhere
 

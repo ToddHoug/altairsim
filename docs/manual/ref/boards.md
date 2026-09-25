@@ -82,7 +82,7 @@ and within a group the boards are in **alphabetical order**.
 
 | Type | What it is |
 |---|---|
-| [`cadzilla`](#cadzilla) | cadzilla: an HD63484 ACRTC graphics board with a Bt453 RAMDAC and 2 MB of fixed frame memory, on a fixed VESA monitor (mode: 640x400, 640x480, 800x600, 1024x768). One 8-port I/O block at BASE (default 70): ACRTC RS=0 at +0, MODE register at +1 (write-only: HSPOL/VSPOL/AMODE/OLEN), ACRTC RS=1 at +2, Bt453 at +4..+7. Draws by command through the ACRTC FIFO; wired for 8 bpp, GAI +8, single or interleaved access set by MODE AMODE. Interrupts (SW1-8) optional (interrupt=none\|int\|vi0..vi7). Needs a Display |
+| [`cadzilla`](#cadzilla) | cadzilla: an HD63484 ACRTC graphics board with a Bt453 RAMDAC and 2 MB of fixed frame memory, on a fixed VESA monitor (mode: 640x480, 800x600, 1024x768 (default)). One 8-port I/O block at BASE (default 70): ACRTC RS=0 at +0, MODE register at +1 (write-only: HSPOL/VSPOL/AMODE/OLEN), ACRTC RS=1 at +2, Bt453 at +4..+7. Draws by command through the ACRTC FIFO; wired for 8 bpp, GAI +8, single or interleaved access set by MODE AMODE. Interrupts (SW1-8) optional (interrupt=none\|int\|vi0..vi7). Needs a Display |
 | [`dazzler`](#dazzler) | Cromemco Dazzler: color graphics from a framebuffer in main RAM. Two ports at BASE+0..1 (default 0E): control/status and format. 32x32 to 128x128, 16 colors/greys. Needs a Display |
 | [`vdb8024`](#vdb8024) | SD Systems VDB-8024: an 80x24 video terminal on one board -- the video console for an SBC-100/200 (the alternative to the 8251). Two I/O ports at BASE+0..1 (default 00): status/keyboard/display. Unit 'keyboard' (CONNECT). Optional keyboard-strobe interrupt strap (interrupt=vi0..vi7) for the SBC-200's CTC to vector -- what the SD video CBIOS needs; polled by default. Boots sdmonv21. Needs a Display |
 | [`vdm1`](#vdm1) | Processor Technology VDM-1: memory-mapped 16x64 video, screen RAM at BASE (default CC00), scroll/status port (default CC). Needs a Display |
@@ -959,14 +959,14 @@ MITS 88-PIO: 8-bit parallel port, units 'out'/'in'. Two ports at BASE+0..1 (defa
 
 ### `cadzilla`
 
-cadzilla: an HD63484 ACRTC graphics board with a Bt453 RAMDAC and 2 MB of fixed frame memory, on a fixed VESA monitor (mode: 640x400, 640x480, 800x600, 1024x768). One 8-port I/O block at BASE (default 70): ACRTC RS=0 at +0, MODE register at +1 (write-only: HSPOL/VSPOL/AMODE/OLEN), ACRTC RS=1 at +2, Bt453 at +4..+7. Draws by command through the ACRTC FIFO; wired for 8 bpp, GAI +8, single or interleaved access set by MODE AMODE. Interrupts (SW1-8) optional (interrupt=none|int|vi0..vi7). Needs a Display
+cadzilla: an HD63484 ACRTC graphics board with a Bt453 RAMDAC and 2 MB of fixed frame memory, on a fixed VESA monitor (mode: 640x480, 800x600, 1024x768 (default)). One 8-port I/O block at BASE (default 70): ACRTC RS=0 at +0, MODE register at +1 (write-only: HSPOL/VSPOL/AMODE/OLEN), ACRTC RS=1 at +2, Bt453 at +4..+7. Draws by command through the ACRTC FIFO; wired for 8 bpp, GAI +8, single or interleaved access set by MODE AMODE. Interrupts (SW1-8) optional (interrupt=none|int|vi0..vi7). Needs a Display
 
 #### Board properties
 
 | Key | Kind | Default | Legal | Meaning |
 |---|---|---|---|---|
 | `port` | int | `0x70` | `0x0` .. `0xF8` | I/O base -- one 8-port block: BASE the ACRTC address/status, BASE+1 the MODE register, BASE+2 the ACRTC data/FIFO port, BASE+4..+7 the Bt453. A multiple of 8; default 70 |
-| `mode` | enum | `640x480` | `640x400` \| `640x480` \| `800x600` \| `1024x768` | The monitor: a fixed-frequency VESA raster the ACRTC's picture is placed in by its HDS/VDS. 640x400, 640x480 (default), 800x600 or 1024x768 |
+| `mode` | enum | `1024x768` | `640x480` \| `800x600` \| `1024x768` | The monitor: a fixed-frequency VESA raster the ACRTC's picture is placed in by its HDS/VDS. 640x480, 800x600 or 1024x768 (default) |
 | `width` | string | `auto` | text | Video window width in pixels: 'auto' (default) opens about half the screen wide, or a number like 1024. The height follows the board's own aspect, and the picture is a whole multiple of its pixels so it stays crisp |
 | `interrupt` | enum | `none` | `none` \| `int` \| `vi0` \| `vi1` \| `vi2` \| `vi3` \| `vi4` \| `vi5` \| `vi6` \| `vi7` | SW1-8: where the ACRTC's IRQ* lands -- none (default, disconnected) or the S-100 line (int = pin 73, or vi0..vi7) to raise while an enabled status flag is pending *(interrupt strap)* |
 | `video` | string | — | — | LIVE: whether the ACRTC is displaying -- OMR STR and DCR SE1 both set. Read-only **(read-only — not a key you may set)** |

@@ -194,10 +194,11 @@ void test_cadzilla() {
     SECTION("cadzilla -- the monitor is there from power-on: a black frame before the ACRTC starts");
     {
         Rig g;
+        CHECK(std::string(g.cad->currentMode().name) == "1024x768", "the default mode");
         g.cad->pump();
         CHECK(g.disp.frames(g.cad) == 1, "the first pump presents a frame -- the window opens at the prompt");
         const Surface* s = g.disp.surface(g.cad);
-        CHECK(s && s->width() == 640 && s->height() == 480, "at the mode's size");
+        CHECK(s && s->width() == 1024 && s->height() == 768, "at the mode's size");
         bool black = s != nullptr;
         for (size_t i = 0; black && i < s->pixels().size(); i += 97)
             if (s->pixels()[i] != 0) black = false;
@@ -206,10 +207,11 @@ void test_cadzilla() {
         CHECK(g.disp.frames(g.cad) == 1, "and nothing repaints it until something changes");
     }
 
-    SECTION("cadzilla -- the default monitor is 640x480: LUT, ORG, a rectangle, a line, a dot");
+    SECTION("cadzilla -- 640x480: LUT, ORG, a rectangle, a line, a dot");
     {
         Rig g;
-        CHECK(std::string(g.cad->currentMode().name) == "640x480", "the default mode");
+        std::string err;
+        CHECK(setProperty(*g.cad, "mode", "640x480", err), "the mode strap takes 640x480");
         g.programMode();
         g.lut(0, 0, 0, 0);
         g.lut(1, 0xFF, 0, 0);                      // 1 = red
@@ -290,6 +292,8 @@ void test_cadzilla() {
     SECTION("cadzilla -- the monitor places the picture by HDS/VDS against its porches");
     {
         Rig g;
+        std::string err;
+        CHECK(setProperty(*g.cad, "mode", "640x480", err), "the mode strap takes 640x480");
         g.programMode();
         g.color(1);
         g.cmd(0x8000, {0, 479});
@@ -325,6 +329,8 @@ void test_cadzilla() {
     SECTION("cadzilla -- the board is wired for 8 bpp and GAI +8; anything else is what the hardware would show");
     {
         Rig g;
+        std::string err;
+        CHECK(setProperty(*g.cad, "mode", "640x480", err), "the mode strap takes 640x480");
         g.programMode();
         // Distinct bytes in the top raster's first 16 words (SAR1 = 0: memory raster 0 is the
         // top of the screen; the ORG sits on the bottom one).
@@ -506,7 +512,7 @@ void test_cadzilla() {
             Property p = prop(name);
             return p.get ? p.get().text(p.radix) : std::string("<missing>");
         };
-        CHECK(val("mode") == "640x480", "defaults: 640x480");
+        CHECK(val("mode") == "1024x768", "defaults: 1024x768");
         CHECK(g.cad->acrtc().vram().size() == 1u << 20, "2 MB of SRAM -- the ACRTC's whole 1 M-word "
               "address space, fixed, not a strap");
         CHECK(!prop("vram").get, "there is no vram property at all any more");
@@ -520,7 +526,7 @@ void test_cadzilla() {
         CHECK(!prop("hspol").set && !prop("vspol").set && !prop("amode").set && !prop("olen").set,
               "the MODE register's four decoded fields are read-only, like the rest of live status");
         g.programMode();
-        CHECK(val("video") == "on" && val("picture") == "640x480 at (0,0)" && val("wiring") == "ok",
+        CHECK(val("video") == "on" && val("picture") == "1024x768 at (0,0)" && val("wiring") == "ok",
               "live values follow the registers");
 
         std::string err;
@@ -543,6 +549,7 @@ void test_cadzilla() {
 
         // Changing the mode re-opens the window at the new size on the next frame.
         Rig h;
+        CHECK(setProperty(*h.cad, "mode", "640x480", err), "the mode strap takes 640x480");
         h.programMode();
         h.cad->pump();
         CHECK(setProperty(*h.cad, "mode", "800x600", err), "SET mode=800x600");
@@ -555,6 +562,8 @@ void test_cadzilla() {
     SECTION("cadzilla -- RESET* resets the ACRTC and keeps the palette; a snapshot restores the picture");
     {
         Rig g;
+        std::string err;
+        CHECK(setProperty(*g.cad, "mode", "640x480", err), "the mode strap takes 640x480");
         g.programMode();
         g.lut(1, 0xFF, 0, 0);
         g.color(1);
@@ -566,6 +575,7 @@ void test_cadzilla() {
         g.cad->serialize(w);
 
         Rig h;
+        CHECK(setProperty(*h.cad, "mode", "640x480", err), "the mode strap takes 640x480");
         StateReader r(w.data());
         h.cad->deserialize(r);
         CHECK(r.ok(), "the state reads back");

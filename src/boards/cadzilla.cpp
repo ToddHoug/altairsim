@@ -17,15 +17,14 @@ Display* g_display = nullptr;
 constexpr int kWordsPerFetch  = 8;
 constexpr int kPixelsPerFetch = 16;
 
-// THE MONITOR MODES. VESA / industry-standard timings reduced to the board's units: memory
-// cycles of 16 pixels horizontally, rasters vertically. Where a VESA porch is not a whole
-// number of cycles it is rounded and the line total kept (800x600: 88 px back porch -> 6
-// cycles = 96, 40 px front porch -> 2 = 32; 1024x768: 136 px sync -> 8 cycles, 24 px front
-// porch -> 2), which is what a timing PROM on a real card would have done.
+// THE MONITOR MODES: the three primary VESA resolutions, timings reduced to the board's
+// units -- memory cycles of 16 pixels horizontally, rasters vertically. Where a VESA porch
+// is not a whole number of cycles it is rounded and the line total kept (800x600: 88 px back
+// porch -> 6 cycles = 96, 40 px front porch -> 2 = 32; 1024x768: 136 px sync -> 8 cycles,
+// 24 px front porch -> 2), which is what a timing PROM on a real card would have done.
 //
 //                name         w     h   hsw hbp hfp  vsw vbp vfp     pixel clock
 const CadzillaBoard::Mode kModes[] = {
-    {"640x400",   640,  400,   6,  3,  1,   2, 35, 12},   // 25.175 MHz, 70 Hz (VGA text timing)
     {"640x480",   640,  480,   6,  3,  1,   2, 33, 10},   // 25.175 MHz, 60 Hz
     {"800x600",   800,  600,   8,  6,  2,   4, 23,  1},   // 40.000 MHz, 60 Hz
     {"1024x768", 1024,  768,   8, 10,  2,   6, 29,  3},   // 65.000 MHz, 60 Hz
@@ -34,7 +33,7 @@ const CadzillaBoard::Mode kModes[] = {
 } // namespace
 
 const CadzillaBoard::Mode& CadzillaBoard::mode(int i) {
-    if (i < 0 || i >= modeCount()) i = 1;
+    if (i < 0 || i >= modeCount()) i = 2;   // 1024x768, the default
     return kModes[i];
 }
 int CadzillaBoard::modeCount() { return (int)(sizeof kModes / sizeof kModes[0]); }
@@ -285,7 +284,7 @@ std::vector<Property> CadzillaBoard::properties() {
         Property x;
         x.name    = "mode";
         x.help    = "The monitor: a fixed-frequency VESA raster the ACRTC's picture is placed in "
-                    "by its HDS/VDS. 640x400, 640x480 (default), 800x600 or 1024x768";
+                    "by its HDS/VDS. 640x480, 800x600 or 1024x768 (default)";
         x.kind    = Kind::Enum;
         for (int i = 0; i < modeCount(); ++i) x.choices.push_back(mode(i).name);
         x.get     = [this] { return Value::ofStr(currentMode().name); };
@@ -297,7 +296,7 @@ std::vector<Property> CadzillaBoard::properties() {
                     return true;
                 }
             }
-            err = "mode is 640x400, 640x480, 800x600 or 1024x768";
+            err = "mode is 640x480, 800x600 or 1024x768";
             return false;
         };
         p.push_back(std::move(x));
