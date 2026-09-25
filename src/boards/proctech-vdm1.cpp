@@ -4,6 +4,8 @@
 #include "core/statefile.h"
 #include "host/display.h"
 
+#include <random>
+
 namespace altair {
 namespace {
 
@@ -46,8 +48,13 @@ constexpr Color kFg = {0x33, 0xFF, 0x66, 0xFF};
 
 void VdmBoard::setDisplay(Display* d) { g_display = d; }
 
-VdmBoard::VdmBoard() {
-    for (auto& b : screen_) b = 0x00;  // blank (control code -> no glyph)
+VdmBoard::VdmBoard() { fillScreen(); }
+
+// The same policy, and the same wording, as MemoryBoard's `fill`/`seed`: the seed
+// buys a repeatable POWER, nothing more.
+void VdmBoard::fillScreen() {
+    std::mt19937_64 rng(seed_ ^ 0x9E3779B97F4A7C15ULL);
+    for (auto& b : screen_) b = (fill_ == Fill::Zero) ? 0x00 : (uint8_t)(rng() & 0xFF);
 }
 
 // ---------------------------------------------------------------------------
@@ -114,10 +121,10 @@ uint8_t VdmBoard::statusByte() const {
 }
 
 void VdmBoard::power() {
-    for (auto& b : screen_) b = 0x00;
+    fillScreen();
     scroll_ = 0;
     timerExpiry_ = 0;
-    dirty_ = true;  // the blanked screen still owes the host one frame
+    dirty_ = true;  // the new screen owes the host one frame
 }
 
 void VdmBoard::serialize(StateWriter& w) const {
@@ -192,13 +199,27 @@ void VdmBoard::render() {
     // whether a later blink-phase flip can change the picture at all (frameChanged).
     bool sawCursorCell = false;
 
+    // SW5/SW6 (manual Table 3-1 and the 2.7.5 test). CR/VT text blanking works in
+    // DISPLAY order, as the beam scans: a CR blanks the rest of its display line, a
+    // VT the rest of its line and every line below it. Both start at the NEXT cell --
+    // the CR or VT itself is drawn, unless control codes are blanked too. A blanked
+    // cell still shows its cursor block ("only cursor blocks are displayed").
+    const bool crvt = blanking_ != Blanking::None;
+    bool       vtBlank = false;
+
     for (int dr = 0; dr < kRows; ++dr) {
-        int srcRow = (scroll_ + dr) & (kRows - 1);  // hardware scroll wraps mod 16
+        int  srcRow  = (scroll_ + dr) & (kRows - 1);  // hardware scroll wraps mod 16
+        bool crBlank = false;
         for (int col = 0; col < kCols; ++col) {
             uint8_t byte = screen_[srcRow * kCols + col];
             uint8_t code = byte & 0x7F;
             if (byte & 0x80) sawCursorCell = true;
             bool cursor = (byte & 0x80) && cursorShown;
+
+            bool blank = crBlank || vtBlank || blanking_ == Blanking::All ||
+                         (blanking_ == Blanking::Control && code < 0x20);
+            if (crvt && code == 0x0D) crBlank = true;
+            if (crvt && code == 0x0B) vtBlank = true;
 
             int px = col * kCellW, py = dr * kCellH;
             uint8_t bgIdx = cursor ? 1 : 0;  // invert the whole cell for the cursor
@@ -208,6 +229,7 @@ void VdmBoard::render() {
                 for (int y = 0; y < kCellH; ++y)
                     for (int x = 0; x < kCellW; ++x) s->put(px + x, py + y, bgIdx);
             }
+            if (blank) continue;
             for (int ry = 0; ry < vdm1font::kRows; ++ry) {
                 uint8_t bits = vdm1font::glyphRow(code, ry);  // bit 7 = leftmost dot
                 for (int rx = 0; rx < vdm1font::kCols; ++rx)
@@ -297,6 +319,60 @@ std::vector<Property> VdmBoard::properties() {
         x.set = [this](const Value& v, std::string&) {
             cursorMode_ = (v.s() == "off") ? 0 : (v.s() == "steady") ? 2 : 1;
             dirty_      = true;
+            return true;
+        };
+        p.push_back(std::move(x));
+    }
+    {
+        Property x;
+        x.name    = "blanking";
+        x.help    = "Control-code and text blanking (SW5/SW6): none = every code shows "
+                    "its glyph; crvt = also a CR blanks the rest of its line and a VT the "
+                    "rest of the screen; control = crvt, and codes 00-1F are blank; "
+                    "all = only cursor blocks show";
+        x.kind    = Kind::Enum;
+        x.choices = {"none", "crvt", "control", "all"};
+        x.get     = [this] {
+            switch (blanking_) {
+                case Blanking::CrVt: return Value::ofStr("crvt");
+                case Blanking::Control: return Value::ofStr("control");
+                case Blanking::All: return Value::ofStr("all");
+                default: return Value::ofStr("none");
+            }
+        };
+        x.set = [this](const Value& v, std::string&) {
+            blanking_ = (v.s() == "crvt")      ? Blanking::CrVt
+                        : (v.s() == "control") ? Blanking::Control
+                        : (v.s() == "all")     ? Blanking::All
+                                               : Blanking::None;
+            dirty_ = true;
+            return true;
+        };
+        p.push_back(std::move(x));
+    }
+    {
+        Property x;
+        x.name    = "fill";
+        x.help    = "Screen RAM at power-on: zero | random (real RAM is not zeroed; "
+                    "0x00 shows as a box)";
+        x.kind    = Kind::Enum;
+        x.choices = {"zero", "random"};
+        x.get     = [this] { return Value::ofStr(fill_ == Fill::Zero ? "zero" : "random"); };
+        x.set     = [this](const Value& v, std::string&) {
+            fill_ = (v.s() == "zero") ? Fill::Zero : Fill::Random;
+            return true;
+        };
+        p.push_back(std::move(x));
+    }
+    {
+        Property x;
+        x.name = "seed";
+        x.help = "Seed for fill=random. The same seed fills the screen the same way at "
+                 "every POWER, so a run is repeatable; change it for a different pattern";
+        x.kind = Kind::Int;
+        x.get  = [this] { return Value::ofInt((long long)seed_); };
+        x.set  = [this](const Value& v, std::string&) {
+            seed_ = (uint64_t)v.i();
             return true;
         };
         p.push_back(std::move(x));
