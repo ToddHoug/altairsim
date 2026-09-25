@@ -10,6 +10,6 @@
 ; same loader used to load 4K BASIC version 3.2", and the tape agrees: the second stage
 ; on PS2-MON.TAP is assembled for page 0F. Boot it with the 8K loader and it lands 4K too
 ; high and the machine wanders off in silence. See tapes/MitsPS2/LDRPS2.ASM.
-MOUNT acr0:tape "tapes/MitsPS2/PS2-MON.TAP"
-LOAD "tapes/MitsPS2/LDRPS2.HEX"
+MOUNT acr0:tape "../../tapes/MitsPS2/PS2-MON.TAP"
+LOAD "../../tapes/MitsPS2/LDRPS2.HEX"
 RUN 0
