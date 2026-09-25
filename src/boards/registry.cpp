@@ -21,6 +21,7 @@
 #include "boards/mits-88dcdd.h"
 #include "boards/mits-88hdsk.h"
 #include "boards/mits-88mds.h"
+#include "boards/farmtek-fdcplus.h"
 #include "boards/mits-88virtc.h"
 #include "boards/mits-frontpanel.h"
 #include "boards/mits-turnkey.h"
@@ -68,6 +69,7 @@ std::vector<BoardType> boardTypes() {
         {"sbc", "SD Systems SBC-100/200: Z80 single-board computer", "SD Systems SBC-100/200: Z80 single-board computer. One 8-port block (78-7F): Intel 8251 console (unit 'tty', data 7C / status 7D, RxD->/DSR auto-baud for MSMONR21), Z80-CTC (78-7B) whose ch1 raises a mode-2 keyboard interrupt (vector 0x82) off the 8251 RxRDY, and a parallel port (7E/7F) whose OUT 7F bit 1 switches the onboard PROM out. Optional onboard boot PROM via [[board.socket]] (at+mount). variant=sbc100|sbc200"},
         {"dcdd", "MITS 88-DCDD: 8\" hard-sector floppy controller", "MITS 88-DCDD: 8\" hard-sector floppy, up to 16 drives. Three ports at BASE+0..2. INVERTED status bits"},
         {"mds", "MITS 88-MDS: 5.25\" minidisk controller", "MITS 88-MDS: 5.25\" minidisk, 4 drives. Same three ports as the dcdd -- but 300 RPM, 64 us/byte, and a motor that stops after 6.4 s"},
+        {"fdcplus", "FarmTek FDC+: serial drive (drive types 6, 7)", "FarmTek FDC+ in serial-drive mode: an 88-DCDD/88-MDS-compatible controller with no drive at all -- a drive server on unit 'line' holds the images and the card fetches a whole track at a time. drivetype=7 (8\", incl. the 8 MB drive) or 6 (Minidisk), read at power-on. Four ports at BASE+0..3 (08 or 80)"},
         {"hdsk", "MITS 88-HDSK Datakeeper: Pertec hard disk controller", "MITS 88-HDSK Datakeeper: Pertec hard disk, 256-byte sectors from a linear .DSK. Eight ports at BASE+0..7 (default A0). Command/handshake protocol, four page buffers"},
         {"dualsd", "S100Computers Dual SD: two microSD sockets for CP/M 3", "S100Computers Dual SD: two microSD sockets (drives 0/1) presented as raw 512-byte-sector CF/SD cards, for CP/M 3. Two ports at BASE+0..1 (default 80): status/command + data. Programmed-I/O command/handshake engine (33H-lead + 8 commands). No boot PROM -- the CPU board's monitor loads CP/M from track 0. Mount a card image (a .img with a .geo geometry sidecar)"},
         {"dualide", "S100Computers IDE-AB: two CompactFlash sockets for CP/M 3", "S100Computers IDE-AB (CF): the IDE/CompactFlash half of the IDE+ESP32 combination board -- two CF sockets (drives 0/1 = A:/B:) for CP/M 3. Five 8255 ports at BASE+0..4 (default 30): A/B data, C control lines, mode config, drive select. Programmed-I/O ATA register engine (LBA read/write, 512-byte sectors). No boot PROM -- the CPU board's monitor boots CP/M from the CF. Mounts the SAME card image as dualsd (a .img with a .geo geometry sidecar); pair with dualsd for the full A:/B:+C:/D: system"},
@@ -120,6 +122,7 @@ std::unique_ptr<Board> makeBoard(const std::string& type) {
     if (type == "sbc") return std::make_unique<SbcBoard>();
     if (type == "dcdd") return std::make_unique<DcddBoard>();
     if (type == "mds") return std::make_unique<MdsBoard>();
+    if (type == "fdcplus") return std::make_unique<FdcPlusBoard>();
     if (type == "hdsk") return std::make_unique<HdskBoard>();
     if (type == "dualide") return std::make_unique<DualIdeBoard>();
     if (type == "dualsd") return std::make_unique<DualSdBoard>();

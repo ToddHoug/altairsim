@@ -122,6 +122,7 @@ Type the part before the bracket.
 | `dcdd` | MITS 88-DCDD: 8" hard-sector floppy controller |
 | `dualide` | S100Computers IDE-AB: two CompactFlash sockets for CP/M 3 |
 | `dualsd` | S100Computers Dual SD: two microSD sockets for CP/M 3 |
+| `fdcplus` | FarmTek FDC+: serial drive (drive types 6, 7) |
 | `hdsk` | MITS 88-HDSK Datakeeper: Pertec hard disk controller |
 | `icom` | iCOM FD3712/FD3812: 8" floppy controller with boot PROM |
 | `mds` | MITS 88-MDS: 5.25" minidisk controller |

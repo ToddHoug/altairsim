@@ -198,7 +198,7 @@ void schemaTable(std::ostream& o, std::vector<Property>& props) {
 const char* boardCategory(const std::string& n) {
     if (n == "8080" || n == "z80" || n == "8085" || n == "6800") return "CPU";
     if (n == "memory" || n == "bankmem" || n == "v2z80rom") return "Memory";
-    if (n == "dcdd" || n == "mds" || n == "hdsk" || n == "versafloppy" ||
+    if (n == "dcdd" || n == "mds" || n == "fdcplus" || n == "hdsk" || n == "versafloppy" ||
         n == "tarbell" || n == "tarbelldd" || n == "16fdc" || n == "64fdc" ||
         n == "icom" || n == "dualsd" || n == "dualide") return "Disk";
     if (n == "2sio" || n == "sio" || n == "sbc" || n == "pmmi" ||

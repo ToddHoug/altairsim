@@ -82,6 +82,7 @@ void test_cromemco_fdc();
 void test_spindle();
 void test_dcdd();
 void test_mds();
+void test_fdcplus();
 void test_hdsk();
 void test_icom();
 void test_dualsd();
