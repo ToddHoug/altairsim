@@ -999,7 +999,7 @@ SD Systems VDB-8024: an 80x24 video terminal on one board -- the video console f
 
 ### `vdm1`
 
-Processor Technology VDM-1: memory-mapped 16x64 video, screen RAM at BASE (default CC00), scroll/status port (default CC). Needs a Display
+Processor Technology VDM-1: memory-mapped 16x64 video, screen RAM at BASE (default CC00), scroll/status port (default CC). MCM6576 character ROM; control codes 00-1F show their glyphs unless `blanking` says not. Needs a Display
 
 #### Board properties
 
@@ -1009,6 +1009,9 @@ Processor Technology VDM-1: memory-mapped 16x64 video, screen RAM at BASE (defau
 | `port` | int | `0xCC` | `0x0` .. `0xFC` | I/O port -- scroll (OUT) / status (IN). Low two bits are zero |
 | `video` | enum | `normal` | `normal` \| `reverse` | Video polarity (SW1/SW2): normal (light on dark) or reverse |
 | `cursor` | enum | `blink` | `off` \| `blink` \| `steady` | Cursor for a byte with bit 7 set (SW3/SW4): off, blink, or steady |
+| `blanking` | enum | `none` | `none` \| `crvt` \| `control` \| `all` | Control-code and text blanking (SW5/SW6): none = every code shows its glyph; crvt = also a CR blanks the rest of its line and a VT the rest of the screen; control = crvt, and codes 00-1F are blank; all = only cursor blocks show |
+| `fill` | enum | `random` | `zero` \| `random` | Screen RAM at power-on: zero \| random (real RAM is not zeroed; 0x00 shows as a box) |
+| `seed` | int | `1` | any | Seed for fill=random. The same seed fills the screen the same way at every POWER, so a run is repeatable; change it for a different pattern |
 | `width` | string | `auto` | text | Video window width in pixels: 'auto' (default) opens about half the screen wide, or a number like 1024. The height follows the board's own aspect, and the picture is a whole multiple of its pixels so it stays crisp |
 
 

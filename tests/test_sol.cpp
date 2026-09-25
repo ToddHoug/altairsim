@@ -119,7 +119,9 @@ struct BootRig {
         mem->addRegion(r, err);
         setProperty(*mem, "fill", "zero", err);
 
-        m.add("vdm1", "vdm0", err);
+        // Zeroed, like the RAM above: the checks below ask whether SOLOS put a
+        // character on the screen, and random power-on bytes could already hold it.
+        setProperty(*m.add("vdm1", "vdm0", err), "fill", "zero", err);
         VdmBoard::setDisplay(&disp);
         sol = dynamic_cast<SolBoard*>(m.add("sol", "sol0", err));
         auto* fp = dynamic_cast<FrontPanelBoard*>(m.add("fp", "fp0", err));

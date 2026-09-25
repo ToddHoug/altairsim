@@ -8,6 +8,15 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+### The VDM-1 shows its whole character set
+
+The VDM-1 now shows the graphics characters for codes 00 to 1F. Before, it always showed them as
+blanks. The board uses the MCM6576 character ROM, and by default it shows every code, as the board
+did when it left the factory. The new `blanking` property sets the SW5/SW6 switches: it can blank the
+control codes, blank the rest of a line after a CR and the rest of the screen after a VT, or blank
+all characters. The screen RAM now holds random bytes at power-on, as real RAM does. Set
+`fill = zero` or a `seed` if you need the same screen at each power-on.
+
 ### A `-s` script runs from any folder
 
 A path in a script that you run with `altairsim -s` is now relative to the script's folder, as

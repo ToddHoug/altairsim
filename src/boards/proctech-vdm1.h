@@ -85,6 +85,9 @@ private:
 
     void render();  // paint the current screen into the injected Display
 
+    // New screen RAM, per the `fill` policy -- at construction and at every POWER.
+    void fillScreen();
+
     // WOULD THE PICTURE LOOK DIFFERENT FROM THE ONE ALREADY ON SCREEN? Painting is
     // expensive (see Display::wantsFrame) and most pumps change nothing at all -- a
     // guest waiting on a disk, or reading a cassette, leaves the screen untouched for
@@ -109,6 +112,22 @@ private:
     bool     reverse_ = false;  // SW1/SW2 -- whole-screen video polarity
     uint8_t  cursorMode_ = 1;   // 0 = off, 1 = blink, 2 = steady (SW3/SW4)
     int      videoWidth_ = 0;   // host window width in px, 0 = auto (~half the screen)
+
+    // SW5/SW6 (manual Table 3-1). The default is ON/ON: every control code shows its
+    // glyph and CR/VT blank nothing -- the factory setting (manual 2.7.1 NOTE).
+    enum class Blanking : uint8_t {
+        None,     // ON/ON   control codes shown, no CR/VT text blanking
+        CrVt,     // ON/OFF  control codes shown, CR/VT text blanking
+        Control,  // OFF/ON  control codes blanked, CR/VT text blanking
+        All,      // OFF/OFF every character blanked (cursor blocks only), CR/VT on
+    };
+    Blanking blanking_ = Blanking::None;
+
+    // Screen RAM at power-on. Real RAM is not zeroed, and on this board it shows: a
+    // byte of 0x00 is the MCM6576's box glyph, not a space.
+    enum class Fill : uint8_t { Zero, Random };
+    Fill     fill_ = Fill::Random;
+    uint64_t seed_ = 1;
 
     // The status one-shot (D0): high until this Clock deadline passes. A T-state
     // count, so it is deterministic and replay-safe -- derived from emulated time,

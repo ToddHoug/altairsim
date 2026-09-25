@@ -27,7 +27,10 @@ struct Rig {
         vdm = dynamic_cast<VdmBoard*>(m.add("vdm1", "vdm0", err));
         VdmBoard::setDisplay(&disp);
         m.power();
+        cls();  // screen RAM powers up holding junk; clear it, as any guest does first
     }
+
+    void    cls() { for (uint16_t i = 0; i < 1024; ++i) poke(i, ' '); }
 
     void    poke(uint16_t off, uint8_t v) { m.bus.memWrite(0xCC00 + off, v); }
     uint8_t status() { return m.bus.ioRead(0xCC); }
@@ -310,5 +313,132 @@ void test_vdm1() {
         CHECK(setProperty(*g.vdm, "base", "D000", err), "a 1 KB-aligned base is taken");
         CHECK(!setProperty(*g.vdm, "port", "CD", err), "a port not on a 4-boundary is refused");
         CHECK(setProperty(*g.vdm, "port", "C8", err), "a multiple of 4 is taken");
+    }
+
+    SECTION("VDM-1 -- the ROM is the MCM6576: control codes 00-1F show their glyphs by default");
+    {
+        Rig g;
+        g.poke(0, 0x00);  // a box
+        g.poke(1, 0x0D);  // a left arrow
+        g.poke(2, 0x1F);
+        g.vdm->pump();
+        const Surface* s = g.disp.surface();
+        CHECK(cellForeground(s, 0, 0) > 0, "0x00 draws its box, not a space");
+        CHECK(cellForeground(s, 1, 0) > 0, "0x0D draws its arrow");
+        CHECK(cellForeground(s, 2, 0) > 0, "0x1F draws its glyph");
+        std::string blanking;
+        for (auto& x : g.vdm->properties())
+            if (x.name == "blanking") blanking = x.get().s();
+        CHECK(blanking == "none", "the default is SW5/SW6 ON/ON");
+    }
+
+    SECTION("VDM-1 -- blanking=none: CR and VT are glyphs and blank nothing");
+    {
+        Rig g;
+        g.poke(0, 0x0D);
+        g.poke(1, 'A');
+        g.poke(64 + 0, 0x0B);
+        g.poke(128 + 0, 'B');
+        g.vdm->pump();
+        const Surface* s = g.disp.surface();
+        CHECK(cellForeground(s, 1, 0) > 0, "text after a CR still shows");
+        CHECK(cellForeground(s, 0, 2) > 0, "text below a VT still shows");
+    }
+
+    SECTION("VDM-1 -- blanking=crvt: CR blanks the rest of its line, VT the rest of the screen");
+    {
+        Rig g;
+        std::string err;
+        CHECK(setProperty(*g.vdm, "blanking", "crvt", err), "blanking=crvt is accepted");
+        g.poke(0, 'A');
+        g.poke(1, 0x0D);
+        g.poke(2, 'B');
+        g.poke(63, 'C');
+        g.poke(64 + 0, 'D');   // the line below the CR: untouched
+        g.poke(64 + 1, 0x0B);
+        g.poke(64 + 2, 'E');
+        g.poke(128 + 0, 'F');
+        g.poke(15 * 64 + 63, 'G');
+        g.vdm->pump();
+        const Surface* s = g.disp.surface();
+        CHECK(cellForeground(s, 0, 0) > 0, "text before the CR shows");
+        CHECK(cellForeground(s, 1, 0) > 0, "the CR itself is drawn (control codes shown)");
+        CHECK(cellForeground(s, 2, 0) == 0, "the cell after the CR is blank");
+        CHECK(cellForeground(s, 63, 0) == 0, "...to the end of the line");
+        CHECK(cellForeground(s, 0, 1) > 0, "the next line is not touched by the CR");
+        CHECK(cellForeground(s, 1, 1) > 0, "the VT itself is drawn");
+        CHECK(cellForeground(s, 2, 1) == 0, "the rest of the VT's line is blank");
+        CHECK(cellForeground(s, 0, 2) == 0, "every line below the VT is blank");
+        CHECK(cellForeground(s, 63, 15) == 0, "...to the end of the screen");
+    }
+
+    SECTION("VDM-1 -- CR/VT blanking follows the DISPLAY, after the scroll");
+    {
+        Rig g;
+        std::string err;
+        CHECK(setProperty(*g.vdm, "blanking", "crvt", err), "blanking=crvt is accepted");
+        g.poke(0, 'A');             // RAM row 0
+        g.poke(15 * 64, 0x0B);      // RAM row 15
+        g.outScroll(15);            // RAM row 15 is now display line 0, row 0 is line 1
+        g.vdm->pump();
+        const Surface* s = g.disp.surface();
+        CHECK(cellForeground(s, 0, 1) == 0, "the VT on display line 0 blanks display line 1");
+    }
+
+    SECTION("VDM-1 -- blanking=control blanks 00-1F; blanking=all leaves only cursor blocks");
+    {
+        Rig g;
+        std::string err;
+        CHECK(setProperty(*g.vdm, "blanking", "control", err), "blanking=control is accepted");
+        g.poke(0, 0x01);
+        g.poke(1, 'A');
+        g.poke(2, 0x0D);
+        g.poke(3, 'B');
+        g.vdm->pump();
+        const Surface* s = g.disp.surface();
+        CHECK(cellForeground(s, 0, 0) == 0, "a control code is blank");
+        CHECK(cellForeground(s, 1, 0) > 0, "a printing character is not");
+        CHECK(cellForeground(s, 2, 0) == 0, "the CR is blank too");
+        CHECK(cellForeground(s, 3, 0) == 0, "and CR blanking is on");
+
+        CHECK(setProperty(*g.vdm, "blanking", "all", err), "blanking=all is accepted");
+        CHECK(setProperty(*g.vdm, "cursor", "steady", err), "cursor=steady is accepted");
+        g.poke(1, 'A');
+        g.poke(5, 'C' | 0x80);
+        g.vdm->pump();
+        s = g.disp.surface();
+        CHECK(cellForeground(s, 1, 0) == 0, "a printing character is blank");
+        CHECK(cellForeground(s, 5, 0) == 8 * 13, "a cursor cell is a solid block");
+    }
+
+    SECTION("VDM-1 -- screen RAM powers up by `fill`: random and repeatable, or zero");
+    {
+        Rig g;
+        std::string err;
+        g.m.power();
+        uint8_t first[1024];
+        for (int i = 0; i < 1024; ++i) first[i] = g.vdm->vram((uint16_t)i);
+        g.m.power();
+        bool same = true, allZero = true;
+        for (int i = 0; i < 1024; ++i) {
+            if (g.vdm->vram((uint16_t)i) != first[i]) same = false;
+            if (first[i] != 0) allZero = false;
+        }
+        CHECK(!allZero, "fill=random (the default) does not power up zeroed");
+        CHECK(same, "the same seed gives the same screen at every POWER");
+
+        CHECK(setProperty(*g.vdm, "seed", "2", err), "seed=2 is accepted");
+        g.m.power();
+        bool differs = false;
+        for (int i = 0; i < 1024; ++i)
+            if (g.vdm->vram((uint16_t)i) != first[i]) differs = true;
+        CHECK(differs, "a different seed gives a different screen");
+
+        CHECK(setProperty(*g.vdm, "fill", "zero", err), "fill=zero is accepted");
+        g.m.power();
+        allZero = true;
+        for (int i = 0; i < 1024; ++i)
+            if (g.vdm->vram((uint16_t)i) != 0) allZero = false;
+        CHECK(allZero, "fill=zero powers up all 0x00");
     }
 }
