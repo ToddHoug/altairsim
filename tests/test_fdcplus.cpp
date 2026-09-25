@@ -122,10 +122,13 @@ public:
         auto& img = images_[(size_t)drive];
         if (img.empty()) {
             img.resize((size_t)len_ * 80);
-            for (size_t i = 0; i < img.size(); ++i) img[i] = (uint8_t)(i * 7 + (size_t)drive);
+            for (size_t i = 0; i < img.size(); ++i) img[i] = fill(drive, i);
         }
         return img;
     }
+    // What a fresh image holds at byte `i`: a pattern, so a misplaced sector shows.
+    static uint8_t fill(int drive, size_t i) { return (uint8_t)((i * 7 + (size_t)drive) & 0xFF); }
+
     uint8_t at(int drive, int track, int sector, int byte) {
         return image(drive)[(size_t)track * (size_t)len_ + (size_t)sector * kSlot + (size_t)byte];
     }
@@ -459,7 +462,7 @@ void test_fdcplus() {
         bool mine = true;
         for (int i = 0; i < kSlot; ++i) mine = mine && r.srv->at(0, 0, 5, i) == (uint8_t)(0xA0 + i);
         CHECK(mine, "sector 5 holds the 137 bytes written (the 138th was dropped)");
-        CHECK(r.srv->at(0, 0, 4, 0) == (uint8_t)(0 * 7 + 4 * kSlot * 7), "sector 4 untouched");
+        CHECK(r.srv->at(0, 0, 4, 0) == FakeServer::fill(0, 4 * kSlot), "sector 4 untouched");
         CHECK(!r.b.dirty(), "clean");
         CHECK(r.srv->got.back().p1 == 0x0001, "and track 1 is read");
     }
