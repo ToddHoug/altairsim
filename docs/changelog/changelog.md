@@ -8,6 +8,12 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+### An empty ROM socket is empty
+
+A `rom` region with no `mount` now reads `FF` even when it has a `size`. Before, a `size` made it
+read `00`. A `rom` region takes its size from its image, so it ignores `size`. The program also
+no longer prints `power: cannot open ''` for an empty socket.
+
 ### The MCP server checks its arguments, and `run` obeys `SET BUS UNCLAIMED`
 
 A tool argument of the wrong type is now an error that names the argument. Before, the server
