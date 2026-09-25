@@ -14,12 +14,13 @@ A new video board of our own design: Hitachi's **HD63484 ACRTC** — a CRT contr
 processor and its own frame memory — and Brooktree's **Bt453** 256-entry color look-up table, on six
 I/O ports and no memory. The CPU draws by command through the ACRTC's FIFO (lines, rectangles,
 polylines, circles, ellipses, arcs, filled rectangles, area paint, patterns, dots, block clears,
-block copies and word transfers, in every operation, color and area mode), the picture scans out at 8 bits per pixel through the Bt453's table onto a **fixed VESA
+block and graphic copies and word transfers -- every command the chip has, in every operation,
+color and area mode), the picture scans out at 8 bits per pixel through the Bt453's table onto a **fixed VESA
 monitor** the board carries (`mode`: the three primary VESA resolutions, 640x480, 800x600 or
 1024x768 -- the default), in single or interleaved access, out of a fixed 2 MB of its own frame
 memory, and the window is the same host display the Dazzler and VDM-1 draw into. Both chips are models in their own right
 (`src/chips/`), built from the Hitachi and Brooktree data sheets, so the next board that carries one
-gets it for free. Graphic copies are recognized but not drawn yet.
+gets it for free.
 The drawing pattern behaves as the chip's own does: a dash carries on around the corners of a
 rectangle, polyline or polygon, zoom counters start where a driver sets them, and the pattern
 pointer reads back where drawing left it.

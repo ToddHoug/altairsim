@@ -75,14 +75,13 @@
 //   Register file: all of it, with the auto-increment rule.       FIFOs and SR: all.
 //   Commands: ORG WPR RPR WPTN RPTN / RD WT MOD DRD DWT DMOD CLR SCLR CPY SCPY / AMOVE RMOVE
 //             ALINE RLINE ARCT RRCT APLL RPLL APLG RPLG CRCL ELPS AARC RARC AEARC REARC
-//             AFRCT RFRCT PAINT DOT PTN, with every
+//             AFRCT RFRCT PAINT DOT PTN AGCPY RGCPY, with every
 //             OPM, every COL and every AREA mode, the pattern pointer and its zoom
 //             counters stepping live (RPR reads them back); CRCL ELPS AARC RARC AEARC
 //             REARC traced pixel by pixel in their C direction; PAINT as a scan-line
-//             seed fill with no stack limit; PTN in all sixteen SL/SD directions. The
-//             remaining opcodes (AGCPY RGCPY) are RECOGNIZED -- their parameters are
-//             consumed so the stream stays in step -- but not executed, and they set CER
-//             so a guest can tell.
+//             seed fill with no stack limit; PTN in all sixteen SL/SD directions; AGCPY
+//             RGCPY with every S/DSD rotation and mirror. Every opcode is executed; an
+//             undefined one sets CER.
 //   Reads:    a read that does not fit the read FIFO waits for room, and the command
 //             stream waits behind it (manual RD-1).
 //   Scan-out: the three background screens (upper/base/lower) stacked by SP0/SP1/SP2 and
@@ -258,6 +257,7 @@ private:
                         int x0, int y0, int xe, int ye, bool cw);
     void     paint(bool e);                                     // PAINT body
     void     drawPattern(int szx, int szy, int sd, bool sl);    // PTN body
+    void     graphicCopy(int xs, int ys, int dx, int dy, bool s, int dsd);   // AGCPY/RGCPY body
     void     patternAt(int dx, int dy, uint8_t ppx0, uint8_t pzcx0, uint8_t ppy0, uint8_t pzcy0);
     void     clearBlock(uint16_t d, int16_t ax, int16_t ay, bool masked, int mm);
     void     copyBlock(uint32_t src, int16_t ax, int16_t ay, bool s, int dsd, bool masked, int mm);

@@ -724,15 +724,85 @@ void test_hd63484() {
         CHECK(inOrder, "all twelve come out in order as space frees up");
     }
 
-    SECTION("HD63484 -- an unimplemented but valid opcode consumes its parameters and reports CER");
+    SECTION("HD63484 -- AGCPY with COL != 00 is undefined: CER, and the next word is a command");
     {
         Rig g;
         g.screen4bpp();
-        g.cmd(0xE000, {1, 2, 3, 4});              // AGCPY: recognized, not drawn
-        CHECK((g.sr() & 0x80) != 0, "CER");
-        CHECK((g.sr() & 0x20) != 0, "CED: free again");
-        g.cmd(0x8000, {2, 0});                    // the next command is parsed as a command...
-        CHECK(g.c.cpx() == 2, "...not as a stray parameter: the stream stayed in step");
+        g.word(0xE008);                           // AGCPY's COL bits must be 00
+        CHECK((g.sr() & 0xA0) == 0xA0, "CER, CED: free again");
+        g.cmd(0x8000, {2, 0});
+        CHECK(g.c.cpx() == 2, "the stream stayed in step");
+    }
+
+    SECTION("HD63484 -- AGCPY: the manual's example, S = 1 DSD = 000 turns the block 90 degrees (AGCPY-4/5)");
+    {
+        Rig g;
+        g.screen4bpp();
+        const auto v = [](int x, int y) { return (x * 3 + y * 5) % 15 + 1; };   // never 0
+        for (int y = 2; y <= 9; ++y)
+            for (int x = 18; x <= 31; ++x) {
+                const uint32_t a = g.wordAt(x, y);
+                const int      sh = (x % 4) * 4;
+                g.c.pokeWord(a, (uint16_t)((g.c.peekWord(a) & ~(0xF << sh)) | (v(x, y) << sh)));
+            }
+        g.cmd(0x8000, {4, 2});
+        g.cmd(0xE800, {18, 2, 13, 7});            // AGCPY S = 1, DSD = 000: Xs 18, Ys 2, DX 13, DY 7
+        CHECK((g.sr() & 0xA0) == 0x20, "executed: CED, no CER");
+        bool ok = true;
+        for (int y = 2; y <= 9; ++y)
+            for (int x = 18; x <= 31; ++x) ok &= g.nib(4 + (y - 2), 2 + (x - 18)) == v(x, y);
+        CHECK(ok, "source column x lands as destination row 2 + (x - 18): (28,6)-(31,9) at (8,12)-(11,15)");
+        CHECK(g.nib(12, 2) == 0 && g.nib(4, 16) == 0, "nothing past the copy");
+        CHECK(g.c.cpx() == 4 && g.c.cpy() == 16, "Pe = (4, 16) (manual AGCPY-5)");
+    }
+
+    SECTION("HD63484 -- RGCPY: the source relative to CP (RGCPY-2/3); S = 0 DSD = 010 mirrors");
+    {
+        Rig g;
+        g.screen4bpp();
+        const auto v = [](int x, int y) { return (x * 7 + y * 3) % 15 + 1; };
+        for (int y = 4; y <= 10; ++y)
+            for (int x = 22; x <= 34; ++x) {
+                const uint32_t a = g.wordAt(x, y);
+                const int      sh = (x % 4) * 4;
+                g.c.pokeWord(a, (uint16_t)((g.c.peekWord(a) & ~(0xF << sh)) | (v(x, y) << sh)));
+            }
+        g.cmd(0x8000, {4, 2});
+        g.cmd(0xF800, {18, 2, 12, 6});            // RGCPY: Pss = CP + (18, 2) = (22, 4), DX 12, DY 6
+        bool ok = true;
+        for (int y = 4; y <= 10; ++y)
+            for (int x = 22; x <= 34; ++x) ok &= g.nib(4 + (y - 4), 2 + (x - 22)) == v(x, y);
+        CHECK(ok, "the same 90-degree turn from (22, 4)");
+        CHECK(g.c.cpx() == 4 && g.c.cpy() == 15, "Pe = (4, 15) (manual RGCPY-3)");
+
+        Rig m;
+        m.screen4bpp();
+        m.c.pokeWord(m.wordAt(32, 0), 0x4321);    // (32..35, 0) = 1 2 3 4
+        m.c.pokeWord(m.wordAt(32, 1), 0x8765);    // (32..35, 1) = 5 6 7 8
+        m.cmd(0x8000, {10, 0});
+        m.cmd(0xE200, {32, 0, 3, 1});             // AGCPY S = 0, DSD = 010: rows written leftward
+        CHECK(m.nib(10, 0) == 1 && m.nib(9, 0) == 2 && m.nib(7, 0) == 4 && m.nib(10, 1) == 5 && m.nib(7, 1) == 8,
+              "a mirror image: the row runs right to left from CP");
+        CHECK(m.c.cpx() == 10 && m.c.cpy() == 2, "Pe one row up");
+
+        m.cmd(0x8000, {10, 0});
+        m.cmd(0xE203, {32, 0, 3, 1});             // the same with OPM = 011: EOR onto itself
+        CHECK(m.nib(10, 0) == 0 && m.nib(7, 1) == 0, "OPM applies: EOR over the copy clears it");
+    }
+
+    SECTION("HD63484 -- AGCPY judges AREA at the destination");
+    {
+        Rig g;
+        g.screen4bpp();
+        g.c.pokeWord(g.wordAt(32, 0), 0xFFFF);
+        g.cmd(0x0808, {0});
+        g.cmd(0x080A, {5});
+        g.cmd(0x0809, {0});
+        g.cmd(0x080B, {5});
+        g.cmd(0x8000, {4, 0});
+        g.cmd(0xE020, {32, 0, 3, 0});             // AREA 001: four pixels to (4..7, 0), area ends at x = 5
+        CHECK(g.nib(4, 0) == 0xF && g.nib(5, 0) == 0xF && g.nib(6, 0) == 0, "copied up to the area's edge");
+        CHECK((g.sr() & 0x60) == 0x60 && g.c.cpx() == 6, "ARD, CED, CP at the crossing");
     }
 
     SECTION("HD63484 -- PAINT E = 0: fill the closed area round CP up to the EDG color (PAINT-1/3)");

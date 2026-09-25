@@ -620,6 +620,16 @@ void Hd63484::execute() {
         return;
     }
     default:
+        if ((op & 0xE000) == 0xE000) {         // AGCPY / RGCPY (S DSD) Xs Ys DX DY
+            int xs = p(0), ys = p(1);
+            if (op & 0x1000) {                 // RGCPY: the source corner relative to CP
+                xs += cpx_;
+                ys += cpy_;
+            }
+            graphicCopy(xs, ys, p(2), p(3), (op & 0x0800) != 0, (op >> 8) & 7);
+            endDraw();
+            return;
+        }
         if ((op & 0xF000) == 0xD000) {         // PTN (SL SD) SZ: SL bit 11, SD bits 10-8
             // (the PTN-8/PTN-9 examples, $D8XX SL = 1 and $D1XX SD = 1, settle the fields)
             drawPattern(u(0) & 0xFF, u(0) >> 8, (op >> 8) & 7, (op & 0x0800) != 0);
@@ -682,8 +692,7 @@ void Hd63484::execute() {
         break;
     }
 
-    // Everything else (AGCPY RGCPY) was recognized and its
-    // parameters consumed; it is not executed, and CER says so.
+    // Nothing reaches here: paramsFor() let through only opcodes executed above.
     commandError();
     commandEnd();
 }
@@ -1103,6 +1112,42 @@ void Hd63484::drawPattern(int szx, int szy, int sd, bool sl) {
     pzcx_ = pzcx0;
     cpx_  = (int16_t)(cpx_ + (szy + 1) * sx);
     cpy_  = (int16_t)(cpy_ + (szy + 1) * sy);
+}
+
+// AGCPY/RGCPY (manual AGCPY-1..5, RGCPY-1..3): copy the (|DX|+1) x (|DY|+1)-pixel
+// rectangle from (xs, ys) to CP, in logical pixels -- CPY's scans in pixel units, S for
+// the source and DSD for the destination (Tables C37-1/C37-2 are C14-1/C14-2 again), so it
+// rotates by 90 degrees and mirrors. The source pixel IS the color data: COL is fixed at
+// 00 and the pattern RAM is not used, while OPM combines it with the destination pixel and
+// AREA judges the destination. One pixel at a time, read then written. CP ends one line
+// past the last on the slow axis (AGCPY-4: S = 1, DSD = 000, CP (4,2), DX = 13 -> (4,16)).
+void Hd63484::graphicCopy(int xs, int ys, int dx, int dy, bool s, int dsd) {
+    const int      bpp   = bitsPerPixel();
+    const uint16_t fm    = (uint16_t)((1u << bpp) - 1);
+    const Scan     ss    = sourceScan(s, dx, dy);
+    const Scan     ds    = destScan(dsd);
+    const int      nFast = (s ? std::abs(dy) : std::abs(dx)) + 1;
+    const int      nSlow = (s ? std::abs(dx) : std::abs(dy)) + 1;
+    const int      x0 = cpx_, y0 = cpy_;
+    for (int j = 0; j < nSlow; ++j) {
+        for (int i = 0; i < nFast; ++i) {
+            uint32_t sa = 0;
+            int      sh = 0;
+            wordAddress(xs + i * ss.fx + j * ss.sx, ys + i * ss.fy + j * ss.sy, sa, sh);
+            const uint16_t v  = (uint16_t)((vramRead(sa) >> sh) & fm);
+            const int      tx = x0 + i * ds.fx + j * ds.sx, ty = y0 + i * ds.fy + j * ds.sy;
+            if (!areaAllows(tx, ty)) {
+                if (stopped_) return;
+                continue;
+            }
+            uint32_t da = 0;
+            int      dsh = 0;
+            wordAddress(tx, ty, da, dsh);
+            vramWrite(da, applyOpm(vramRead(da), (uint16_t)(v << dsh), da, dsh, bpp));
+        }
+    }
+    cpx_ = (int16_t)(x0 + nSlow * ds.sx);
+    cpy_ = (int16_t)(y0 + nSlow * ds.sy);
 }
 
 // AFRCT/RFRCT: the rectangle with CP and (x1, y1) as opposite corners, both included,

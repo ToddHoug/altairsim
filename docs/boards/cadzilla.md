@@ -140,8 +140,8 @@ half of the block picks MODE vs. the ACRTC), not an accident of layout.
 **Status register.** `WFE` write FIFO empty (up to 8 words may be written), `WFR` write FIFO
 not full (one word may), `RFR` read FIFO has a word, `RFF` read FIFO full, `CED` command end —
 the chip will take a new command (cleared when one is written), `ARD` area detect (set by the
-AREA modes, cleared by RPR or ABT), `CER` command error — an undefined opcode, a bad parameter,
-or an opcode this model recognizes but does not execute (cleared only by ABT). After RESET\* and
+AREA modes, cleared by RPR or ABT), `CER` command error — an undefined opcode or a bad parameter
+(cleared only by ABT). After RESET\* and
 after ABT: `$23`.
 
 **Control registers** (through AR). `r02` CCR — bit 15 ABT, 14 PSE, 13 DDM, 12 CDM, 11 DRC,
@@ -252,6 +252,7 @@ and the same three for *inside*).
 | A curve is drawn **in order** from its start — CCW, or CW when C = 1 — so the pattern runs along it and AREA 001/101 stop where it crosses; CRCL/ELPS start at (A + r, B), go once round, and leave CP at the center; arcs leave CP at Pe, **undrawn** (CRCL-1, AARC-1). Which pixels: the nearest to the curve in each column where it runs mostly horizontally and each row where it runs mostly vertically, so a circle is 8-way symmetric and C changes the order, never the pixels. The manual gives no rule for detecting Pe; an arc ends where Pe's ray crosses it, so a Pe slightly off the curve still ends it | a dashed circle's dashes run backwards, or an EOR-drawn circle leaves its start pixel lit |
 | PAINT's edge is EDG (E = 0) or everything but EDG (E = 1) — and **also any pixel already in CL0 or CL1** (PAINT-1), compared at each pixel's own field. It paints 4-connected spans left to right from CP's line and leaves CP just past the last span (Figure C34-4). Its pattern is anchored at CP, and the pointer is left as PAINT found it | a fill color that matches the background paints nothing; a pattern fill shows seams between spans |
 | PTN's rows run along **SD × 45°** counter-clockwise from +X; successive rows step 90° further round, or 45° when **SL = 1** (Table C36-1, read from the scan). SL is bit 11 and SD bits 10-8 — the PTN-1 bit diagram is misdrawn, its examples (`$D8XX`, `$D1XX`) are not. A diagonal step moves one pixel in X and Y, so a diagonal PTN is gapped (PTN-9) | a rotated pattern comes out mirrored, or a slanted one sheared the wrong way |
+| AGCPY/RGCPY copy in **logical pixels** with CPY's S and DSD scans (Tables C37-1/C37-2), from (Xs, Ys) — relative to CP for RGCPY — to CP, so they turn a block 90° or mirror it; CP ends one line past the last (AGCPY-5: CP (4,2), S = 1, DX = 13 → (4,16)). COL is fixed at 00: the source pixel is the color data, OPM combines it with the destination, AREA judges the destination, and the pattern RAM is not used | a rotated copy comes out transposed the wrong way, or a driver chaining copies from CP lands them on top of each other |
 | CPY/SCPY scan the source by **S** (rows or columns, from the corner the signs of AX/AY name) and write the destination from RWP in **DSD**'s order — bit 2 columns, bit 1 leftward, bit 0 downward (Tables C14-1/C14-2, read from the scan) — so S ≠ DSD bit 2 transposes the block; RWPe ends **one line past** the last on the slow axis (CPY-6: `$B0` → `$70`), unlike CLR's | a rotated or mirrored copy comes out in the wrong orientation, or a chained copy overlaps its predecessor by a line |
 | DRD/DWT/DMOD with **negative AX/AY** walk the block the way CLR does: leftward, and down in Y (up in memory) (DRD-2, DWT-2) | a bottom-up block transfer is rejected, or lands mirrored |
 | The shift register is 8 bpp × 8 words whatever CCR/OMR say: a wrong GBM packs pixels the board will not unpack, a wrong GAI makes each fetch overlap the last | an off-spec program shows a coherent picture here and garbage on the card, or the reverse |
@@ -267,10 +268,9 @@ and the same three for *inside*).
   wait state. A guest that times a command, or that syncs to the raster to avoid flicker, sees
   an infinitely fast chip and an unmoving beam. The status bits a guest *polls* (the FIFO
   flags, CED) are exact.
-- **Commands not executed**:
-  AGCPY, RGCPY. They are recognized and their parameters consumed — the command stream stays in
-  step — and **CER is set**, so a guest can tell. DRD/DWT/DMOD run only in the manual's
-  "under program control" mode (no DMAC on the board).
+- **Every command executes.** DRD/DWT/DMOD run only in the manual's "under program control"
+  mode (no DMAC on the board). An undefined opcode sets **CER** and is dropped alone, so the
+  words after it are read as commands.
 - **PAINT has no seed-stack limit.** The chip keeps four pending seeds and hands any more to the
   host through the read FIFO, to be painted by re-issuing PAINT (PAINT-4); here one PAINT fills
   the whole area and never sets RFR, so a driver following the manual's re-issue loop simply
