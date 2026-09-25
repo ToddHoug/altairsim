@@ -250,6 +250,8 @@ and the same three for *inside*).
 | **RWP is one register**; DN rides in its high word, so rewriting Pr0C to change screens keeps RWPL (5.10.2.8) | a driver that selects the screen after setting the address transfers to address 0 |
 | ELPS's *a* and *b* are **not the semi-axes**: they are the ratio *a* : *b* = dX² : dY² of the squared semi-axes, dX the X one (ELPS-2/3: 9 : 4 with dX = 9 is dY = 6). An arc's radius is CP's own distance from the center; RARC/REARC give both the center and Pe relative to CP | an ellipse comes out the wrong shape, or an arc round the wrong center |
 | A curve is drawn **in order** from its start — CCW, or CW when C = 1 — so the pattern runs along it and AREA 001/101 stop where it crosses; CRCL/ELPS start at (A + r, B), go once round, and leave CP at the center; arcs leave CP at Pe, **undrawn** (CRCL-1, AARC-1). Which pixels: the nearest to the curve in each column where it runs mostly horizontally and each row where it runs mostly vertically, so a circle is 8-way symmetric and C changes the order, never the pixels. The manual gives no rule for detecting Pe; an arc ends where Pe's ray crosses it, so a Pe slightly off the curve still ends it | a dashed circle's dashes run backwards, or an EOR-drawn circle leaves its start pixel lit |
+| PAINT's edge is EDG (E = 0) or everything but EDG (E = 1) — and **also any pixel already in CL0 or CL1** (PAINT-1), compared at each pixel's own field. It paints 4-connected spans left to right from CP's line and leaves CP just past the last span (Figure C34-4). Its pattern is anchored at CP, and the pointer is left as PAINT found it | a fill color that matches the background paints nothing; a pattern fill shows seams between spans |
+| PTN's rows run along **SD × 45°** counter-clockwise from +X; successive rows step 90° further round, or 45° when **SL = 1** (Table C36-1, read from the scan). SL is bit 11 and SD bits 10-8 — the PTN-1 bit diagram is misdrawn, its examples (`$D8XX`, `$D1XX`) are not. A diagonal step moves one pixel in X and Y, so a diagonal PTN is gapped (PTN-9) | a rotated pattern comes out mirrored, or a slanted one sheared the wrong way |
 | CPY/SCPY scan the source by **S** (rows or columns, from the corner the signs of AX/AY name) and write the destination from RWP in **DSD**'s order — bit 2 columns, bit 1 leftward, bit 0 downward (Tables C14-1/C14-2, read from the scan) — so S ≠ DSD bit 2 transposes the block; RWPe ends **one line past** the last on the slow axis (CPY-6: `$B0` → `$70`), unlike CLR's | a rotated or mirrored copy comes out in the wrong orientation, or a chained copy overlaps its predecessor by a line |
 | DRD/DWT/DMOD with **negative AX/AY** walk the block the way CLR does: leftward, and down in Y (up in memory) (DRD-2, DWT-2) | a bottom-up block transfer is rejected, or lands mirrored |
 | The shift register is 8 bpp × 8 words whatever CCR/OMR say: a wrong GBM packs pixels the board will not unpack, a wrong GAI makes each fetch overlap the last | an off-spec program shows a coherent picture here and garbage on the card, or the reverse |
@@ -265,10 +267,14 @@ and the same three for *inside*).
   wait state. A guest that times a command, or that syncs to the raster to avoid flicker, sees
   an infinitely fast chip and an unmoving beam. The status bits a guest *polls* (the FIFO
   flags, CED) are exact.
-- **Commands not executed**: PAINT, PTN,
+- **Commands not executed**:
   AGCPY, RGCPY. They are recognized and their parameters consumed — the command stream stays in
   step — and **CER is set**, so a guest can tell. DRD/DWT/DMOD run only in the manual's
   "under program control" mode (no DMAC on the board).
+- **PAINT has no seed-stack limit.** The chip keeps four pending seeds and hands any more to the
+  host through the read FIFO, to be painted by re-issuing PAINT (PAINT-4); here one PAINT fills
+  the whole area and never sets RFR, so a driver following the manual's re-issue loop simply
+  finds nothing left to do.
 - **Scan-out**: graphic screens only (CHR = 1 character screens are scanned as graphic), the
   three background screens stacked and the window over them, non-interlaced; single and
   interleaved access only (superimposed mode's second phase is not fetched). The monitor is the

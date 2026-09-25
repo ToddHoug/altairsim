@@ -614,7 +614,18 @@ void Hd63484::execute() {
         endDraw();
         return;
     }
+    case 0xC800: case 0xC900: {                // PAINT (E in bit 8)
+        paint((op & 0x0100) != 0);
+        endDraw();
+        return;
+    }
     default:
+        if ((op & 0xF000) == 0xD000) {         // PTN (SL SD) SZ: SL bit 11, SD bits 10-8
+            // (the PTN-8/PTN-9 examples, $D8XX SL = 1 and $D1XX SD = 1, settle the fields)
+            drawPattern(u(0) & 0xFF, u(0) >> 8, (op >> 8) & 7, (op & 0x0800) != 0);
+            endDraw();
+            return;
+        }
         break;
     }
 
@@ -671,7 +682,7 @@ void Hd63484::execute() {
         break;
     }
 
-    // Everything else (PAINT PTN AGCPY RGCPY) was recognized and its
+    // Everything else (AGCPY RGCPY) was recognized and its
     // parameters consumed; it is not executed, and CER says so.
     commandError();
     commandEnd();
@@ -970,6 +981,128 @@ void Hd63484::traceConic(int xc, int yc, int64_t a, int64_t b, int x0, int y0, i
         drawPixel((int)(xc + p.first), (int)(yc + m * p.second));
         if (stopped_) return;
     }
+}
+
+// The pattern pointer as a plane command anchored at CP would have it at the pixel
+// (dx, dy) away: the scan from the pointer the command found, dx steps in X and dy in Y,
+// either sign, round the PS..PE window and the zoom. PAINT fills in no fixed order, so it
+// places the pointer by position -- a seamless tiling whichever way a span runs.
+void Hd63484::patternAt(int dx, int dy, uint8_t ppx0, uint8_t pzcx0, uint8_t ppy0, uint8_t pzcy0) {
+    const int  m    = ((cmd_ >> 3) & 3) == 3 ? 3 : 15;
+    const auto axis = [m](uint8_t pp, uint8_t pzc, int ps, int pe, int pz, int steps, uint8_t& opp, uint8_t& opzc) {
+        const int64_t width = ((pe - ps) & m) + 1;
+        const int64_t rep   = pz + 1;
+        int64_t       t     = (((pp - ps) & m) % width) * rep + (pzc < pz ? pzc : pz) + steps;
+        t                   = ((t % (width * rep)) + width * rep) % (width * rep);
+        opp                 = (uint8_t)((ps + t / rep) & m);
+        opzc                = (uint8_t)(t % rep);
+    };
+    axis(ppx0, pzcx0, psx_, pex_, pzx_, dx, ppx_, pzcx_);
+    axis(ppy0, pzcy0, psy_, pey_, pzy_, dy, ppy_, pzcy_);
+}
+
+// PAINT (manual PAINT-1..11): fill the closed area round CP, bounded by the EDGE color --
+// E = 0: pixels equal to EDG; E = 1: every pixel NOT equal to EDG -- and, as the chip
+// does, by pixels already in CL0 or CL1: "color code stored in color registers (CL0 or
+// CL1) are also considered to be an edge during PAINT execution" (PAINT-1), which is what
+// stops it filling what it has just filled. Each color is compared at the pixel's own
+// field, as a drawing color is.
+//
+// It paints spans "parallel to the X axis (left to right)" from CP's line out to the lines
+// above and below (PAINT-3), 4-connected. The chip's four-entry seed stack overflows into
+// the read FIFO for the host to re-issue; THIS ONE HAS NO LIMIT, so one PAINT fills the
+// whole area and RFR is never set -- a driver that follows the manual's re-issue loop
+// (Figure C34-6) simply finds nothing to re-issue. Visited pixels are kept by their
+// PHYSICAL location, so a fill that escapes a leaking outline wraps round the frame memory
+// as the chip's would and still ends. AREA suppress modes (x1x) bound the fill like an
+// edge; the stop modes (x01) end it at the first crossing. CP ends at the end point
+// (Figure C34-4): just past the last span painted.
+void Hd63484::paint(bool e) {
+    const int      bpp = bitsPerPixel();
+    const uint16_t fm  = (uint16_t)((1u << bpp) - 1);
+    const int      am  = (cmd_ >> 5) & 7;
+    std::vector<bool> seen((size_t)vram_.size() * 16);
+    const auto key = [&](int x, int y) {
+        uint32_t addr = 0;
+        int      shift = 0;
+        wordAddress(x, y, addr, shift);
+        return (size_t)(addr & vmask_) * 16 + (size_t)shift;
+    };
+    const auto fillable = [&](int x, int y) {
+        if (seen[key(x, y)]) return false;
+        if ((am & 3) >= 2) {                    // suppress outside (0x1x) / inside (1x1x)
+            const bool inside = x >= xmin_ && x <= xmax_ && y >= ymin_ && y <= ymax_;
+            if ((am & 4) ? inside : !inside) {
+                if ((am & 3) == 3) sr_ |= kARD;
+                return false;
+            }
+        }
+        uint32_t addr = 0;
+        int      shift = 0;
+        wordAddress(x, y, addr, shift);
+        const uint16_t v = (uint16_t)((vramRead(addr) >> shift) & fm);
+        const bool     edge = e ? v != ((edg_ >> shift) & fm) : v == ((edg_ >> shift) & fm);
+        return !edge && v != ((cl0_ >> shift) & fm) && v != ((cl1_ >> shift) & fm);
+    };
+
+    const int     x0 = cpx_, y0 = cpy_;
+    const uint8_t ppx0 = ppx_, pzcx0 = pzcx_, ppy0 = ppy_, pzcy0 = pzcy_;
+    std::vector<std::pair<int, int>> seeds{{x0, y0}};
+    while (!seeds.empty()) {
+        auto [x, y] = seeds.back();
+        seeds.pop_back();
+        if (!fillable(x, y)) continue;
+        // Claim the span as it is found, so one that wraps all the way round the frame
+        // memory meets its own start and stops.
+        seen[key(x, y)] = true;
+        int xl = x, xr = x;
+        while (fillable(xl - 1, y)) seen[key(--xl, y)] = true;
+        while (fillable(xr + 1, y)) seen[key(++xr, y)] = true;
+        for (int xi = xl; xi <= xr; ++xi) {
+            patternAt(xi - x0, y - y0, ppx0, pzcx0, ppy0, pzcy0);
+            drawPixel(xi, y);
+            if (stopped_) break;
+        }
+        if (stopped_) break;
+        cpx_ = (int16_t)(xr + 1);
+        cpy_ = (int16_t)y;
+        for (int ny : {y + 1, y - 1}) {
+            bool run = false;
+            for (int xi = xl; xi <= xr; ++xi) {
+                const bool f = fillable(xi, ny);
+                if (f && !run) seeds.push_back({xi, ny});
+                run = f;
+            }
+        }
+    }
+    ppx_ = ppx0; pzcx_ = pzcx0; ppy_ = ppy0; pzcy_ = pzcy0;
+}
+
+// PTN (manual PTN-1..9): the pattern RAM as a (SZx + 1) x (SZy + 1) pixel picture at CP.
+// Its rows run along SD x 45 degrees, counter-clockwise from +X; successive rows step 90
+// degrees further round -- or only 45, slanting it into a parallelogram, when SL = 1
+// (Table C36-1, read from the scan). A diagonal step is one pixel in X AND Y, so a
+// diagonal PTN leaves a pixel's gap between its neighbours (PTN-9). The pattern scans as
+// AFRCT's does -- every row from the pointer PTN found, PPY stepping per row -- and CP
+// ends one row past the last, at its start (Pe in Table C36-1).
+void Hd63484::drawPattern(int szx, int szy, int sd, bool sl) {
+    static constexpr int kDir[8][2] = {{1, 0}, {1, 1}, {0, 1}, {-1, 1}, {-1, 0}, {-1, -1}, {0, -1}, {1, -1}};
+    const int     fx = kDir[sd][0], fy = kDir[sd][1];
+    const int     sx = kDir[(sd + (sl ? 1 : 2)) & 7][0], sy = kDir[(sd + (sl ? 1 : 2)) & 7][1];
+    const uint8_t ppx0 = ppx_, pzcx0 = pzcx_;
+    for (int j = 0; j <= szy; ++j) {
+        ppx_  = ppx0;
+        pzcx_ = pzcx0;
+        for (int i = 0; i <= szx; ++i) {
+            drawPixel(cpx_ + i * fx + j * sx, cpy_ + i * fy + j * sy);
+            if (stopped_) return;
+        }
+        stepPatternY();
+    }
+    ppx_  = ppx0;
+    pzcx_ = pzcx0;
+    cpx_  = (int16_t)(cpx_ + (szy + 1) * sx);
+    cpy_  = (int16_t)(cpy_ + (szy + 1) * sy);
 }
 
 // AFRCT/RFRCT: the rectangle with CP and (x1, y1) as opposite corners, both included,

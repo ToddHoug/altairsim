@@ -735,6 +735,211 @@ void test_hd63484() {
         CHECK(g.c.cpx() == 2, "...not as a stray parameter: the stream stayed in step");
     }
 
+    SECTION("HD63484 -- PAINT E = 0: fill the closed area round CP up to the EDG color (PAINT-1/3)");
+    {
+        Rig g;
+        g.screen4bpp();
+        g.cmd(0x0801, {0x5555});                  // draw the outline in 5
+        g.cmd(0x9000, {10, 6});                   // ARCT (0,0)-(10,6)
+        g.cmd(0x0803, {0x5555});                  // EDG = 5
+        g.cmd(0x0800, {0xFFFF});                  // CL0 = CL1 = F: a solid fill
+        g.cmd(0x0801, {0xFFFF});
+        g.cmd(0x8000, {3, 3});
+        g.cmd(0xC800);                            // PAINT, E = 0
+        CHECK((g.sr() & 0xA4) == 0x20, "CED; no CER; RFR never set -- no seeds for the host to re-issue");
+        bool in = true, edge = true;
+        for (int y = 1; y <= 5; ++y)
+            for (int x = 1; x <= 9; ++x) in &= g.nib(x, y) == 0xF;
+        for (int x = 0; x <= 10; ++x) edge &= g.nib(x, 0) == 5 && g.nib(x, 6) == 5;
+        for (int y = 0; y <= 6; ++y) edge &= g.nib(0, y) == 5 && g.nib(10, y) == 5;
+        CHECK(in, "the whole inside is painted");
+        CHECK(edge, "the outline is left as it was");
+        CHECK(g.nib(11, 3) == 0 && g.nib(3, 7) == 0 && g.nib(3, -1) == 0, "and nothing outside it");
+        CHECK(g.c.cpx() == 10 && g.c.cpy() >= 1 && g.c.cpy() <= 5, "CP ends at Pe, just past the last span (Figure C34-4)");
+
+        Rig k;                                    // CP on the edge: nothing to paint
+        k.screen4bpp();
+        k.cmd(0x0801, {0x5555});
+        k.cmd(0x9000, {10, 6});
+        k.cmd(0x0803, {0x5555});
+        k.cmd(0xC800);
+        CHECK(k.nib(3, 3) == 0 && k.c.cpx() == 0 && (k.sr() & 0x20) != 0, "PAINT from an edge pixel paints nothing");
+    }
+
+    SECTION("HD63484 -- PAINT E = 1: the edge is every color EXCEPT EDG, so it fills a region OF that color");
+    {
+        Rig g;
+        g.screen4bpp();
+        g.cmd(0x0801, {0x3333});
+        g.cmd(0x8000, {10, 2});
+        g.cmd(0xC000, {20, 8});                   // a block of 3
+        g.cmd(0x0803, {0x3333});                  // EDG = 3
+        g.cmd(0x0800, {0xFFFF});
+        g.cmd(0x0801, {0xFFFF});
+        g.cmd(0x8000, {15, 5});
+        g.cmd(0xC900);                            // PAINT, E = 1
+        bool all = true;
+        for (int y = 2; y <= 8; ++y)
+            for (int x = 10; x <= 20; ++x) all &= g.nib(x, y) == 0xF;
+        CHECK(all, "the block of EDG color is painted");
+        CHECK(g.nib(9, 5) == 0 && g.nib(21, 5) == 0 && g.nib(15, 9) == 0 && g.nib(15, 1) == 0, "and stops at the other colors");
+    }
+
+    SECTION("HD63484 -- PAINT: CL0/CL1 count as edges; the pattern tiles from CP; AREA bounds a leak");
+    {
+        const auto box = [](Rig& g) {
+            g.screen4bpp();
+            g.cmd(0x0801, {0x5555});
+            g.cmd(0x9000, {10, 6});
+            g.cmd(0x0803, {0x5555});
+        };
+        Rig g;
+        box(g);
+        g.cmd(0x0801, {0xFFFF});
+        g.cmd(0x8000, {5, 1});
+        g.cmd(0x8800, {5, 6});                    // a wall of F -- the fill color -- across the inside
+        g.cmd(0x0800, {0xFFFF});
+        g.cmd(0x8000, {3, 3});
+        g.cmd(0xC800);
+        CHECK(g.nib(1, 1) == 0xF && g.nib(4, 5) == 0xF, "the left part is painted");
+        CHECK(g.nib(6, 3) == 0 && g.nib(9, 5) == 0,
+              "the right part is not: 'CL0 or CL1 are also considered to be an edge' (PAINT-1)");
+
+        Rig t;
+        box(t);
+        t.cmd(0x1800, {2, 0x0005});               // pattern row 0 = 0101
+        t.cmd(0x0807, {0x0010});                  // PEX = 1
+        t.cmd(0x0800, {0xAAAA});                  // CL0 = A, CL1 = F
+        t.cmd(0x0801, {0xFFFF});
+        t.cmd(0x8000, {4, 3});
+        t.cmd(0xC800);
+        CHECK(t.nib(4, 3) == 0xF && t.nib(5, 3) == 0xA && t.nib(3, 3) == 0xA && t.nib(2, 3) == 0xF,
+              "the pattern is anchored at CP, seamless both ways along a span");
+        CHECK(t.nib(4, 1) == 0xF && t.nib(9, 5) == 0xA, "on every row");
+        t.cmd(0x0C05);
+        CHECK(t.readWord() == 0x0000, "and the pattern pointer is left as PAINT found it");
+
+        Rig a;
+        box(a);
+        a.cmd(0x0801, {0x0000});
+        a.cmd(0x8000, {10, 3});
+        a.cmd(0xCC00);                            // knock a hole in the right side
+        a.cmd(0x0808, {0});                       // area x 0..20, y -2..10
+        a.cmd(0x080A, {20});
+        a.cmd(0x0809, {(uint16_t)-2});
+        a.cmd(0x080B, {10});
+        a.cmd(0x0800, {0xFFFF});
+        a.cmd(0x0801, {0xFFFF});
+        a.cmd(0x8000, {3, 3});
+        a.cmd(0xC840);                            // PAINT AREA 010: only inside the area
+        CHECK(a.nib(3, 3) == 0xF && a.nib(10, 3) == 0xF && a.nib(15, 3) == 0xF && a.nib(20, -2) == 0xF,
+              "the fill leaks out through the hole, as far as the area");
+        CHECK(a.nib(21, 3) == 0 && a.nib(15, 11) == 0, "and no further");
+        CHECK((a.sr() & 0x40) == 0, "AREA 010 says nothing");
+    }
+
+    SECTION("HD63484 -- PTN: the pattern RAM as a picture at CP (PTN-3..6: as is, shifted, cropped, tiled)");
+    {
+        // A 6 x 8 picture: row r of the pattern RAM, bit c. Nothing symmetric about it.
+        static const uint16_t rows[8] = {0x21, 0x12, 0x0C, 0x3F, 0x01, 0x2A, 0x15, 0x30};
+        const auto bit = [&](int c, int r) { return (rows[r] >> c) & 1; };
+        const auto rig = [&](Rig& g) {
+            g.screen4bpp();
+            g.cmd(0x1800, {16, rows[0], rows[1], rows[2], rows[3], rows[4], rows[5], rows[6], rows[7]});
+            g.cmd(0x0806, {0x0000});              // PS = (0,0)
+            g.cmd(0x0807, {0x7050});              // PE = (5,7), no zoom
+        };
+
+        Rig g;
+        rig(g);
+        g.cmd(0xD000, {0x0705});                  // PTN SD = 0, SZ = PE - PS (PTN-3: $0705)
+        bool ok = true;
+        for (int y = 0; y < 8; ++y)
+            for (int x = 0; x < 6; ++x) ok &= g.lit(x, y) == (bool)bit(x, y);
+        CHECK(ok, "PP = PS, SZ = PE - PS: the pattern exactly, bit 0 at CP, PTN0 at the bottom");
+        CHECK(!g.lit(6, 3) && !g.lit(0, 8), "no bigger than SZ");
+        CHECK(g.c.cpx() == 0 && g.c.cpy() == 8, "Pe: one row past the top, at its start");
+
+        Rig h;
+        rig(h);
+        h.cmd(0x0805, {0x3020});                  // PP = (2,3)
+        h.cmd(0xD000, {0x0705});
+        ok = true;
+        for (int y = 0; y < 8; ++y)
+            for (int x = 0; x < 6; ++x) ok &= h.lit(x, y) == (bool)bit((x + 2) % 6, (y + 3) % 8);
+        CHECK(ok, "PP != PS: the same pattern, rotated to start at PP (PTN-4)");
+
+        Rig c;
+        rig(c);
+        c.cmd(0xD000, {0x0403});                  // SZ < PE - PS (PTN-5: $0403)
+        ok = true;
+        for (int y = 0; y < 5; ++y)
+            for (int x = 0; x < 4; ++x) ok &= c.lit(x, y) == (bool)bit(x, y);
+        CHECK(ok && !c.lit(4, 3) && !c.lit(0, 5), "SZ smaller: cropped");
+
+        Rig t;
+        rig(t);
+        t.cmd(0xD000, {0x0F0B});                  // SZ > PE - PS (PTN-6: $0F0B)
+        ok = true;
+        for (int y = 0; y < 16; ++y)
+            for (int x = 0; x < 12; ++x) ok &= t.lit(x, y) == (bool)bit(x % 6, y % 8);
+        CHECK(ok, "SZ bigger: tiled");
+
+        Rig z;
+        rig(z);
+        z.cmd(0x0807, {0x7151});                  // PZX = PZY = 1 (PTN-7)
+        z.cmd(0xD000, {0x0F0B});
+        ok = true;
+        for (int y = 0; y < 16; ++y)
+            for (int x = 0; x < 12; ++x) ok &= z.lit(x, y) == (bool)bit((x / 2) % 6, (y / 2) % 8);
+        CHECK(ok, "zoomed x2 both ways");
+    }
+
+    SECTION("HD63484 -- PTN directions (Table C36-1): SL = 1 slants it, SD = 1 turns it 45 degrees, SD = 4 180");
+    {
+        static const uint16_t rows[8] = {0x21, 0x12, 0x0C, 0x3F, 0x01, 0x2A, 0x15, 0x30};
+        const auto bit = [&](int c, int r) { return (rows[r] >> c) & 1; };
+        const auto rig = [&](Rig& g) {
+            g.screen4bpp();
+            g.cmd(0x1800, {16, rows[0], rows[1], rows[2], rows[3], rows[4], rows[5], rows[6], rows[7]});
+            g.cmd(0x0806, {0x0000});
+            g.cmd(0x0807, {0x7050});
+        };
+
+        Rig s;
+        rig(s);
+        s.cmd(0xD800, {0x0705});                  // SL = 1, SD = 0 (PTN-8: $D8XX)
+        bool ok = true;
+        for (int j = 0; j < 8; ++j)
+            for (int i = 0; i < 6; ++i) ok &= s.lit(i + j, j) == (bool)bit(i, j);
+        CHECK(ok, "SL = 1: rows along X, each row one pixel further right -- a 45-degree parallelogram");
+        CHECK(s.c.cpx() == 8 && s.c.cpy() == 8, "Pe up the slant");
+
+        Rig d;
+        rig(d);
+        d.cmd(0x8000, {10, 0});
+        d.cmd(0xD100, {0x0705});                  // SD = 1 (PTN-9: $D1XX)
+        ok = true;
+        bool gaps = true;
+        for (int j = 0; j < 8; ++j)
+            for (int i = 0; i < 6; ++i) ok &= d.lit(10 + i - j, i + j) == (bool)bit(i, j);
+        for (int y = 0; y <= 13; ++y)
+            for (int x = 0; x < 20; ++x)
+                if (((x - 10 + y) & 1) && d.lit(x, y)) gaps = false;
+        CHECK(ok, "SD = 1: rows up and right at 45 degrees, successive rows up and LEFT");
+        CHECK(gaps, "a diagonal step is one pixel in X and Y: every other pixel is a gap");
+        CHECK(d.c.cpx() == 2 && d.c.cpy() == 8, "Pe eight diagonal steps up-left");
+
+        Rig r;
+        rig(r);
+        r.cmd(0x8000, {20, 10});
+        r.cmd(0xD400, {0x0705});                  // SD = 4: rows leftward, successive rows DOWN
+        ok = true;
+        for (int j = 0; j < 8; ++j)
+            for (int i = 0; i < 6; ++i) ok &= r.lit(20 - i, 10 - j) == (bool)bit(i, j);
+        CHECK(ok && r.c.cpx() == 20 && r.c.cpy() == 2, "SD = 4: the picture turned 180 degrees, Pe below CP");
+    }
+
     SECTION("HD63484 -- CRCL: from (A+r, B) once round, the start drawn once, CP back at the center (CRCL-1/2)");
     {
         Rig g;

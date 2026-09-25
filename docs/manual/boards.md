@@ -988,8 +988,7 @@ board is currently asserting an interrupt), alongside the straps: `port` (the wh
 base), `mode`, `width` and `interrupt` — where the board's IRQ\* line lands, `none` by default or
 one of the S-100 interrupt lines, matching the configuration switch's eighth position on the real
 card. Frame memory is fixed at 2 MB and is not a strap. The `cadzilla` machine is the bare board
-with a console to type at. The ACRTC's paint, pattern and graphic-copy commands are recognized but
-not yet drawn; the board says so in its status register, and the
+with a console to type at. The ACRTC's graphic-copy commands are recognized but not yet drawn; the board says so in its status register, and the
 Developer Guide lists exactly what is modeled.
 
 ---
