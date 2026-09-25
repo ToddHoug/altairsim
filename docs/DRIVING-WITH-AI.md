@@ -170,7 +170,7 @@ reading and writing memory, the ROMs, reset — is a `board_*`, `bus_*` or `mem_
 
 | Tool | Args | Does |
 |---|---|---|
-| `run` | `from?`, `input?`, `until?`, `timeout_ms?` (2000, max 600000), `max_steps?` | Type `input`, advance the guest, return what it printed. Stops on `until` match, a **prompt** (guest idle on console input), `timeout_ms`, `max_steps`, HLT, a breakpoint, or a cancel of the request (`notifications/cancelled`) or a ^C sent to the altairsim process (both give `stopped: "interrupted"`) — see `stopped`. `timeout_ms` is a ceiling, not a wait: the call returns as soon as one of the others fires. `from` sets PC first (that is how you boot). **Never blocks.** |
+| `run` | `from?`, `input?`, `until?`, `timeout_ms?` (2000, max 600000), `max_steps?` | Type `input`, advance the guest, return what it printed. Stops on `until` match, a **prompt** (guest idle on console input), `timeout_ms`, `max_steps`, HLT, a breakpoint, a port no board decodes under `SET BUS UNCLAIMED=HALT` (`unclaimed`), a `BREAK TAPE STOP` (`tape-stop`), or a cancel of the request (`notifications/cancelled`) or a ^C sent to the altairsim process (both give `stopped: "interrupted"`) — see `stopped`. `timeout_ms` is a ceiling, not a wait: the call returns as soon as one of the others fires. `from` sets PC first (that is how you boot). Bus and board messages from the run, such as a `SET BUS UNCLAIMED=WARN` line, come back in `warnings`. **Never blocks.** |
 | `send` | `text` | Type at the console without running. |
 | `recv` | — | Drain output since last read, without running. |
 | `regs` | — | CPU registers now (`pc`, `halted`, `registers{}`). |
@@ -227,8 +227,10 @@ long job forward. Set it to the worst case you are willing to sit through and le
 the call. The maximum is 600000 (ten minutes); anything larger is clamped to it.
 
 **`from` is a JSON number, and JSON has no hex.** Write the decimal value: `65280` for `FF00`,
-`64512` for `FC00`, `63488` for `F800`. A string such as `"0xFF00"` is not a number, and today it
-is silently ignored, so the run starts wherever the PC was (#579).
+`64512` for `FC00`, `63488` for `F800`. A string such as `"0xFF00"` is not a number, so the server
+refuses the call and tells you the number to send: `` `from` must be a JSON number, not a string:
+"0xFF00" is 65280 ``. Every tool checks its arguments this way, so a wrong type or a missing
+required argument is an error, and never a silent 0.
 
 ### Stopping a `run` early, and `status`
 
