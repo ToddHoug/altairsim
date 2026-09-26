@@ -564,6 +564,65 @@ if(hit LESS 0)
                       "  'ALTAIRSIM 8800' is not in the out: sink.\n--- sink ---\n${printed}")
 endif()
 
+# ---- 8. CADZILLA -- drawdemo under CP/M, off the example's own floppy. ------------------
+#
+# examples/cadzilla boots CP/M from cpm22b23-56k-drawdemo.dsk and the reader types DRAWDEMO.
+# Driven over --mcp, not piped keys: drawdemo waits for a key between screens, and a key that
+# arrives while it is still printing is taken by the BDOS's ^S check and lost (it prints with
+# function 9 and reads with function 6) -- so each key must wait for the whole prompt, which
+# only `until` can do. MCP does not run the machine file's startup, so the boot is `from` FF00.
+#
+# What it proves: the disk boots and carries the program (a machine that merely started gets
+# no banner), drawdemo started the board at 1024x768 with the wiring right (SHOW cad0 -- a
+# program that never touched the ACRTC leaves the video off), and ESC takes it back to A>.
+file(COPY "${SRC}/examples/cadzilla" DESTINATION "${dist}/examples")
+set(cz "${dist}/examples/cadzilla")
+
+file(WRITE "${dist}/drawdemo.jsonl" [=[
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"examples","version":"1"}}}
+{"jsonrpc":"2.0","method":"notifications/initialized"}
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"run","arguments":{"from":65280,"until":"A>","timeout_ms":30000}}}
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"run","arguments":{"input":"DRAWDEMO\r","until":"quits)... ","timeout_ms":30000}}}
+{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"run","arguments":{"input":" ","until":"quits)... ","timeout_ms":30000}}}
+{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"monitor","arguments":{"command":"SHOW cad0"}}}
+{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"monitor","arguments":{"command":"SHOW cpu0"}}}
+{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"run","arguments":{"input":"\u001b","until":"A>","timeout_ms":30000}}}
+]=])
+
+function(expect_drawdemo toml wants)
+  execute_process(
+    COMMAND           "${SIM}" ${toml} --mcp
+    WORKING_DIRECTORY "${cz}"
+    INPUT_FILE        "${dist}/drawdemo.jsonl"
+    OUTPUT_VARIABLE   out
+    ERROR_VARIABLE    err
+    TIMEOUT           60
+  )
+  foreach(want "CADzilla drawdemo: the ACRTC drawing commands, 1024x768"
+               " 1/21  DOT"
+               " 2/21  ALINE"
+               "video            on"
+               "picture          1024x768 at (0,0)"
+               "wiring           ok"
+               "drawdemo done."
+               ${wants})
+    string(FIND "${out}" "${want}" hit)
+    if(hit LESS 0)
+      message(FATAL_ERROR "examples: `altairsim ${toml} --mcp` did not run drawdemo as the README says.\n"
+                          "  '${want}' never came back.\n--- stdout ---\n${out}\n--- stderr ---\n${err}")
+    endif()
+  endforeach()
+  string(FIND "${out}" "ACRTC command error" hit)
+  if(hit GREATER_EQUAL 0)
+    message(FATAL_ERROR "examples: drawdemo reported an ACRTC command error under ${toml}.\n--- stdout ---\n${out}")
+  endif()
+endfunction()
+
+# The full-speed machine, and the real-speed one beside it. drawdemo-real.toml names
+# `base = "drawdemo.toml"`, so this also proves a relative base resolves in the copied folder.
+expect_drawdemo(drawdemo.toml      "draw_rate        full;clock_hz         0 ")
+expect_drawdemo(drawdemo-real.toml "draw_rate        real;clock_hz         2000000")
+
 file(REMOVE_RECURSE "${dist}")
 message(STATUS "examples: the shipped examples boot from their own directory, and a typed "
                "path still means the shell's.")

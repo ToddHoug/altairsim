@@ -1,0 +1,78 @@
+# CADzilla's drawing demo under CP/M 2.2, at full speed.
+#
+#     cd examples/cadzilla && altairsim drawdemo.toml
+#
+# It boots straight to A> off the 8" floppy beside this file. Type DRAWDEMO: a window opens
+# and the program steps through every drawing command of the board's HD63484 ACRTC, one
+# screen per command, 21 screens in all. Each screen is described on the console. Press any
+# key for the next screen (in the window or at the terminal), ESC or ^C to stop. ^E (STOP)
+# takes the keyboard back to the monitor at any point; RUN resumes.
+#
+# FULL SPEED. The processor runs flat out and every ACRTC command is done the moment it
+# lands, so each screen appears at once. drawdemo-real.toml is the same machine at the speed
+# of the real hardware -- a 2 MHz 8080 and the ACRTC's data-sheet drawing times.
+#
+# THE MACHINE is the built-in `cadzilla` bench (machines/cadzilla.toml: front panel, 8080,
+# 2SIO console at 10, the board at 70-77, an empty 88-DCDD at 08, the host bridge at B0,
+# 56K of RAM) plus exactly what makes it boot CP/M. THE PATHS ARE RELATIVE TO THIS FILE, so
+# the folder boots wherever it is copied to.
+#
+# THE DISK is cpm22b23-56k.dsk from examples/cpm, with MBASIC and the BASIC programs taken
+# off to make room for DRAWDEMO.COM (make-drawdemo-disk.sh is the recipe). ASM, LOAD, DDT,
+# M80/L80 and the host-bridge R/W/HDIR are all still on it. Drive 0 is read/write: there is
+# no undo, so copy the image first if you are about to test writes.
+
+[machine]
+name    = "drawdemo"
+base    = "cadzilla"
+startup = ["RUN FF00"]        # EXAMINE FF00 / RUN on a real disk Altair: the DBL boot PROM
+
+# THE BACKSPACE KEY. A modern terminal sends DEL (7F); CP/M's line editor wants BS (08).
+[console]
+bsdel = "bs"
+
+# THE WINDOW comes to the front when it opens, and keys typed in it go to the console as
+# well as the terminal's -- so "press any key" works while you look at the picture.
+[display]
+focus    = true
+keyboard = "console"
+
+# THE PROCESSOR, flat out. Stated here rather than inherited, because it is what makes
+# this file the full-speed one.
+[[board]]
+id       = "cpu0"
+clock_hz = 0
+
+# THE BOARD. drawdemo programs the ACRTC for 1024x768, so the monitor must be strapped for
+# 1024x768 too -- stated, not inherited. draw_rate = "full": each command is done at once.
+[[board]]
+id        = "cad0"
+mode      = "1024x768"
+draw_rate = "full"
+
+# THE DISK, in drive 0 of the base's own 88-DCDD at 08 (the port the boot PROM and the
+# CP/M BIOS are wired to).
+[[board]]
+id = "dsk0"
+
+  [[board.drive]]
+  unit  = 0
+  mount = "cpm22b23-56k-drawdemo.dsk"
+
+# MEMORY, REPLACED. The base has 56K of plain RAM and no boot PROM. This CP/M was built for
+# 56K (0000-DFFF) and boots from the DBL PROM at FF00. `type` with the base's id replaces the
+# board outright, so the RAM region is stated again. cad0 decodes no memory at all.
+[[board]]
+type = "memory"
+id   = "mem0"
+fill = "random"               # real static RAM does not come up zeroed
+
+  [[board.region]]
+  type = "ram"
+  at   = 0000
+  size = "56K"
+
+  [[board.region]]
+  type  = "rom"
+  at    = FF00
+  mount = "builtin:dbl"
