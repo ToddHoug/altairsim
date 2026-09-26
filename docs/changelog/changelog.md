@@ -50,6 +50,15 @@ clock is the monitor's pixel clock divided by 8 (single access) or 4 (interleave
 sensitive to time. The setting does not depend on the CPU's `clock_hz`. Snapshots from an earlier
 build do not load in this one.
 
+### The CADzilla example ships
+
+`examples/cadzilla/` runs **drawdemo** under CP/M 2.2 on an 8" floppy. Boot it, type `DRAWDEMO`,
+and a 1024x768 window steps through every drawing command of the ACRTC, one screen for each
+command, 21 screens in all. `drawdemo.toml` draws at full speed. `drawdemo-real.toml` is the
+same machine with a 2 MHz 8080 and `draw_rate = "real"`, so each screen takes the time it takes
+on the real board. The disk is the CP/M disk from `examples/cpm` with `MBASIC` and its BASIC
+programs removed to make room.
+
 ### A new board: the FDC+ serial drive
 
 The new `fdcplus` board is the FarmTek FDC+ in its serial drive mode (drive types 6 and 7). A
