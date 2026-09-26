@@ -1,9 +1,9 @@
-# An HD63484 ACRTC graphics board with a Bt453 RAMDAC in an Altair -- the bench for cadzilla.
+# An HD63484 ACRTC graphics board with a Bt453 RAMDAC in an Altair -- the bench for CADzilla.
 #
-# The board is our own design (docs/boards/cadzilla.md), built from two real mid-1980s chips,
-# on a fixed VESA monitor (`mode`, one of the three primary VESA resolutions -- 640x480,
-# 800x600 or 1024x768 -- selectable right here in the machine file, or with `SET cad0
-# mode=...` at the prompt; 1024x768 here, the board's own default). It is wired for 8 bits
+# The board is a new custom product based on period components (docs/boards/cadzilla.md):
+# two real mid-1980s chips, on a fixed VESA monitor (`mode`, one of the three primary VESA
+# resolutions -- 640x480, 800x600 or 1024x768 -- selectable right here in the machine file,
+# or with `SET cad0 mode=...` at the prompt; 1024x768 here, the board's own default). It is wired for 8 bits
 # per pixel and an address increment of 8 words per display cycle; the register values for
 # every mode are in the board's reference. One 8-port I/O block: `port`/`port+2` the ACRTC
 # (RS=0/RS=1 -- NOT adjacent), `port+1` the board's own MODE register (single vs. interleaved
@@ -36,7 +36,7 @@
 # board; in a headless build the machine runs identically and draws nothing.
 #
 # THE REST OF THE MACHINE is our own development bench, not period software's: the same
-# front panel, disk controller (empty) and host bridge as `default.toml`, so cadzilla can be
+# front panel, disk controller (empty) and host bridge as `default.toml`, so CADzilla can be
 # developed and tested alongside a realistic supporting complement -- moving a test program in
 # with the host bridge, say, or exercising the board next to a disk controller that also
 # decodes I/O -- without dragging in DBL or a boot disk this board has no use for.
@@ -89,7 +89,7 @@ draw_rate = "full"
 
 # THE FLOPPY CONTROLLER -- an 88-DCDD at 0x08, four drives, no disks: the same honest empty
 # default as `default.toml`. Nothing in this machine boots from it; it is here so the bench
-# has a realistic disk controller decoding I/O alongside cadzilla's own ports.
+# has a realistic disk controller decoding I/O alongside CADzilla's own ports.
 [[board]]
 type   = "dcdd"
 id     = "dsk0"

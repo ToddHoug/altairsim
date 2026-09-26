@@ -10,8 +10,8 @@ as it is now; this document is the record of how it got there.
 
 ### `cadzilla` — an HD63484 ACRTC graphics board, and a way to prove a picture
 
-A new video board of our own design: Hitachi's **HD63484 ACRTC** — a CRT controller with a drawing
-processor and its own frame memory — and Brooktree's **Bt453** 256-entry color look-up table, on six
+A new video board, a new custom product based on period components: Hitachi's **HD63484
+ACRTC** — a CRT controller with a drawing processor and its own frame memory — and Brooktree's **Bt453** 256-entry color look-up table, on six
 I/O ports and no memory. The CPU draws by command through the ACRTC's FIFO (lines, rectangles,
 polylines, circles, ellipses, arcs, filled rectangles, area paint, patterns, dots, block clears,
 block and graphic copies and word transfers -- every command the chip has, in every operation,

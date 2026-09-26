@@ -1,7 +1,7 @@
 #pragma once
 //
 // Brooktree Bt453 -- a 256 x 24 color-palette RAMDAC. A CHIP, NOT A CARD, exactly as
-// the FD1771 and the 8257 next door are. The cadzilla video board has one between its
+// the FD1771 and the 8257 next door are. The CADzilla video board has one between its
 // ACRTC and the monitor; the next board that turns up with a Bt453 gets it for free.
 // Modeled from the Brooktree data sheet (reference/Brooktree Bt453 RAMDAC.md), NOT from
 // any one program that loads it.

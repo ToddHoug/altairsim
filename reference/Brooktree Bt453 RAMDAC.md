@@ -6,7 +6,7 @@ Brooktree Corporation, *Bt453 66 MHz Monolithic CMOS 256 x 24 Color Palette RAMD
 (4-3 … 4-11). Scanned image, no text layer — read as page images. The same part appears in the
 *1991 Brooktree Product Databook* and the *1990 Graphics and Image Products Application
 Handbook* (both on bitsavers). This is the emulation reference for `src/chips/bt453.{h,cpp}`,
-the color look-up table on the `cadzilla` video board (`docs/boards/cadzilla.md`).
+the color look-up table on the CADzilla video board (`docs/boards/cadzilla.md`).
 
 The Bt453 is a **256-entry, 24-bit color look-up table with three 8-bit video D/A converters
 on one chip**. Eight pixel inputs (P0–P7) select one of the 256 entries every pixel clock;

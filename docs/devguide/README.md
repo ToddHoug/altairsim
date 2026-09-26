@@ -14,7 +14,7 @@ board without the source in front of you.
 | [Building it](building.md) | Build, test, and the doc targets. |
 | [Theory of operation](theory.md) | The bus, boards, memory, I/O, interrupts and reset. |
 | [Writing a board](adding-a-board.md) | A board at port FFh, end to end — and it compiles. |
-| [Writing a video board](video-board.md) | The nine questions, the three gates, the one `acquire()` call, and proving a picture with no window. cadzilla is the example. |
+| [Writing a video board](video-board.md) | The nine questions, the three gates, the one `acquire()` call, and proving a picture with no window. CADzilla is the example. |
 | [Assembling a ROM](assembling-roms.md) | Turning a period `.ASM` listing into a built-in `.HEX` with M80/L80 inside the simulator. |
 | [Review comments](doc-review-comments.md) | Leaving `@claude` notes on a document and having them applied to the master. |
 

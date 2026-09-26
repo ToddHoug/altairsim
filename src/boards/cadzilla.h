@@ -1,7 +1,7 @@
 #pragma once
 //
-// cadzilla -- an HD63484 ACRTC graphics board with a Bt453 RAMDAC. A board of Todd's own
-// design (2026); see docs/boards/cadzilla.md.
+// CADzilla -- an HD63484 ACRTC graphics board with a Bt453 RAMDAC. A new custom product
+// based on period components (2026); see docs/boards/cadzilla.md.
 //
 // TWO CHIPS ON SIX I/O PORTS, AND A FRAME MEMORY THE CPU NEVER SEES.
 //
@@ -11,7 +11,8 @@
 //                        not a chip register; see MODE REGISTER below
 //                BASE+2  ACRTC RS=1 (the 16-bit register the address names, one byte per
 //                        cycle, or the command FIFOs)
-//                BASE+3  not decoded -- nobody answers it
+//                BASE+3  the high byte of a 16-bit Command/FIFO transfer on the real
+//                        card (SW1-7) -- an 8080/Z80 never makes one, so nothing answers
 //                BASE+4..+7  Bt453 by C1C0 -- address register, color palette RAM, address
 //                        register again, overlay registers -- all read/write
 //              The ACRTC's own RS=0/RS=1 pair is therefore NOT adjacent on this board --
