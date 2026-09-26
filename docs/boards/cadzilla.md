@@ -1,4 +1,4 @@
-# cadzilla — an HD63484 ACRTC graphics board with a Bt453 RAMDAC
+# CADzilla — an HD63484 ACRTC graphics board with a Bt453 RAMDAC
 
 **Status:** milestone 1 — registers, FIFOs, a drawing subset, scan-out through the LUT into a
 fixed VESA monitor. Built 2026-09-18; the monitor model and the 8 bpp / GAI +8 wiring added
@@ -10,36 +10,32 @@ to 1024x768, 2026-09-24.
 
 ## The real hardware
 
-There is no period product called cadzilla: it is a board of **Todd's own design**, assembled
-from two real chips of the mid 1980s the way a CAD-station card of that era was.
+CADzilla is **a new custom product based on period components**, not a period product. It is
+based on two vintage chips of the mid 1980s the way a CAD-station card of that era was.
 
 - **Hitachi HD63484 ACRTC** (Advanced CRT Controller, 1984). A CRT controller with a
   microcoded *drawing processor* and its own frame-buffer interface: up to 2 MB of memory on the
-  card that the host never addresses — cadzilla fits 2 MB of **SRAM**, which needs no refresh
-  cycles at all (a real design choice this board makes; the chip itself also supports DRAM with
-  refresh addressing, which cadzilla has no use for). The host sets ~30 timing and display
-  registers, then draws by writing 16-bit *commands* into an 8-word FIFO — move, line, rectangle,
+  card that the host never addresses — CADzilla fits 2 MB of **SRAM**. The host sets ~30
+  timing and display registers, then draws by writing 16-bit *commands* into an 8-word FIFO — move, line, rectangle,
   polyline, polygon, circle, ellipse, arc, paint, pattern, copy — in logical X-Y pixel coordinates
   at 1, 2, 4, 8 or 16 bits per pixel. Four logical screens (upper, base, lower, window), zoom,
-  cursors, a light pen, DMA to the host. Interfaces as an 8- or 16-bit peripheral occupying **two
+  cursors, a light pen, DMA to the host. Interfaces as an 8- or 16-bit peripheral occupying **two I/O
   locations**, selected by its RS pin.
 - **Brooktree Bt453** (1986). A 256 × 24 color-palette RAM with three 8-bit video DACs. Eight
-  pixel inputs (P0–P7) select an entry every pixel clock; three overlay registers on two more
-  inputs; an 8-bit MPU port with two command inputs, so it occupies **four locations**.
+  pixel inputs (P0–P7) select one of its 256 entries, each set to any of 16.7M colors; an 8-bit
+  MPU port with two command inputs, so it occupies **four I/O locations**.
 
-The board's own decisions, which no chip made — and every one of them is visible from the bus:
+Board design decisions:
 
-| Decision | cadzilla |
+| Decision | CADzilla |
 |---|---|
 | ACRTC bus mode | 8-bit (DACK\* strapped at reset via SW1-6 held Off), the only mode an S-100 8080/Z80 can use |
-| **I/O map** | ONE 8-port block from `port` (default `0x70`, a multiple of 8): `+0` the ACRTC's RS=0, `+1` the board's own **MODE register** (write-only), `+2` the ACRTC's RS=1, `+3` undecoded, `+4`..`+7` the Bt453. The ACRTC's own two ports are **not adjacent** — MODE sits between them. There is no separate DAC strap — the RAMDAC always sits four ports above `port` |
+| **I/O map** | ONE 8-port block from `port` (default `0x70`, a multiple of 8): `+0` the ACRTC's address/status register RS=0, `+1` the board's own **MODE register** (write-only), `+2` the ACRTC's Command/FIFO low data lane RS=1 (in 8-bit mode both bytes of a word pass through it, high byte first), `+3` upper byte of 16 bit Command/FIFO in 16 bit mode, `+4`..`+7` the Bt453. The ACRTC's address/status port utilizes only the lower byte, and will never support a 16 bit transfer. This allows the MODE register to occupy `+1`, leaving `+2` for 8 bit Data/FIFO access, and `+2` and `+3` for 16 bit access. An 8080 or Z80 makes only 8-bit I/O cycles, so here `+3` is never used and nothing answers it |
 | **MODE register** (`port+1`, write-only) | the board's own glue-logic strap, not a register on either chip: `HSPOL`/`VSPOL` sync polarity, `AMODE` the access mode the board's *own* fetch logic runs (single/interleaved — must agree with the ACRTC's own OMR ACM bit, or `wiring` says so), `OLEN` overlay enable (TBD, wired to nothing). Bit layout below |
 | **Shift register** | wired for **8 bits per pixel and 8 words per display fetch**: each display cycle the board fetches eight consecutive words (128 bits) at the address the ACRTC puts on MAD and shifts them out as sixteen 8-bit pixels, low byte of the low word first. This is a hardware fact, not a register — see *Programming model* below |
 | **Monitor** | a fixed-frequency VESA display chosen by the `mode` strap: the three primary VESA resolutions -- **640x480, 800x600, 1024x768 (default)** -- settable in the machine file or with `SET`. The frame is always the mode's size; the ACRTC's picture is placed in it by HDS/VDS against the mode's porches |
 | **Access modes** | single and interleaved, selected by **MODE AMODE** (not read from the ACRTC's own OMR ACM bit — the two are independent straps a driver must set in agreement). Superimposed is not wired |
-| **Frame memory** | **fixed at 2 MB of SRAM** — the reference design's own fit, the full 1 M words the ACRTC addresses. Not a strap: the real card has no jumper for it, and needs none, since it never refreshes |
-| Pixel bus to the DAC | P0–P7 from the shift register; the Bt453 sees exactly the byte the frame memory holds |
-| Overlay inputs | OL0, OL1 tied low regardless of OLEN: the overlay registers can be loaded but nothing selects them yet |
+| **Frame memory** | **fixed at 2 MB of SRAM** — the reference design's own fit, the full 1 M words the ACRTC addresses. |
 | **IRQ\*** | strapped by `interrupt` (SW1-8): `none` (default, SW1-8 Off) disconnects it; `int` or `vi0`..`vi7` (SW1-8 On) raises that S-100 line whenever `acrtc_.irq()` — an enabled SR flag — is true |
 | **2CLK** | the ACRTC's clock comes from the monitor's pixel clock (PCLK, the VESA rate of `mode`): **PCLK/8 in single access mode, PCLK/4 in interleaved**, selected by MODE `AMODE`. A memory cycle is then 16 pixels single and 8 interleaved |
 | **Drawing time** | the `draw_rate` strap: `full` (default) draws in no time; `real` gives each command its data-sheet time — see *Drawing time* below |
@@ -181,7 +177,7 @@ never addresses it directly; see *The real hardware* above.
 | `BASE+0` | **Address register (AR)**: which control register `BASE+2` reaches (`r00`–`rFF`) | **Status register (SR)**: `CER ARD CED LPD RFF RFR WFR WFE` (D7..D0) |
 | `BASE+1` | **MODE register**: `HSPOL`(0) `VSPOL`(1) `AMODE`(2) `OLEN`(3), bits 4–7 unused. Write-only | floats — MODE cannot be read back |
 | `BASE+2` | the control register AR names, **one byte**: even AR = high byte, odd AR = low byte. AR = 0/1: a **command word into the write FIFO**, high byte then low | the same register's byte; AR = 0/1: the next byte **out of the read FIFO**, high then low |
-| `BASE+3` | — not decoded — | — not decoded — |
+| `BASE+3` | High byte of the Command/FIFO word write if 16 bit I/O is requested and enabled, AR = 0. Never on an 8080/Z80: not decoded here | High byte of the Command/FIFO word read if 16 bit I/O is requested and enabled, AR = 0. Never on an 8080/Z80: not decoded here |
 | `BASE+4` | Bt453 address register (which LUT entry the next R,G,B cycles touch); resets the color phase to red | the address register |
 | `BASE+5` | color palette RAM: red, then green, then blue; the entry is written on the blue cycle and the address increments | R, G, B of the entry, one per read; increments after blue |
 | `BASE+6` | the address register again (an alias; there is no separate read-mode register on this part) | the address register |
@@ -189,7 +185,10 @@ never addresses it directly; see *The real hardware* above.
 
 The ACRTC's own RS=0/RS=1 pair is deliberately **not adjacent**: MODE sits between them at
 `BASE+1`, reflecting a real address-bit decode (A1 is the ACRTC's RS pin, A0 within the low
-half of the block picks MODE vs. the ACRTC), not an accident of layout.
+half of the block picks MODE vs. the ACRTC), not an accident of layout. The ACRTC's
+address/status port utilizes only the lower byte, and will never support a 16 bit transfer. This
+allows the MODE register to occupy `+1`, leaving `+2` for 8 bit Data/FIFO access, and `+2` and
+`+3` for 16 bit access.
 
 **Status register.** `WFE` write FIFO empty (up to 8 words may be written), `WFR` write FIFO
 not full (one word may), `RFR` read FIFO has a word, `RFF` read FIFO full, `CED` command end —
@@ -239,8 +238,9 @@ and the same three for *inside*).
 ## How it is simulated
 
 - **Bus cycles decoded**: `IN`/`OUT` on `port` and `port+2` (the ACRTC's RS=0/RS=1); `OUT`
-  only on `port+1` (MODE); `IN`/`OUT` on `port+4`..`port+7` (the Bt453). `port+3` answers
-  nothing. No memory.
+  only on `port+1` (MODE); `IN`/`OUT` on `port+4`..`port+7` (the Bt453). `port+3`, the high
+  byte of a 16-bit transfer, answers nothing: an 8080 or Z80 makes only 8-bit I/O cycles. No
+  memory.
 - **Two chips, no bus-level timing**: `Hd63484` (`src/chips/hd63484.h`) and `Bt453`
   (`src/chips/bt453.h`) hold all the state; the board forwards RS = A0 to one and C1C0 = A1A0
   to the other. A drawing command executes **at the instant its last parameter lands** — at
@@ -318,7 +318,7 @@ and the same three for *inside*).
 | DRD/DWT/DMOD with **negative AX/AY** walk the block the way CLR does: leftward, and down in Y (up in memory) (DRD-2, DWT-2) | a bottom-up block transfer is rejected, or lands mirrored |
 | The shift register is 8 bpp × 8 words whatever CCR/OMR say: a wrong GBM packs pixels the board will not unpack, a wrong GAI makes each fetch overlap the last | an off-spec program shows a coherent picture here and garbage on the card, or the reverse |
 | **MODE AMODE, not OMR ACM, governs the board's own fetch pattern** — the two are independent straps a driver must agree, and only `wiring` compares them | a driver that sets the ACRTC to interleaved but forgets `port+1` gets a SINGLE-access picture out of doubled registers: half the frame, or a picture that never fills |
-| MODE (`port+1`) is write-only and the ACRTC's own two ports are not adjacent — `port+3` is a gap, not a register | a driver probing the block with `IN` for a live register at `+1` or `+3` finds nothing, correctly; one that assumes RS=0/RS=1 are back to back writes its FIFO data to MODE instead |
+| MODE (`port+1`) is write-only and the ACRTC's own two ports are not adjacent — `port+3` is only the high byte of a 16-bit transfer, which an 8-bit host never makes | a driver probing the block with `IN` for a live register at `+1` or `+3` finds nothing, correctly; one that assumes RS=0/RS=1 are back to back writes its FIFO data to MODE instead |
 | In interleaved mode every horizontal register is in doubled units and a memory cycle is 8 frame pixels | the picture is half as wide as intended, or the timing is off by half a line |
 | The picture is placed by HDS/VDS against the mode's porches; the frame does not grow to fit | a program that lands one cycle early is clipped, not shifted |
 | A Bt453 address-register **write** resets the R/G/B phase; a **read** does not; both `DAC+0` and `DAC+2` are the same register; the address increments after the blue cycle and wraps `$FF` → `$00` | colors land one channel out of phase, or a Bt458 driver's "read mask" write moves the address |
@@ -372,7 +372,7 @@ drawing priority, static RAM, interleaved, a command wrapping whole frames, a st
 a snapshot taken mid-command.
 `tests/test_cadzilla.cpp` proves the board: the one-8-port-block decode (both directions on
 the ACRTC's RS=0/RS=1 pair at `+0`/`+2` and the Bt453 at `+4`..`+7`, write-only on MODE at
-`+1`, nothing at the `+3` gap), the MODE register's four fields decoding independently into
+`+1`, nothing at `+3`, the 16-bit high byte an 8-bit host never uses), the MODE register's four fields decoding independently into
 live status, the ports reaching the chips, and an **end-to-end 640x480 picture** — LUT loaded
 through the four DAC ports, a rectangle, a line and a dot drawn through the two ACRTC ports,
 the frame read back with `CHECK_FRAME_OPTS` sampled every 32nd pixel for a reader and

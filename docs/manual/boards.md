@@ -193,7 +193,7 @@ The boards are in groups, in the same order as the sections below.
 | `vdm1` | Processor Technology VDM-1: memory-mapped video. Needs a display |
 | `dazzler` | Cromemco Dazzler: color graphics. Needs a display |
 | `vdb8024` | SD Systems VDB-8024: an 80×24 video terminal on one board. Needs a display |
-| `cadzilla` | cadzilla: an HD63484 ACRTC graphics board with a Bt453 color table. Needs a display |
+| `cadzilla` | CADzilla: an HD63484 ACRTC graphics board with a Bt453 color table. Needs a display |
 | `sol` | Processor Technology Sol-PC: the onboard I/O of the Sol-20, on one board |
 
 **Interrupts and the clock**
@@ -1199,12 +1199,12 @@ board, for you to build on. A 64×64 picture is very small, so the board's `widt
 
 ### `cadzilla`: an HD63484 ACRTC graphics board
 
-This board is **our own design**, not a period product. It uses two real chips from the middle
-of the 1980s. The **Hitachi HD63484 ACRTC** is a CRT controller with a *drawing processor* and up
-to one megaword of its own frame memory. The **Brooktree Bt453** is a color table of 256 entries,
-with three video DACs on one chip.
+This board is **a new custom product based on period components**, not a period product. It
+uses two real chips from the middle of the 1980s. The **Hitachi HD63484 ACRTC** is a CRT
+controller with a *drawing processor* and up to one megaword of its own frame memory. The
+**Brooktree Bt453** is a color table of 256 entries, with three video DACs on one chip.
 
-The VDM-1 and the Dazzler show a picture from the machine's RAM. The cadzilla board keeps its
+The VDM-1 and the Dazzler show a picture from the machine's RAM. The CADzilla board keeps its
 picture in its own memory, and the processor never addresses a pixel. The guest **draws with
 commands**, for example "move here", "draw a line to there" and "clear this block". The guest
 writes each command into the FIFO of the ACRTC, one word at a time, and the chip draws.
@@ -1216,7 +1216,7 @@ The board decodes one block of 8 I/O ports from `port` (default `70`):
 | `port` | the ACRTC address register (write) and status register (read) |
 | `port+1` | the board's own MODE register, write only: the sync polarity, and the access mode of the board's fetch logic |
 | `port+2` | the ACRTC control register that the address names, one byte at a time: the high byte at an even address, the low byte at the odd address |
-| `port+3` | not decoded |
+| `port+3` | not decoded: on the real board it is the high byte of a 16-bit transfer, and an 8080 or Z80 does only 8-bit transfers |
 | `port+4` to `port+7` | the Bt453: the address register, the color table (red, green, then blue), the address again, and the overlay colors |
 
 The timing and display registers of the ACRTC increment the address after each byte. For this

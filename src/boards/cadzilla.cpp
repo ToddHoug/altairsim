@@ -109,8 +109,9 @@ void CadzillaBoard::clockAttached() {
 }
 
 // ---------------------------------------------------------------------------
-// Bus: one 8-port block from BASE, no memory. BASE+3 is not decoded; BASE+1 (MODE) is
-// write-only -- both exactly like the Dazzler's format port floats on a read. The ACRTC's
+// Bus: one 8-port block from BASE, no memory. BASE+3 (a 16-bit transfer's high byte, which an
+// 8-bit host never makes) is not decoded; BASE+1 (MODE) is write-only -- both exactly like the
+// Dazzler's format port floats on a read. The ACRTC's
 // own RS=0/RS=1 are NOT adjacent: RS=0 is BASE+0, RS=1 is BASE+2, with MODE between them
 // (see the header comment for the decode this reflects). Every ACRTC access ends by
 // calling intChanged(), since acrtc_.irq() -- SR against CCR's enables -- can move on any
@@ -121,7 +122,7 @@ bool CadzillaBoard::decodes(const BusCycle& c) const {
     if (c.type != Cycle::IoRead && c.type != Cycle::IoWrite) return false;
     uint8_t off = (uint8_t)(c.port() - port_);
     if (off > 7) return false;
-    if (off == 3) return false;                                 // undecoded gap
+    if (off == 3) return false;                                 // 16-bit high byte: never on 8080/Z80
     if (off == 1) return c.type == Cycle::IoWrite;               // MODE: write-only
     return true;                                                 // 0,2: ACRTC; 4-7: Bt453
 }

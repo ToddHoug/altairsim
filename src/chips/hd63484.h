@@ -1,7 +1,7 @@
 #pragma once
 //
 // Hitachi HD63484 ACRTC -- Advanced CRT Controller. A CHIP, NOT A CARD, exactly as the
-// FD1771 and the 8257 next door are. The cadzilla video board has one; the next board
+// FD1771 and the 8257 next door are. The CADzilla video board has one; the next board
 // that turns up with an ACRTC gets it for free.
 //
 // A CRT controller with a DRAWING PROCESSOR and its OWN frame memory: up to 1 M words
@@ -202,7 +202,7 @@ public:
     // bpp-bit field, so at 16 bpp it is the whole word. THIS IS THE CHIP'S OWN VIEW --
     // pixels unpacked at GBM, one fetch per memory cycle -- and it is what a test of the
     // chip reads. A real board's shift register decides the pixel width and the words per
-    // fetch for itself; cadzilla uses the address-level API below and ignores GBM.
+    // fetch for itself; CADzilla uses the address-level API below and ignores GBM.
     void scanline(int y, std::span<uint16_t> out) const;
 
     // ---- SCAN-OUT AT THE ADDRESS LEVEL: what the MAD bus carries (manual 5.6-5.9) ----
