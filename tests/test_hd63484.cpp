@@ -1349,4 +1349,193 @@ void test_hd63484() {
         CHECK((d.status() & 0x20) != 0, "and completes on the restored chip");
         CHECK(d.takeDirty(), "a restored chip owes a frame");
     }
+
+    // ---- DRAWING TIME (timed mode): datasheet Table 3, paid in the free slots ----
+
+    SECTION("HD63484 -- Table 3: every command's 2CLK cost from its parameters and what it drew");
+    {
+        using V = std::vector<uint16_t>;
+        const auto cy = [](uint16_t op, V p, uint64_t dots = 0, uint64_t rows = 0) {
+            return Hd63484::opCycles(op, p, dots, rows);
+        };
+        CHECK(cy(0x0400, {0, 0}) == 8, "ORG 8");
+        CHECK(cy(0x0801, {0}) == 6 && cy(0x0C12, {}) == 6, "WPR 6, RPR 6");
+        CHECK(cy(0x1800, {4, 1, 2}) == 16, "WPTN 4n+8, n = the 2 data words");
+        CHECK(cy(0x1C00, {3}) == 22, "RPTN 4n+10");
+        CHECK(cy(0x2400, {0, 0}) == 62 && cy(0x2800, {0, 0}) == 34 && cy(0x2C01, {0, 0}) == 34,
+              "DRD / DWT / DMOD: their constants (each word is charged as it moves)");
+        CHECK(cy(0x4400, {}) == 12 && cy(0x4800, {0}) == 8 && cy(0x4C02, {0}) == 8, "RD 12, WT 8, MOD 8");
+        CHECK(cy(0x5800, {0, 3, 1}) == 44, "CLR (2x+8)y+12: AX 3, AY 1 -> x 4, y 2");
+        CHECK(cy(0x5800, {0, (uint16_t)-3, (uint16_t)-1}) == 44, "a negative AX/AY is the same block");
+        CHECK(cy(0x5C01, {0, 3, 1}) == 56, "SCLR (4x+6)y+12");
+        CHECK(cy(0x6000, {0, 0, 1, 2}) == 78 && cy(0x7003, {0, 0, 1, 2}) == 78, "CPY / SCPY (6x+10)y+12");
+        CHECK(cy(0x8000, {1, 1}) == 56 && cy(0x8400, {1, 1}) == 56, "AMOVE / RMOVE 56");
+        CHECK(cy(0x8800, {0, 0}, 10) == 58, "ALINE P.L+18, OPM 000: P = 4");
+        CHECK(cy(0x8804, {0, 0}, 10) == 78, "OPM 100-111: P = 6");
+        CHECK(cy(0x9000, {0, 0}, 20) == 134, "ARCT 2P(A+B)+54 over the positions it visited");
+        CHECK(cy(0x9800, {3}, 30) == 176, "APLL sum[P.L+16]+8");
+        CHECK(cy(0xA000, {3}, 30) == 188, "APLG sum[P.L+16]+P.Lo+20");
+        CHECK(cy(0xC000, {0, 0}, 12, 3) == 90, "AFRCT (P.A+8)B+18");
+        CHECK(cy(0xCC00, {}) == 8, "DOT 8");
+        CHECK(cy(0xC800, {}, 12, 3) == 464, "PAINT (18A+102)B-58");
+        CHECK(cy(0xC800, {}, 0, 0) == 0, "a PAINT that painted nothing is not negative");
+        CHECK(cy(0xD000, {0}, 16, 4) == 124, "PTN (P.A+10)B+20");
+        CHECK(cy(0xE000, {0, 0, 0, 0}, 6, 2) == 126, "AGCPY ((P+2)A+10)B+70");
+        CHECK(cy(0xA800, {5}, 10) == 146 && cy(0xAC00, {1, 1, 1}, 10) == 190, "CRCL 8d+66, ELPS 10d+90");
+        CHECK(cy(0xB000, {0, 0, 0, 0}, 10) == 98 && cy(0xB800, {0, 0, 0, 0, 0, 0}, 10) == 196,
+              "AARC 8d+18, AEARC 10d+96");
+    }
+
+    SECTION("HD63484 -- timed: CED and WFE wait for the command's time; the FIFO backs up");
+    {
+        Rig g;
+        g.screen4bpp();                           // untimed: the setup costs nothing
+        CHECK(!g.c.timed(), "untimed is the chip's default");
+        g.c.setTimed(true);
+        g.c.advance(100);
+
+        g.cmd(0xCC00);                            // DOT: 8 2CLK, every slot free (not started)
+        CHECK(g.c.busy() && g.c.busyUntil() == 108, "a DOT started at 100 ends at 108");
+        CHECK((g.sr() & 0x20) == 0, "CED clear while it is drawn");
+        CHECK(g.lit(0, 0), "the pixel itself is already in the frame memory");
+        g.c.advance(107);
+        CHECK((g.sr() & 0x20) == 0, "still clear one 2CLK short");
+        g.c.advance(108);
+        CHECK((g.sr() & 0x20) != 0 && !g.c.busy(), "set at its end");
+
+        g.cmd(0x8000, {0, 0});
+        g.c.advance(1000);
+        g.cmd(0x8800, {10, 0});                   // ALINE: 10 positions, P.L+18 = 58
+        CHECK(g.c.busyUntil() == 1058, "a line's cost counts the pixels it visited");
+        g.c.advance(1058);
+
+        g.cmd(0x5800, {0, 15, 15});               // CLR 16 x 16 words: (32+8)*16+12 = 652
+        const uint64_t t0 = 1058;
+        CHECK(g.c.busyUntil() == t0 + 652, "CLR (2x+8)y+12");
+        g.cmd(0xCC00);
+        CHECK((g.sr() & 0x03) == 0x02, "a word behind a busy command waits: WFE clear, WFR set");
+        for (int i = 0; i < 7; ++i) g.cmd(0xCC00);
+        CHECK(g.c.writeFifoWords() == 8 && (g.sr() & 0x03) == 0, "eight words fill it: WFR clear too");
+        g.c.advance(t0 + 652);
+        CHECK(g.c.writeFifoWords() == 7 && (g.sr() & 0x03) == 0x02 && (g.sr() & 0x20) == 0,
+              "the CLR ends and the first DOT starts at once: room again, CED clear for the DOT");
+        g.c.advance(t0 + 652 + 8 * 8);
+        CHECK((g.sr() & 0x23) == 0x23 && !g.c.busy(), "each DOT at its own end: all done at 8 x 8 later");
+    }
+
+    SECTION("HD63484 -- timed: RD's word, a DWT's words, ABT, turning timing off");
+    {
+        Rig g;
+        g.screen4bpp();
+        g.c.setTimed(true);
+        g.cmd(0x080C, {0x0000});                  // RWP = 0: two WPRs, 6 each, back to back
+        g.cmd(0x080D, {0x0000});
+        const uint64_t t = 50;
+        g.c.advance(t);
+        CHECK(!g.c.busy(), "both WPRs done by 12");
+        g.c.pokeWord(0, 0x1234);
+        g.cmd(0x4400);                            // RD: 12
+        CHECK((g.sr() & 0x04) == 0, "RD's word is not in the read FIFO while it is being read");
+        g.c.advance(t + 11);
+        CHECK((g.sr() & 0x24) == 0, "nor one 2CLK short");
+        g.c.advance(t + 12);
+        CHECK((g.sr() & 0x24) == 0x24 && g.readWord() == 0x1234, "RFR and CED together, at its end");
+
+        g.cmd(0x080D, {0x0000});
+        g.c.advance(t + 100);
+        g.cmd(0x2800, {1, 0});                    // DWT 2 x 1 words: 34 + (4+16) + (4+8) = 66
+        g.c.advance(t + 100 + 34);                // the constant is paid before the data is taken
+        g.word(0xAAAA);
+        g.word(0x5555);
+        CHECK(g.c.busyUntil() == t + 100 + 34 + 20 && g.c.writeFifoWords() == 1,
+              "the first word costs 4 + 16 (its group of 8); the second waits in the FIFO");
+        g.c.advance(t + 100 + 66);
+        CHECK((g.sr() & 0x20) != 0 && g.c.peekWord(0) == 0xAAAA && g.c.peekWord(1) == 0x5555,
+              "the second costs 4 + 8 (the row's end): (4x+8)y+16[xy/8]+34 = 66 in all");
+
+        g.cmd(0x5800, {0, 15, 15});
+        CHECK(g.c.busy(), "a CLR in flight...");
+        g.reg(0x02, 0x8200);                      // ABT
+        CHECK(!g.c.busy() && g.sr() == 0x23, "...is gone with ABT: SR = $23");
+        g.reg(0x02, 0x0200);
+
+        g.cmd(0x5800, {0, 15, 15});
+        g.cmd(0xCC00);
+        g.c.setTimed(false);
+        CHECK(!g.c.busy() && (g.sr() & 0x23) == 0x23, "turning timing off finishes it, and what was queued");
+    }
+
+    SECTION("HD63484 -- timed: the display takes its slots (ACP, RAM, single vs. interleaved)");
+    {
+        // A small frame whose slots can be counted by hand. H = 20 slots a raster: HSYNC
+        // low for 2 (slot 0 the refresh period, slot 1 the attribute cycle), the display
+        // HDS 2 .. +HDW 10 cycles after HSYNC rises, i.e. slots 4..13. V = 10 rasters:
+        // VSYNC low for 1, the display VDS 1 raster after it rises, SP1 5 rasters: 2..6.
+        const auto frame = [](Rig& g, uint16_t omrBits) {
+            g.reg(0x82, (19 << 8) | 2);           // HC 19 (20 slots), HSW 2
+            g.reg(0x84, (1 << 8) | 9);            // HDS 2, HDW 10
+            g.reg(0x86, 10);                      // VC 10
+            g.reg(0x88, (0 << 8) | 1);            // VDS 1, VSW 1
+            g.reg(0x8A, 5);                       // SP1 5
+            g.reg(0x06, 0x4000);                  // DCR: the base screen
+            g.reg(0x04, (uint16_t)(0x4000 | omrBits));   // OMR: STR + the bits under test
+        };
+        const auto dotEnd = [&](uint16_t omrBits, uint64_t at) {
+            Rig g;
+            g.screen4bpp();
+            frame(g, omrBits);
+            g.c.setTimed(true);
+            g.c.advance(at);
+            g.cmd(0xCC00);                        // 8 2CLK: four free slots
+            return g.c.busyUntil();
+        };
+        // Raster 2 starts at slot 40, 2CLK 80.
+        CHECK(dotEnd(0x0000, 80) == 112,
+              "display priority: free slots 2, 3, then the display is skipped to 14, 15 -> ends at slot 56");
+        CHECK(dotEnd(0x2000, 80) == 92, "drawing priority (ACP): slots 2..5 -> 46");
+        CHECK(dotEnd(0x0080, 80) == 110, "static RAM (RAM): the refresh slot 0 draws too -> 0, 2, 3, 14");
+        CHECK(dotEnd(0x0008, 80) == 96, "interleaved: every second display slot -> 2, 3, 5, 7");
+        CHECK(dotEnd(0x0000, 0) == 12, "a non-display raster: slots 2..5 (0 and 1 are HSYNC's)");
+        {
+            // Frame free = 5 rasters x 18 + 5 x 8 = 130. A CLR of 652 2CLK is 326 slots from
+            // slot 0: two whole frames (260), then the 66th free slot of the third -- 36 in
+            // rasters 0-1, 8 each in 2-4, the 6th of raster 5's (2 3 14 15 16 17) = slot 17.
+            Rig g;
+            g.screen4bpp();
+            frame(g, 0x0000);
+            g.c.setTimed(true);
+            g.cmd(0x5800, {0, 15, 15});
+            CHECK(g.c.busyUntil() == 2 * (2 * 200 + 5 * 20 + 17 + 1), "a long command wraps whole frames");
+        }
+        {
+            Rig g;
+            g.screen4bpp();
+            frame(g, 0x0000);
+            g.reg(0x04, 0x0000);                  // STR clear: not started
+            g.c.setTimed(true);
+            g.c.advance(80);
+            g.cmd(0xCC00);
+            CHECK(g.c.busyUntil() == 88, "a chip that is not started has every slot free");
+        }
+    }
+
+    SECTION("HD63484 -- timed: a snapshot mid-command keeps its end");
+    {
+        Rig g;
+        g.screen4bpp();
+        g.c.setTimed(true);
+        g.cmd(0x5800, {0, 15, 15});
+        g.cmd(0xCC00);
+        StateWriter w;
+        g.c.serialize(w);
+        Hd63484     d{4096};
+        StateReader r(w.data());
+        d.deserialize(r);
+        CHECK(r.ok(), "reads back cleanly");
+        d.setTimed(true);                         // the strap is the board's, not the snapshot's
+        CHECK(d.busy() && d.busyUntil() == g.c.busyUntil(), "the command in flight and its end travelled");
+        CHECK((d.status() & 0x21) == 0, "CED and WFE still owed");
+        d.advance(g.c.busyUntil() + 8);
+        CHECK((d.status() & 0x21) == 0x21, "and both come when the CLR and the DOT behind it are paid");
+    }
 }

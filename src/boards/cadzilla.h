@@ -68,6 +68,21 @@
 //   Also: OL1..0 tied low (no overlay source); IRQ* wired to the `interrupt` strap (SW1-8
 //   on the real card enables it; off, the default, disconnects it -- see below).
 //
+//   2CLK IS THE BOARD'S. The ACRTC's clock comes from the monitor's pixel clock (PCLK, the
+//   VESA rate of `mode`): PCLK/8 in single access mode, PCLK/4 in interleaved -- selected
+//   by MODE AMODE, the board's glue, not the chip's OMR ACM. A memory cycle is then 16
+//   pixels single and 8 interleaved, which is why the horizontal registers double.
+//
+// DRAWING TIME -- the `draw_rate` strap. `full` (the default): the ACRTC draws in no time,
+// as it always has here -- the fastest bench for developing a program. `real`: each command
+// costs its datasheet Table 3 time in 2CLK (chips/hd63484.h, DRAWING TIME), so the write
+// FIFO backs up and CED comes late exactly as a timing-sensitive program -- a game -- would
+// see on the card. The board turns T-states into 2CLK (sync) and arms one Clock deadline
+// at the command's end (arm), so an interrupt on CED lands on time with the CPU halted.
+// It is not the CPU's `clock_hz`: that only decides whether the host waits, and the guest
+// cannot see it; the drawing time is emulated time, the same number of instructions long
+// at any `clock_hz`.
+//
 // THE MODE REGISTER (BASE+1, write-only) is the board's own glue logic, not a register on
 // either chip -- the host programs it in tandem with the ACRTC's own OMR when it sets up
 // the picture, and it is what the board's OWN fetch logic (programmedWidth/X, paintFrame)
@@ -110,6 +125,7 @@ class Display;  // host/display.h -- injected; the board never learns it is SDL
 class CadzillaBoard : public Board {
 public:
     CadzillaBoard();
+    ~CadzillaBoard() override;  // cancels the drawing deadline (a fired stale alarm is a UAF)
 
     std::string type() const override { return "cadzilla"; }
 
@@ -155,6 +171,7 @@ public:
         int width, height;         // the active picture, in pixels
         int hsw, hbp, hfp;         // sync, back porch, front porch: memory cycles
         int vsw, vbp, vfp;         // sync, back porch, front porch: rasters
+        long long pclk;            // the pixel clock, Hz (2CLK is PCLK/8 or PCLK/4)
         int hc() const { return hsw + hbp + width / 16 + hfp; }   // total cycles per line
         int vc() const { return vsw + vbp + height + vfp; }       // total rasters per frame
     };
@@ -173,6 +190,10 @@ public:
     // What SHOW's `wiring` says: "ok", or which of GBM / GAI / ACM disagrees with the board.
     std::string wiring() const;
 
+    // The ACRTC's 2CLK in Hz: the mode's pixel clock over 8 (MODE AMODE single) or 4
+    // (interleaved).
+    long long twoClkHz() const;
+
     // ---- For tests: the chips themselves ----
     Hd63484& acrtc() { return acrtc_; }
     Bt453&   dac() { return dac_; }
@@ -180,6 +201,13 @@ public:
 private:
     void render();
     void paintFrame(Surface* s, int w, int h);
+
+    // Drawing time: bring the ACRTC's 2CLK count up to the Clock, at the rate in force
+    // since the last sync; then (re)arm the deadline at the end of whatever it is drawing.
+    // Anything that changes the 2CLK rate (MODE AMODE, `mode`) syncs BEFORE it changes it.
+    void sync();
+    void arm();
+    void clockAttached() override;
 
     // The board's own notion of access mode -- from the MODE register (BASE+1), not the
     // ACRTC's OMR. This is what the shift register (paintFrame, programmedWidth/X) runs on;
@@ -204,12 +232,19 @@ private:
     int       mode_ = 2;          // index into the VESA mode table: 1024x768
     int       videoWidth_ = 0;    // host window width in px, 0 = auto
     IrqJumper irq_ = IrqJumper::None;   // SW1-8: where IRQ* lands, if anywhere
+    bool      drawReal_ = false;  // draw_rate: false = full (instant), true = real (Table 3)
 
     // ---- Runtime state written by the guest, not a strap ----
     uint8_t modeReg_ = 0;         // MODE register (BASE+1): HSPOL/VSPOL/AMODE/OLEN
 
     // ---- Render bookkeeping ----
     bool dirty_ = true;           // something in the picture moved since the last frame
+
+    // ---- Drawing time: the ACRTC's 2CLK count, kept in step with the Clock ----
+    uint64_t      lastT_ = 0;     // the Clock's T-state at the last sync
+    uint64_t      acc2clk_ = 0;   // 2CLK cycles since power-on
+    uint64_t      rem_ = 0;       // the fraction carried: (T-states x 2CLK Hz) mod CPU Hz
+    Clock::Handle wake_ = Clock::kNone;   // the end of the command being drawn
 };
 
 } // namespace altair

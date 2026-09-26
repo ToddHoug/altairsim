@@ -41,6 +41,8 @@ The board's own decisions, which no chip made — and every one of them is visib
 | Pixel bus to the DAC | P0–P7 from the shift register; the Bt453 sees exactly the byte the frame memory holds |
 | Overlay inputs | OL0, OL1 tied low regardless of OLEN: the overlay registers can be loaded but nothing selects them yet |
 | **IRQ\*** | strapped by `interrupt` (SW1-8): `none` (default, SW1-8 Off) disconnects it; `int` or `vi0`..`vi7` (SW1-8 On) raises that S-100 line whenever `acrtc_.irq()` — an enabled SR flag — is true |
+| **2CLK** | the ACRTC's clock comes from the monitor's pixel clock (PCLK, the VESA rate of `mode`): **PCLK/8 in single access mode, PCLK/4 in interleaved**, selected by MODE `AMODE`. A memory cycle is then 16 pixels single and 8 interleaved |
+| **Drawing time** | the `draw_rate` strap: `full` (default) draws in no time; `real` gives each command its data-sheet time — see *Drawing time* below |
 
 ### The MODE register (`port+1`, write-only)
 
@@ -105,6 +107,58 @@ A picture programmed with `HDS = back porch − 1` fills the frame from the left
 later it is 16 pixels to the right (8 in interleaved mode) with its last cycle off the edge, one
 cycle earlier it is clipped on the left. Vertically the same with `VDS` and the vertical back
 porch. `SHOW`'s `picture` line reports the programmed size and where its top-left corner lands.
+
+### Drawing time (`draw_rate`)
+
+`draw_rate = "full"` (the default) is the fastest bench for writing a program: every command is
+done the moment its last parameter lands, `WFE` and `CED` are always set, and the CPU never
+waits on the chip. `draw_rate = "real"` gives each command the time the HD63484 data sheet
+gives it (Table 3, in 2CLK cycles), so a timing-sensitive program — a game — sees the chip it
+was written for: the words behind a command wait in the write FIFO (`WFE` clears; at 8 words
+`WFR` clears too), and `CED`, any SR flag the command raised and any word it answers
+(RD, RPR, RPTN, DRD) appear only when its time is up. Set it in the machine file or with
+`SET cad0 draw_rate=real`.
+
+**Where the time goes.** A command of N 2CLK needs N/2 memory cycles of drawing, and the
+display takes its own share first. The ACRTC's own timing registers and `OMR` decide which
+memory cycles are free:
+
+| Memory cycle | Free for drawing |
+|---|---|
+| the last cycle of HSYNC low (the attribute output cycle) | never |
+| the rest of HSYNC low (the DRAM refresh period) | only with `OMR` RAM = 1 (static RAM mode — right for this board's SRAM) |
+| the display period (the background's HDS..HDS+HDW, the window's HWS..HWS+HWW) | single access, ACP = 0 (display priority): none. ACP = 1 (drawing priority): all. Interleaved: every second cycle |
+| the rest of the retrace | always |
+
+So the same command is fastest in interleaved mode, or in single access mode with drawing
+priority, and slowest in single access mode with display priority, where it draws only in the
+retrace. A chip that is not started (`OMR` STR = 0) draws in every cycle.
+
+**2CLK per mode**:
+
+| `mode` | Pixel clock | 2CLK, single (PCLK/8) | 2CLK, interleaved (PCLK/4) |
+|---|---|---|---|
+| `640x480` | 25.175 MHz | 3.147 MHz | 6.294 MHz |
+| `800x600` | 40.000 MHz | 5.000 MHz | 10.000 MHz |
+| `1024x768` | 65.000 MHz | 8.125 MHz | 16.250 MHz |
+
+The design intends interleaved access at 640x480, and single access at 800x600 and 1024x768.
+Nothing enforces that: the board times what it is programmed to do.
+
+**It is not the CPU's `clock_hz`.** `clock_hz = 0` (flat out) only stops the host from waiting;
+the guest cannot see it. The drawing time is emulated time, turned into T-states at the CPU's
+rate (2 MHz when flat out), so a command costs the same number of instructions at any
+`clock_hz`. A flat-out CPU runs the whole program — drawing waits included — faster in wall-clock
+time, and the program's own timing stays right.
+
+**What the data sheet leaves open, and what this model assumes:** Table 3's counts are taken as
+the drawing processor's time when it gets every memory cycle it asks for. L and d (the dots of a
+line or curve) and A × B (a filled area) are the logical pixel positions the command actually
+visited, clipped and suppressed ones included. PAINT's formula (exact only for a rectangle,
+Table 3 note 2) is applied with its painted pixels and spans. In interleaved mode every
+retrace cycle is free, as in single access mode. A command's end is fixed when it starts, so a
+timing register written while it runs changes the next command, not that one. The raster
+counter (`r80`) still reads 0.
 
 ## Sources
 
@@ -189,8 +243,15 @@ and the same three for *inside*).
   nothing. No memory.
 - **Two chips, no bus-level timing**: `Hd63484` (`src/chips/hd63484.h`) and `Bt453`
   (`src/chips/bt453.h`) hold all the state; the board forwards RS = A0 to one and C1C0 = A1A0
-  to the other. A drawing command executes **at the instant its last parameter lands** — the
-  FIFO drains immediately, so `WFE` is the steady state.
+  to the other. A drawing command executes **at the instant its last parameter lands** — at
+  `draw_rate=full` the FIFO drains immediately, so `WFE` is the steady state.
+- **Drawing time** (`draw_rate=real`): the chip counts time only in 2CLK cycles and is told
+  it (`Hd63484::advance`); it keeps the command it is paying for (`busy`/`busyUntil`), holds
+  back the SR flags and read-FIFO words it owes, and stops taking FIFO words until the end.
+  The board turns the Clock's T-states into 2CLK at PCLK/8 or PCLK/4 (`sync`, with the
+  remainder carried so no fraction is lost however often a guest polls), syncs before any
+  change of rate (MODE `AMODE`, `mode`), and arms **one** Clock deadline at the command's end
+  (`arm`), so an interrupt on CED lands on time with the CPU halted and no bus cycle.
 - **`pump()`**: the three gates every video board here uses — did either chip change anything
   (a drawing, a register, a LUT entry)? does the host want a frame? — then the board builds the
   **monitor's** frame: a Surface the size of the `mode`, black, into which it runs its own shift
@@ -205,7 +266,7 @@ and the same three for *inside*).
   window opens at the prompt like the Dazzler's and shows the picture once a program starts
   the chip.
 - **`properties()`**: straps `port` (the whole 8-port block's base), `mode` (the monitor),
-  `width` (the window), `interrupt` (`none|int|vi0`..`vi7` — SW1-8); live, read-only `video`,
+  `draw_rate` (`full|real`), `width` (the window), `interrupt` (`none|int|vi0`..`vi7` — SW1-8); live, read-only `video`,
   `picture` (programmed size and position in the frame), `wiring` (GBM/GAI against the board,
   OMR ACM against MODE AMODE), the MODE register decoded into `hspol`/`vspol`/`amode`/`olen`,
   `status` (the SR), and `irq` (whether IRQ\* is asserted right now). Frame memory is not a
@@ -264,10 +325,11 @@ and the same three for *inside*).
 
 ## Limitations and deliberate departures
 
-- **No time.** Drawing is instantaneous, the raster counter reads 0, there is no DTACK and no
-  wait state. A guest that times a command, or that syncs to the raster to avoid flicker, sees
-  an infinitely fast chip and an unmoving beam. The status bits a guest *polls* (the FIFO
-  flags, CED) are exact.
+- **Drawing time is Table 3's, and nothing finer.** At `draw_rate=real` a command takes its
+  data-sheet time in the memory cycles the display leaves free (*Drawing time*, above, lists
+  what that model assumes); at `full`, the default, it takes none. Either way the raster
+  counter reads 0, and there is no DTACK and no wait state on a register access, so a guest
+  that syncs to the raster to avoid flicker sees an unmoving beam.
 - **Every command executes.** DRD/DWT/DMOD run only in the manual's "under program control"
   mode (no DMAC on the board). An undefined opcode sets **CER** and is dropped alone, so the
   words after it are read as commands.
@@ -299,10 +361,15 @@ and the same three for *inside*).
 ## Verification
 
 `tests/test_bt453.cpp` drives the DAC through Tables 1–2 of its data sheet.
-`tests/test_hd63484.cpp` (22 sections) drives the ACRTC through its two locations: reset state,
+`tests/test_hd63484.cpp` (56 sections) drives the ACRTC through its two locations: reset state,
 8-bit register access, FIFO/status transitions, every worked example the manual gives (WPR-2,
 RPR-2, WPTN-2, RPTN-2, ORG-3, CLR-3/4, ALINE-2, ARCT-2, AFRCT-1, DRD/DWT-2), the operation,
-color and area modes, scan-out geometry, the window overlay, and a snapshot round trip.
+color and area modes, scan-out geometry, the window overlay, and a snapshot round trip. Its
+**drawing-time** sections check every Table 3 formula, the FIFO backing up behind a busy
+command (WFE, then WFR at 8 words), RD's word and a DWT's per-word cost, ABT and turning timing
+off mid-command, the free-cycle rules on a small frame counted by hand (display priority,
+drawing priority, static RAM, interleaved, a command wrapping whole frames, a stopped chip), and
+a snapshot taken mid-command.
 `tests/test_cadzilla.cpp` proves the board: the one-8-port-block decode (both directions on
 the ACRTC's RS=0/RS=1 pair at `+0`/`+2` and the Bt453 at `+4`..`+7`, write-only on MODE at
 `+1`, nothing at the `+3` gap), the MODE register's four fields decoding independently into
@@ -322,7 +389,11 @@ leaving a black frame while the LUT survives; and a dedicated **interrupts** sec
 `interrupt=none` (the default, SW1-8 off) asserts nothing regardless of the ACRTC's own
 pending state, `interrupt=int`/`vi0`..`vi7` (SW1-8 on) raises that line exactly when
 `Hd63484::irq()` is true, and disabling CCR's enable bits drops the request even while SR's
-own CED bit is still pending.
+own CED bit is still pending. Its **drawing-time** sections prove `draw_rate` set both by `SET`
+and from a machine file (and saved back), the T-state length of a DOT and a CLR at 1024x768
+single and 640x480 interleaved, an `AMODE` change mid-command, a guest polling every T-state
+losing no time, the same T-states at `clock_hz = 0`, 2 MHz and (doubled) 4 MHz, the CED
+interrupt raised by the deadline alone, and a restored board re-arming its command's end.
 
 No period software exists for this board; the register table above is what a program would
 load, and `machines/cadzilla.toml`'s header walks the default 1024x768 case from the monitor

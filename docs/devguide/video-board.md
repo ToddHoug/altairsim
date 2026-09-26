@@ -25,8 +25,8 @@ method each, and the other two are the Limitations section.
 | 4 | **Where pixels come from and how you know they moved.** A write to on-board RAM latches a dirty flag; main RAM has to be polled against a shadow; a chip with its own memory tells you | `Hd63484::takeDirty()`, `Bt453::takeDirty()` | `pump()` |
 | 5 | **Geometry.** Native w×h — fixed, decoded from registers each frame, or **the monitor's**: a board with a real CRT controller can carry a fixed-frequency display and place the chip's picture in it. `PixelFormat::Indexed8` is the only format the seam has | the `mode` strap's VESA frame (one of the three primary VESA resolutions, 1024x768 by default); the ACRTC's picture placed by HDS/VDS against the mode's porches | `render()`, `acquire()` |
 | 6 | **Palette.** How many entries, from where. Dazzler: 16 from an RGBI nibble. VDM-1: 2. cadzilla: **256, and they are a chip** | `Bt453::palette()` | `setPalette()` |
-| 7 | **Observable timing.** A status bit a guest can *time* (vblank, scan parity) comes off `clock_->now()` — never a poll counter. An oscillator the guest cannot observe (a cursor blink) comes off `Display::hostSeconds()` | none yet — see Limitations | `statusByte()` |
-| 8 | **Straps vs live status.** A strap has a setter and round-trips through `CONFIG SAVE`; live status has **no setter**, and that absence is the whole signal. A register that is write-only *on the wire* (a chip's format byte, or a board's own glue register) is still reflected as read-only live status — the board keeps the shadow the wire cannot give back. A fixed hardware fact with no jumper on the real card (cadzilla's 2 MB of SRAM) is neither a strap nor live status — it is a constant. Every video board pushes `Display::widthProperty(videoWidth_)` | `port`, `mode`, `width`, `interrupt`; live `video`, `picture`, `wiring`, `hspol`/`vspol`/`amode`/`olen`, `status`, `irq` | `properties()` |
+| 7 | **Observable timing.** A status bit a guest can *time* (vblank, scan parity) comes off `clock_->now()` — never a poll counter. An oscillator the guest cannot observe (a cursor blink) comes off `Display::hostSeconds()` | the drawing time at `draw_rate=real`: T-states carried into 2CLK (`sync()`, remainder kept), one Clock deadline at the command's end (`arm()`) so an interrupt lands with no bus cycle; the raster counter is not modeled | `sync()`, `arm()` |
+| 8 | **Straps vs live status.** A strap has a setter and round-trips through `CONFIG SAVE`; live status has **no setter**, and that absence is the whole signal. A register that is write-only *on the wire* (a chip's format byte, or a board's own glue register) is still reflected as read-only live status — the board keeps the shadow the wire cannot give back. A fixed hardware fact with no jumper on the real card (cadzilla's 2 MB of SRAM) is neither a strap nor live status — it is a constant. Every video board pushes `Display::widthProperty(videoWidth_)` | `port`, `mode`, `draw_rate`, `width`, `interrupt`; live `video`, `picture`, `wiring`, `hspol`/`vspol`/`amode`/`olen`, `status`, `irq` | `properties()` |
 | 9 | **Snapshot.** Runtime state only — never a strap, never the `Display*`. If no memory board holds your pixels, **they travel with you** | both chips, frame memory as a `blob` | `serialize()` |
 
 Two things that are *not* the board's business, and each is the classic mistake: a **keyboard**
@@ -200,7 +200,10 @@ Its own `docs/boards/cadzilla.md` says exactly what is not modeled. **Interrupts
 `IrqJumper` and `irqJumperProperty()`, `assertsInt()`/`assertsVi()` reading the chip's own
 `irq()`, and `intChanged()` called from every place that could move, per the lamp chapter's
 closing section — so that recipe step is already done here and is the worked example for the
-next board that needs it. Two still remain: **observable timing** (a raster counter a guest
-reads must come off the `Clock`, like the Dazzler's vblank bit), and **the rest of the command
-set**, which drops into `Hd63484::execute()`'s dispatch with its parameter count already in
-`paramsFor()`.
+next board that needs it. **Drawing time** is done too, at `draw_rate=real`: the chip counts
+only 2CLK and is told the time (`Hd63484::advance()`), and the board owns the conversion from
+T-states and the one Clock deadline — the pattern for a chip whose speed depends on a clock the
+board supplies. One piece still remains: **the raster counter** (`r80` reads 0). A guest reads it
+to sync to the beam, so it must come off the `Clock`, like the Dazzler's vblank bit; the frame's
+slot timeline that `Hd63484::buildTimeline()` already builds for drawing time is where its
+position would come from.

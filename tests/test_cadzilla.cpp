@@ -2,6 +2,7 @@
 #include "framecheck.h"
 
 #include "boards/cadzilla.h"
+#include "config/toml.h"
 #include "core/machine.h"
 #include "core/statefile.h"
 #include "host/display_null.h"
@@ -657,5 +658,136 @@ void test_cadzilla() {
         for (size_t i = 0; black && i < s->pixels().size(); i += 97)
             if (s->pixels()[i] != 0) black = false;
         CHECK(black, "and the monitor shows a black 640x480 frame -- the window stays, the picture is gone");
+    }
+
+    // ---- DRAWING TIME: the draw_rate strap, 2CLK from the pixel clock, one deadline ----
+
+    SECTION("cadzilla -- draw_rate: full by default, real by SET or from the machine file");
+    {
+        Rig g;
+        std::string err;
+        CHECK(!g.cad->acrtc().timed(), "full (instant drawing) is the default");
+        g.cmd(0x5800, {0, 15, 15});
+        CHECK((g.sr() & 0x23) == 0x23, "full: a CLR is done the moment it lands");
+        CHECK(setProperty(*g.cad, "draw_rate", "real", err) && g.cad->acrtc().timed(), "SET draw_rate=real");
+        CHECK(!setProperty(*g.cad, "draw_rate", "fast", err), "anything but full or real is refused");
+
+        // The file, the way an operator sets it -- not only SET at the prompt (DESIGN.md 8).
+        const char* kText = R"(
+[machine]
+name = "drawtime"
+
+[[board]]
+type      = "cadzilla"
+id        = "cad0"
+port      = 0x70
+draw_rate = "real"
+)";
+        Machine fm;
+        CHECK(loadTomlText(kText, "drawtime", fm, err), "a machine file with draw_rate loads");
+        auto* fc = dynamic_cast<CadzillaBoard*>(fm.find("cad0"));
+        CHECK(fc && fc->acrtc().timed(), "draw_rate = \"real\" in the file times the ACRTC");
+        CHECK(saveTomlText(fm).find("draw_rate = \"real\"") != std::string::npos, "and CONFIG SAVE writes it back");
+    }
+
+    SECTION("cadzilla -- draw_rate=real: 2CLK is the pixel clock / 8 single, / 4 interleaved");
+    {
+        std::string err;
+        {
+            Rig g;                                // 1024x768: 65 MHz / 8 = 8.125 MHz; CPU Hz 2 MHz
+            CHECK(setProperty(*g.cad, "draw_rate", "real", err), "real");
+            CHECK(g.cad->twoClkHz() == 8125000, "1024x768 single access: 8.125 MHz");
+            g.cmd(0xCC00);                        // DOT: 8 2CLK = 1.97 T-states -> the 2nd
+            g.m.clock.advance(1);
+            CHECK((g.sr() & 0x20) == 0, "a DOT is not done one T-state later");
+            g.m.clock.advance(1);
+            CHECK((g.sr() & 0x20) != 0, "and done two T-states later");
+
+            g.cmd(0x5800, {0, 15, 15});           // CLR: 652 2CLK = 160.5 T-states
+            g.m.clock.advance(160);
+            CHECK((g.cad->acrtc().status() & 0x20) == 0, "a 16 x 16 CLR is not done after 160 T-states");
+            g.m.clock.advance(1);
+            CHECK((g.cad->acrtc().status() & 0x20) != 0,
+                  "and done at 161 -- with no bus cycle: the deadline brought it in");
+
+            // A guest polls SR every few T-states, and each poll carries T-states into 2CLK:
+            // the fraction (4.0625 2CLK a T-state here) must travel, or every poll loses some.
+            g.cmd(0x5800, {0, 15, 15});
+            const uint64_t t0 = g.m.clock.now();
+            while ((g.sr() & 0x20) == 0 && g.m.clock.now() - t0 < 1000) g.m.clock.advance(1);
+            CHECK(g.m.clock.now() - t0 == 161, "polled every T-state, the CLR still takes 161");
+        }
+        {
+            Rig g;
+            CHECK(setProperty(*g.cad, "mode", "640x480", err), "640x480");
+            CHECK(setProperty(*g.cad, "draw_rate", "real", err), "real");
+            g.mode_reg(0x04);                     // AMODE: interleaved
+            CHECK(g.cad->twoClkHz() == 6293750, "640x480 interleaved: 25.175 MHz / 4");
+            g.cmd(0x5800, {0, 15, 15});           // 652 2CLK = 207.2 T-states
+            g.m.clock.advance(207);
+            CHECK((g.cad->acrtc().status() & 0x20) == 0, "not done at 207");
+            g.m.clock.advance(1);
+            CHECK((g.cad->acrtc().status() & 0x20) != 0, "done at 208");
+        }
+        {
+            Rig g;                                // AMODE moves mid-command: the rest at the new rate
+            CHECK(setProperty(*g.cad, "draw_rate", "real", err), "real");
+            g.cmd(0x5800, {0, 15, 15});
+            g.m.clock.advance(80);                // 80 T x 8.125 MHz / 2 MHz = 325 2CLK paid
+            g.mode_reg(0x04);                     // now 16.25 MHz: 327 left = 40.2 T
+            g.m.clock.advance(40);
+            CHECK((g.cad->acrtc().status() & 0x20) == 0, "not done 40 T-states after the switch");
+            g.m.clock.advance(1);
+            CHECK((g.cad->acrtc().status() & 0x20) != 0, "done at 41: the time before it counted at the old rate");
+        }
+    }
+
+    SECTION("cadzilla -- draw_rate=real: the drawing time is emulated time, whatever clock_hz is");
+    {
+        std::string err;
+        const auto clrDone = [&](long long hz) {
+            Rig g;
+            g.m.clock.setHz(hz);
+            setProperty(*g.cad, "draw_rate", "real", err);
+            g.cmd(0x5800, {0, 15, 15});
+            uint64_t t = 0;
+            while ((g.cad->acrtc().status() & 0x20) == 0 && t < 100000) {
+                g.m.clock.advance(1);
+                ++t;
+            }
+            return t;
+        };
+        CHECK(clrDone(0) == 161 && clrDone(2000000) == 161,
+              "flat out (clock_hz = 0) and 2 MHz: the same 161 T-states -- the guest cannot tell them apart");
+        CHECK(clrDone(4000000) == 321, "a 4 MHz CPU runs twice the instructions in the ACRTC's same 80 us");
+    }
+
+    SECTION("cadzilla -- draw_rate=real: the end raises IRQ* on its own, and survives a snapshot");
+    {
+        Rig g;
+        std::string err;
+        CHECK(setProperty(*g.cad, "draw_rate", "real", err), "real");
+        CHECK(setProperty(*g.cad, "interrupt", "int", err), "IRQ* to pin 73");
+        g.reg(0x02, 0x0020);                      // CCR: CED interrupt enabled
+        g.cmd(0x5800, {0, 15, 15});
+        CHECK(!g.cad->assertsInt(), "no interrupt while the CLR is drawn");
+        g.m.clock.advance(161);                   // the CPU halted: not one bus cycle
+        CHECK(g.cad->assertsInt(), "the command's end raises IRQ* with nobody touching the board");
+
+        g.cmd(0x5800, {0, 15, 15});               // (reading SR is no acknowledge: CED is simply clear)
+        g.m.clock.advance(100);
+        StateWriter w;
+        g.cad->serialize(w);
+        Rig h;
+        CHECK(setProperty(*h.cad, "draw_rate", "real", err), "real, on the restoring board too");
+        h.m.clock.advance(g.m.clock.now());
+        StateReader r(w.data());
+        h.cad->deserialize(r);
+        CHECK(r.ok() && h.cad->acrtc().busy(), "the CLR in flight travelled");
+        h.m.clock.advance(60);
+        CHECK((h.cad->acrtc().status() & 0x20) == 0, "not done 160 T-states in");
+        h.m.clock.advance(1);
+        CHECK((h.cad->acrtc().status() & 0x20) != 0, "the restored board re-armed its end: done at 161");
+        g.adopt();
     }
 }

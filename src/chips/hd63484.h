@@ -86,12 +86,50 @@
 //             stream waits behind it (manual RD-1).
 //   Scan-out: the three background screens (upper/base/lower) stacked by SP0/SP1/SP2 and
 //             the window over them, graphic screens only, non-interlaced, GAI +1/+2/+4/+8.
-//   Timing:   NONE. Drawing is instantaneous at the moment the last parameter lands, the
-//             raster counter is not modeled, and DTACK/wait states do not exist. A guest
-//             that times a command sees an infinitely fast ACRTC.
+//   Timing:   TWO MODES, the board's choice (setTimed). UNTIMED (the default): drawing is
+//             instantaneous at the moment the last parameter lands -- WFE and CED are the
+//             steady state and a guest that times a command sees an infinitely fast ACRTC.
+//             TIMED: every command costs its datasheet Table 3 2CLK count, paid in the
+//             memory cycles the display leaves free for drawing (DRAWING TIME, below);
+//             until it is paid, the words behind it wait in the write FIFO and CED, the
+//             SR flags it raised and any words it answers stay unseen. Either way the
+//             raster counter is not modeled and DTACK/wait states do not exist.
 //   Not modeled: zoom, character screens, block/graphic cursors, light pen, blink
 //             attributes, DMA handshaking (DRD/DWT/DMOD run in the manual's "under
 //             program control" mode), interlace, master/slave sync.
+//
+// ---------------------------------------------------------------------------
+// DRAWING TIME (timed mode; datasheet Table 3, manual 2.2 and OMR ACP/RAM/ACM)
+//
+// The chip knows time only as a count of 2CLK cycles, which the BOARD supplies (advance):
+// the board has the oscillator and knows how 2CLK relates to the CPU's T-states. The chip
+// never learns what a second is.
+//
+// COST. Table 3 gives each command in 2CLK cycles, from its parameters and from what it
+// drew: L and d are the logical pixel positions the command visited (counted in drawPixel
+// -- COL-suppressed and AREA-clipped positions included, as they step the pattern too), B
+// the rows of a plane command, x and y the words of a block command. P = 4 for OPM
+// 000-011, 6 for 100-111. PAINT's formula is exact only for a rectangle (Table 3 note 2);
+// it is applied with A x B = the pixels painted and B = the spans. The program-controlled
+// transfers are charged word by word as the words move: 4 per word, 8 per row, 16 (DRD:
+// 12) per started group of 8 words, and the table's constant when the command starts.
+//
+// WHERE IT IS PAID. A cost of N 2CLK needs ceil(N/2) drawing SLOTS; a slot is one memory
+// cycle (two 2CLK). A raster is HC+1 slots from HSYNC falling, a frame VC rasters from
+// VSYNC falling, and a slot is free for drawing by these rules:
+//   - the last slot of HSYNC low (the attribute output cycle): never;
+//   - the other HSYNC-low slots (the DRAM refresh period): only with OMR RAM = 1;
+//   - the display period -- the background's HDS..HDS+HDW on a lit raster, the window's
+//     HWS..HWS+HWW on a window raster: none in single access with ACP = 0 (display
+//     priority), all with ACP = 1, and every second slot (the drawing phase) in the dual
+//     access modes;
+//   - every other slot of the retrace: always.
+// A chip that is not started (OMR STR = 0), or whose HC/VC describe no frame, has every
+// slot free. The frame's phase is simply 2CLK time / 2 modulo the frame, from power-on.
+// ASSUMPTIONS the manual does not settle: Table 3's counts are what the drawing processor
+// takes when it gets every slot it asks for; in the dual modes the retrace slots are all
+// free, as in single access; a command's end is fixed when it starts, so a timing
+// register written while it runs moves the NEXT command, not this one.
 // ---------------------------------------------------------------------------
 
 #include <cstddef>
@@ -122,6 +160,29 @@ public:
     void reset();
     // Power-on: everything zero, then reset(). The frame memory comes up zero.
     void power();
+
+    // ---- DRAWING TIME (see DRAWING TIME above) ----
+
+    // Timed or instantaneous drawing -- the board's strap. Turning it off finishes the
+    // command in flight at once, and everything queued behind it.
+    void setTimed(bool on);
+    bool timed() const { return timed_; }
+
+    // The time is `now2clk` 2CLK cycles since power-on: finish every command whose end has
+    // come -- each at its own end, so the next starts there, not at `now2clk` -- and start
+    // what the write FIFO holds behind it. Time never runs backwards; an earlier value is
+    // ignored. A no-op untimed.
+    void advance(uint64_t now2clk);
+
+    // Is a command still being paid for, and until when (2CLK)? The board arms its
+    // deadline on it, so an interrupt on CED or WFE lands on time with no bus cycle.
+    bool     busy() const { return busy_; }
+    uint64_t busyUntil() const { return busyUntil_; }
+
+    // Table 3: the 2CLK cost of command `op` with parameters `params`, having visited
+    // `dots` pixel positions in `rows` rows. Public and static so a test can check the
+    // table itself. Transfers (DRD/DWT/DMOD) return only their constant.
+    static uint64_t opCycles(uint16_t op, const std::vector<uint16_t>& params, uint64_t dots, uint64_t rows);
 
     // ---- THE SCREEN, for the board's render loop ----
 
@@ -238,6 +299,7 @@ private:
     // ---- the command engine ----
     void processFifo();                      // consume words from the write FIFO
     void commandWord(uint16_t w);            // one word of command or parameter
+    void run();                              // execute(), paid for when timed
     int  paramsFor(uint16_t opcode) const;   // how many parameter words (-1 = undefined)
     void execute();                          // all parameters are in
     void commandEnd() { sr_ |= kCED; }
@@ -282,6 +344,15 @@ private:
     void     setRwp(uint32_t a) { rwp_ = a & 0xFFFFF; }
     uint32_t mw(int dn) const { return regWord((uint8_t)(0xC2 + dn * 8)) & 0x0FFF; }
     uint32_t sar(int dn) const;
+
+    // ---- drawing time (timed mode) ----
+    // The engine is busy for `cycles` 2CLK from now_: the SR flags raised since `before`
+    // are held back until the end, when finish() raises them.
+    void     occupy(uint64_t cycles, uint8_t before);
+    void     finish();                                  // the command's end has come
+    uint64_t drawEnd(uint64_t start, uint64_t cycles);  // when `cycles` of drawing started at `start` end
+    void     buildTimeline();                           // slotFree_/rasterFree_ from the registers
+    uint64_t xferCost() const;                          // the transfer word about to move
 
     void     vramWrite(uint32_t addr, uint16_t v) { vram_[addr & vmask_] = v; dirty_ = true; }
     uint16_t vramRead(uint32_t addr) const { return vram_[addr & vmask_]; }
@@ -332,6 +403,21 @@ private:
     std::vector<uint16_t> vram_;
     uint32_t vmask_;
     bool     dirty_ = true;
+
+    // Drawing time. timed_ is the board's strap and does not travel in a snapshot.
+    bool     timed_ = false;
+    uint64_t now_ = 0;              // 2CLK since power-on, as last told (advance)
+    bool     busy_ = false;         // a command is being paid for...
+    uint64_t busyUntil_ = 0;        // ...until this 2CLK
+    uint8_t  pendingSr_ = 0;        // SR flags it raised, shown when it ends
+    uint64_t dots_ = 0, rows_ = 0;  // what the command in execute() has visited
+    // The frame's free slots: one flag per slot, and free slots before each raster (the
+    // last entry is the frame's total). Rebuilt lazily when a timing register moves.
+    std::vector<uint8_t>  slotFree_;
+    std::vector<uint32_t> rasterFree_;
+    int      slotsPerRaster_ = 0;
+    bool     timelineAll_ = true;   // every slot free: stopped, or no frame described
+    bool     timelineStale_ = true;
 };
 
 } // namespace altair

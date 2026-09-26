@@ -993,6 +993,7 @@ cadzilla: an HD63484 ACRTC graphics board with a Bt453 RAMDAC and 2 MB of fixed 
 |---|---|---|---|---|
 | `port` | int | `0x70` | `0x0` .. `0xF8` | I/O base -- one 8-port block: BASE the ACRTC address/status, BASE+1 the MODE register, BASE+2 the ACRTC data/FIFO port, BASE+4..+7 the Bt453. A multiple of 8; default 70 |
 | `mode` | enum | `1024x768` | `640x480` \| `800x600` \| `1024x768` | The monitor: a fixed-frequency VESA raster the ACRTC's picture is placed in by its HDS/VDS. 640x480, 800x600 or 1024x768 (default) |
+| `draw_rate` | enum | `full` | `full` \| `real` | Drawing speed: full (as fast as the host can -- every ACRTC command finishes at once) \| real (each command takes its datasheet time, so the write FIFO fills and CED comes late, as on the card) |
 | `width` | string | `auto` | text | Video window width in pixels: 'auto' (default) opens about half the screen wide, or a number like 1024. The height follows the board's own aspect, and the picture is a whole multiple of its pixels so it stays crisp |
 | `interrupt` | enum | `none` | `none` \| `int` \| `vi0` \| `vi1` \| `vi2` \| `vi3` \| `vi4` \| `vi5` \| `vi6` \| `vi7` | SW1-8: where the ACRTC's IRQ* lands -- none (default, disconnected) or the S-100 line (int = pin 73, or vi0..vi7) to raise while an enabled status flag is pending *(interrupt strap)* |
 | `video` | string | — | — | LIVE: whether the ACRTC is displaying -- OMR STR and DCR SE1 both set. Read-only **(read-only — not a key you may set)** |

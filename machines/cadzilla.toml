@@ -71,11 +71,21 @@ port = 10
 # Bt453 at 74-77), a 1024x768 monitor (the board's own default -- `mode` also takes 640x480
 # or 800x600, the other two primary VESA resolutions). 2 MB of SRAM is fixed. It decodes
 # no memory at all; the picture lives on the board. `interrupt` (SW1-8) defaults to `none`.
+#
+# `draw_rate` is how fast the ACRTC draws. `full` (the board's default, and this bench's
+# choice): every command is done the moment it lands, so a program under development never
+# waits on the chip. `real`: each command takes the time the HD63484 data sheet gives it,
+# paid in the memory cycles the display leaves free -- the write FIFO fills and CED comes
+# late, as on the card. Use `real` for anything timing-sensitive, a game above all
+# (`SET cad0 draw_rate=real` at the prompt). It is independent of `cpu0 clock_hz`: that only
+# decides whether the host waits, and the drawing time is the same number of instructions
+# at any CPU speed setting.
 [[board]]
-type = "cadzilla"
-id   = "cad0"
-port = 0x70
-mode = "1024x768"
+type      = "cadzilla"
+id        = "cad0"
+port      = 0x70
+mode      = "1024x768"
+draw_rate = "full"
 
 # THE FLOPPY CONTROLLER -- an 88-DCDD at 0x08, four drives, no disks: the same honest empty
 # default as `default.toml`. Nothing in this machine boots from it; it is here so the bench
