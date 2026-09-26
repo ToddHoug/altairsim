@@ -71,8 +71,8 @@ public:
     std::vector<Property> properties() override;
     std::vector<MapEntry> ioMap() const override;
 
-    std::vector<std::string> debugFlags() const override { return {"seek", "link"}; }
-    enum DebugFlag { SEEK = 0, LINK = 1 };
+    std::vector<std::string> debugFlags() const override { return {"seek", "link", "error"}; }
+    enum DebugFlag { SEEK = 0, LINK = 1, FAULT = 2 };
 
     // The serial unit, the card's J2 connector, for types 6 and 7 -- the server mounts those
     // images -- and the four drives of type 5, drive0..drive3, which MOUNT fills.
@@ -152,7 +152,9 @@ private:
     void sendTrack();
     void startWrite();
     void startRead();
-    bool takeReply(const char* cmd, uint16_t& code, uint16_t& data);
+    const char* takeReply(const char* cmd, uint16_t& code, uint16_t& data);  // nullptr = good
+    bool faultsOn();  // `error` or `link`: the link's faults are reported
+    void writeFault(const char* what, const char* why);
     void flushRx();
     void finishWrite(bool ok);
     void resetLink();
@@ -207,6 +209,7 @@ private:
     uint64_t             statAt_    = 0;
     uint64_t             deadline_  = 0;
     int                  tries_     = 0;
+    int                  serverUp_  = -1;  // -1 not heard yet, 0 silent, 1 answering: reported on a change
     bool                 readAfter_ = false;
     std::vector<uint8_t> rx_;
     std::vector<uint8_t> tx_;

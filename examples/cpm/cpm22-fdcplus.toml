@@ -25,7 +25,16 @@ base = "default"
 
 # The boot: EXAMINE FF00 / RUN, as on a real disk Altair. DBL at FF00 does not know that there is
 # no disk; to it, the FDC+ is an 88-DCDD.
-startup = ["RUN FF00"]
+#
+# IF NOTHING COMES AFTER `RUN FF00`, the drive server is not answering. DBL has no time limit --
+# it waits for the drive to be ready, as it does on a real Altair -- so the screen stays empty.
+# The board's `error` debug flag reports what the line does wrong: a server that does not
+# answer, a bad track, a write the server did not take. It is off. To turn it on, remove the `#`
+# before its line below (or type `SET fdc0 DEBUG=error` at the monitor).
+startup = [
+  "SET fdc0 DEBUG=error",
+  "RUN FF00",
+]
 
 # A modern Backspace key sends DEL; CP/M's line editor wants BS.
 [console]
@@ -67,7 +76,8 @@ drivetype = 7          # 7 = serial drive as an Altair 8" drive (the 8 MB drive 
 #
 # A server on this same computer or across the network can also be reached through a TCP
 # bridge, with `connect = "socket:HOST:PORT"`. If the port will not open, the error lists the
-# serial ports this computer has.
+# serial ports this computer has. If the port opens but nothing comes after RUN FF00, see the
+# `error` debug flag at the top of this file.
 # ============================================================================================
 connect = "serial:/dev/cu.usbserial-AL009KFH"
 baud    = 230400

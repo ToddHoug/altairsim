@@ -91,8 +91,10 @@ the serial drive's eight rates, default 403200 — see below), `connect` (the dr
 `CONNECT fdc0:line` sets it). One serial unit, `line`, which takes no `MOUNT`: the server mounts
 the images. The four disk units `drive0`–`drive3` are type 5's.
 
-**Debug flags:** `seek` (every step) and `link` (every READ/WRIT sent, every track received,
-and a change in the server's mount map).
+**Debug flags:** `seek` (every step), `link` (every READ/WRIT sent, every track received,
+and a change in the server's mount map) and `error` (only the link's faults: STAT not answered --
+said once, on the change, and again when the server answers -- a bad or wrong reply, a track
+with a bad checksum or cut short, and each failed WRIT/WSTA try). `link` prints the faults too.
 
 ### Reset
 
