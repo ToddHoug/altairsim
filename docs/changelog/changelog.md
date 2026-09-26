@@ -39,6 +39,17 @@ Alongside it, a video board's frame can now leave the simulator: a test asserts 
 picture** as a text grid and, when it disagrees, writes what the board actually drew as a `.ppm`
 you can open. The Developer Guide's new *Writing a video board* chapter walks through it.
 
+### `cadzilla` draws at the real chip's speed if you ask it to
+
+The new `draw_rate` strap on `cadzilla` sets how fast the ACRTC draws. With `full`, the default,
+each command completes immediately, as before. With `real`, each command takes the time that
+the HD63484 data sheet gives it. The chip draws only in the memory cycles that the display does
+not use, so the write FIFO fills and the command-end bit comes late, as on the card. The ACRTC
+clock is the monitor's pixel clock divided by 8 (single access) or 4 (interleaved access). Use
+`SET cad0 draw_rate=real`, or put it in the machine file, for a game or any program that is
+sensitive to time. The setting does not depend on the CPU's `clock_hz`. Snapshots from an earlier
+build do not load in this one.
+
 ### A new board: the FDC+ serial drive
 
 The new `fdcplus` board is the FarmTek FDC+ in its serial drive mode (drive types 6 and 7). A

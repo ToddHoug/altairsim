@@ -101,6 +101,8 @@ void Hd63484::power() {
     orgDpd_ = 0;
     orgDn_  = 0;
     cpx_ = cpy_ = 0;
+    now_ = 0;
+    timelineStale_ = true;
     reset();
 }
 
@@ -116,6 +118,8 @@ void Hd63484::abort() {
     xferRead_ = false;
     rpending_.clear();
     stopped_  = false;
+    busy_      = false;               // the command being paid for is gone with the rest
+    pendingSr_ = 0;
     sr_ = kCED | kWFR | kWFE;
 }
 
@@ -176,9 +180,11 @@ void Hd63484::regByteWritten(uint8_t addr) {
     case 0x04: case 0x05:                      // OMR: STR, GAI, ACM
     case 0x06: case 0x07:                      // DCR: screen enables
         dirty_ = true;
+        timelineStale_ = true;                 // STR, ACP, RAM, ACM and the screens set drawing time
         return;
     default:
         if (addr >= 0x80) dirty_ = true;       // timing and display-control RAM
+        if (addr >= 0x82 && addr <= 0x97) timelineStale_ = true;   // HSR..VWR: the frame's shape
         return;
     }
 }
@@ -229,6 +235,7 @@ void Hd63484::queueRead(uint16_t w) { rpending_.push_back(w); }
 // into an indefinite wait state ... the command should be aborted" (manual 6.5): CED
 // stays clear, and the stream stays stalled, until ABT.
 void Hd63484::feedRead() {
+    if (busy_) return;                         // timed: a command's answer waits for its end
     size_t n = 0;
     while (n < rpending_.size() && rfifoN_ + 2 <= kFifoBytes) {
         pushRead((uint8_t)(rpending_[n] >> 8));
@@ -237,10 +244,15 @@ void Hd63484::feedRead() {
     }
     rpending_.erase(rpending_.begin(), rpending_.begin() + (std::ptrdiff_t)n);
     while (xferRead_ && xferLeft_ > 0 && rfifoN_ + 2 <= kFifoBytes) {
+        const uint64_t cost = timed_ ? xferCost() : 0;
         uint16_t w = vramRead(xferAddr());
         pushRead((uint8_t)(w >> 8));
         pushRead((uint8_t)w);
         xferAdvance();
+        if (timed_) {                          // one word per paid stretch: the next comes at its end
+            occupy(cost, sr_);
+            return;
+        }
     }
 }
 
@@ -261,13 +273,15 @@ void Hd63484::updateFifoStatus() {
 }
 
 // ---------------------------------------------------------------------------
-// The command engine. Drawing is instantaneous, so the write FIFO drains the moment a
-// word lands -- WFE is the steady state and a driver's polling loop never spins. The
-// exception is a command waiting on the read FIFO (readStalled): the words behind it
-// stay in the write FIFO until the host reads, exactly as they would on the chip.
+// The command engine. UNTIMED, drawing is instantaneous, so the write FIFO drains the
+// moment a word lands -- WFE is the steady state and a driver's polling loop never spins.
+// TIMED, the engine stops taking words while a command is being paid for (busy_), so the
+// words behind it back up in the write FIFO as they do on the chip: WFE clears, and at 8
+// words WFR. Either way a command waiting on the read FIFO (readStalled) holds the
+// words behind it in the write FIFO until the host reads, exactly as the chip does.
 // ---------------------------------------------------------------------------
 void Hd63484::processFifo() {
-    while (wfifoN_ >= 2 && !readStalled()) {
+    while (wfifoN_ >= 2 && !readStalled() && !busy_) {
         uint8_t hi = 0, lo = 0;
         popWrite(hi);
         popWrite(lo);
@@ -336,12 +350,15 @@ int Hd63484::paramsFor(uint16_t op) const {
 void Hd63484::commandWord(uint16_t w) {
     // A DWT/DMOD in progress under program control: the words are frame-memory data.
     if (xferLeft_ > 0 && !xferRead_) {
+        const uint8_t  before = sr_;
+        const uint64_t cost   = timed_ ? xferCost() : 0;
         uint32_t addr = xferAddr();
         int      mm   = cmd_ & 3;
         bool     mod  = (cmd_ & 0xFF00) == 0x2C00;
         vramWrite(addr, mod ? modify(vramRead(addr), w, mm) : w);
         xferAdvance();
         if (xferLeft_ == 0) commandEnd();
+        if (timed_) occupy(cost, before);
         return;
     }
 
@@ -357,7 +374,7 @@ void Hd63484::commandWord(uint16_t w) {
             return;
         }
         inCommand_ = true;
-        if (paramsWanted_ == 0) execute();
+        if (paramsWanted_ == 0) run();
         return;
     }
 
@@ -369,7 +386,24 @@ void Hd63484::commandWord(uint16_t w) {
         else if (top == 0x9800 || top == 0x9C00 || top == 0xA000 || top == 0xA400)
             paramsWanted_ = 1 + 2 * (int)w;    // polyline/polygon: n points
     }
-    if ((int)params_.size() >= paramsWanted_) execute();
+    if ((int)params_.size() >= paramsWanted_) run();
+}
+
+// Execute the command whose parameters are all in. Timed, it is then paid for: the drawing
+// lands in the frame memory now (nothing the guest can read sees it before the end -- the
+// commands that could are queued behind this one), and everything the guest CAN see waits
+// for the end: the SR flags it raised (CED above all), and any words it answers (busy_ is
+// set first, so feedRead() holds them).
+void Hd63484::run() {
+    if (!timed_) {
+        execute();
+        return;
+    }
+    const uint8_t before = sr_;
+    dots_ = rows_ = 0;
+    busy_ = true;
+    execute();
+    occupy(opCycles(cmd_, params_, dots_, rows_), before);
 }
 
 // ---------------------------------------------------------------------------
@@ -698,6 +732,191 @@ void Hd63484::execute() {
 }
 
 // ---------------------------------------------------------------------------
+// Drawing time (timed mode; the DRAWING TIME note in the header).
+// ---------------------------------------------------------------------------
+void Hd63484::setTimed(bool on) {
+    if (!on && timed_) {
+        timed_ = false;
+        while (busy_) finish();                // untimed, nothing it starts is paid for
+    }
+    timed_ = on;
+}
+
+void Hd63484::advance(uint64_t now2clk) {
+    if (now2clk < now_) return;
+    while (busy_ && busyUntil_ <= now2clk) {
+        now_ = busyUntil_;                     // the next command starts HERE, not at now2clk
+        finish();
+    }
+    now_ = now2clk;
+}
+
+void Hd63484::occupy(uint64_t cycles, uint8_t before) {
+    pendingSr_ |= (uint8_t)(sr_ & ~before & (kCER | kARD | kCED));
+    sr_         = (uint8_t)(sr_ & ~pendingSr_);
+    busy_       = true;
+    busyUntil_  = drawEnd(now_, cycles ? cycles : 1);   // nothing the chip does is free
+}
+
+void Hd63484::finish() {
+    busy_ = false;
+    sr_ |= pendingSr_;
+    pendingSr_ = 0;
+    // The words it answered go into the read FIFO now; a command still owed room ends
+    // when the host has made it (popRead), as untimed.
+    const bool waiting = !rpending_.empty();
+    feedRead();
+    if (waiting && rpending_.empty()) commandEnd();
+    if (!busy_ && !readStalled()) processFifo();
+}
+
+// The transfer word about to move (DRD/DWT/DMOD under program control): Table 3's
+// (4x+8)y + 16[xy/8] (DRD: 12[xy/8]), spread over the words -- 4 each, 8 more on the
+// last word of a row, 16 (12) more on the first word of every group of 8.
+uint64_t Hd63484::xferCost() const {
+    const int k    = xferAx_ * xferAy_ - xferLeft_;   // this word's index in the block
+    uint64_t  cost = 4;
+    if (k % 8 == 0) cost += xferRead_ ? 12 : 16;
+    if (xferX_ == xferAx_ - 1) cost += 8;
+    return cost;
+}
+
+// Table 3 (datasheet "ACRTC Command Table"), in 2CLK cycles.
+uint64_t Hd63484::opCycles(uint16_t op, const std::vector<uint16_t>& prm, uint64_t dots, uint64_t rows) {
+    const auto     u     = [&](size_t i) -> uint64_t { return i < prm.size() ? prm[i] : 0; };
+    const auto     words = [&](size_t i) -> uint64_t { return (uint64_t)std::abs((int)(int16_t)u(i)) + 1; };
+    const uint64_t P     = (op & 0x0004) ? 6 : 4;     // OPM 100-111 read before they write
+
+    // ---- register access and data transfer ----
+    if (op == 0x0400) return 8;                                   // ORG
+    if ((op & ~0x001F) == 0x0800) return 6;                       // WPR
+    if ((op & ~0x001F) == 0x0C00) return 6;                       // RPR
+    if ((op & ~0x000F) == 0x1800)                                 // WPTN: n words
+        return 4 * (prm.empty() ? 0 : prm.size() - 1) + 8;
+    if ((op & ~0x000F) == 0x1C00) return 4 * u(0) + 10;           // RPTN n
+    if (op == 0x2400) return 62;                                  // DRD: + each word as it moves
+    if (op == 0x2800 || (op & ~0x0003) == 0x2C00) return 34;      // DWT / DMOD: likewise
+    if (op == 0x4400) return 12;                                  // RD
+    if (op == 0x4800 || (op & ~0x0003) == 0x4C00) return 8;       // WT / MOD
+    if (op == 0x5800) return (2 * words(1) + 8) * words(2) + 12;  // CLR D AX AY
+    if ((op & ~0x0003) == 0x5C00) return (4 * words(1) + 6) * words(2) + 12;   // SCLR
+    if ((op & ~0x0F00) == 0x6000 || (op & ~0x0F03) == 0x7000)     // CPY / SCPY SAH SAL AX AY
+        return (6 * words(2) + 10) * words(3) + 12;
+
+    // ---- graphic drawing ----
+    switch (op & 0xFF00) {
+    case 0x8000: case 0x8400: return 56;                          // AMOVE / RMOVE
+    case 0x8800: case 0x8C00: return P * dots + 18;               // ALINE / RLINE: P.L+18
+    case 0x9000: case 0x9400: return P * dots + 54;               // ARCT / RRCT: 2P(A+B)+54
+    case 0x9800: case 0x9C00: return P * dots + 16 * u(0) + 8;    // APLL / RPLL: sum[P.L+16]+8
+    case 0xA000: case 0xA400: return P * dots + 16 * u(0) + 20;   // APLG / RPLG: ...+P.Lo+20
+    case 0xC000: case 0xC400: return P * dots + 8 * rows + 18;    // AFRCT / RFRCT: (P.A+8)B+18
+    case 0xCC00: return 8;                                        // DOT
+    case 0xC800: case 0xC900: {                                   // PAINT: (18A+102)B-58
+        const int64_t c = 18 * (int64_t)dots + 102 * (int64_t)rows - 58;
+        return c > 0 ? (uint64_t)c : 0;
+    }
+    default: break;
+    }
+    if ((op & 0xE000) == 0xE000) return (P + 2) * dots + 10 * rows + 70;   // AGCPY / RGCPY
+    if ((op & 0xF000) == 0xD000) return P * dots + 10 * rows + 20;         // PTN
+    switch (op & 0xFE00) {
+    case 0xA800: return 8 * dots + 66;                            // CRCL
+    case 0xAC00: return 10 * dots + 90;                           // ELPS
+    case 0xB000: case 0xB400: return 8 * dots + 18;               // AARC / RARC
+    case 0xB800: case 0xBC00: return 10 * dots + 96;              // AEARC / REARC
+    default: return 0;
+    }
+}
+
+// Which slots of the frame the display leaves free for drawing (the rules in the header).
+void Hd63484::buildTimeline() {
+    timelineStale_ = false;
+    const uint16_t omr = regWord(0x04);
+    const int      H   = ((regWord(0x82) >> 8) & 0xFF) + 1;
+    const int      V   = regWord(0x86) & 0x0FFF;
+    timelineAll_ = !(omr & 0x4000) || V == 0;           // not started, or no frame
+    slotFree_.clear();
+    rasterFree_.clear();
+    if (timelineAll_) return;
+
+    int hsw = regWord(0x82) & 0x1F;
+    if (hsw < 1) hsw = 1;
+    if (hsw > H) hsw = H;
+    const int  vsw  = regWord(0x88) & 0x1F;
+    const bool ram  = (omr & 0x0080) != 0;              // static RAM: the refresh period draws
+    const bool acp  = (omr & 0x2000) != 0;              // drawing priority
+    const bool dual = (omr & 0x0008) != 0;              // interleaved (or superimposed)
+
+    slotsPerRaster_ = H;
+    slotFree_.assign((size_t)H * (size_t)V, 0);
+    rasterFree_.assign((size_t)V + 1, 0);
+    for (int v = 0; v < V; ++v) {
+        uint32_t   a   = 0;
+        const bool bg  = backgroundRaster(v - vsw - vds(), a);
+        const bool win = windowRaster(v - vsw, a);
+        uint32_t   n   = 0;
+        for (int h = 0; h < H; ++h) {
+            bool f;
+            if (h < hsw - 1) {
+                f = ram;                                // DRAM refresh period
+            } else if (h == hsw - 1) {
+                f = false;                              // the attribute output cycle
+            } else {
+                const int k    = h - hsw;               // memory cycles from HSYNC's rise
+                const bool inB = bg && k >= hds() && k < hds() + hdw();
+                const bool inW = win && k >= hws() && k < hws() + hww();
+                if ((!inB && !inW) || acp) {
+                    f = true;
+                } else if (dual) {                      // the drawing phase of each display cycle
+                    f = (!inB || ((k - hds()) & 1)) && (!inW || ((k - hws()) & 1));
+                } else {
+                    f = false;
+                }
+            }
+            slotFree_[(size_t)v * (size_t)H + (size_t)h] = f ? 1 : 0;
+            n += f ? 1 : 0;
+        }
+        rasterFree_[(size_t)v + 1] = rasterFree_[(size_t)v] + n;
+    }
+    // A frame with no free slot at all is no real timing (every retrace slot is display);
+    // drawing at full rate beats a chip that never finishes anything.
+    if (rasterFree_.back() == 0) timelineAll_ = true;
+}
+
+// When `cycles` 2CLK of drawing that start at `start` are done: the end of the
+// ceil(cycles/2)-th free slot at or after `start`.
+uint64_t Hd63484::drawEnd(uint64_t start, uint64_t cycles) {
+    if (timelineStale_) buildTimeline();
+    const uint64_t n = (cycles + 1) / 2;
+    const uint64_t s = (start + 1) / 2;                 // the first whole slot
+    if (timelineAll_) return 2 * (s + n);
+
+    const uint64_t F        = slotFree_.size();
+    const uint64_t perFrame = rasterFree_.back();
+    const uint64_t H        = (uint64_t)slotsPerRaster_;
+    uint64_t       frame    = s / F;
+    const uint64_t pos      = s % F;
+    // Free slots of this frame before `pos`; the target is the n-th free one from there.
+    uint64_t r      = pos / H;
+    uint64_t before = rasterFree_[(size_t)r];
+    for (uint64_t i = r * H; i < pos; ++i) before += slotFree_[(size_t)i];
+    uint64_t target = before + n;                       // 1-based, counted from this frame's start
+    frame += (target - 1) / perFrame;
+    target = (target - 1) % perFrame + 1;
+    // The raster holding it: rasterFree_[r] < target <= rasterFree_[r + 1].
+    r = (uint64_t)(std::lower_bound(rasterFree_.begin(), rasterFree_.end(), (uint32_t)target) -
+                   rasterFree_.begin()) - 1;
+    uint64_t cnt = rasterFree_[(size_t)r];
+    uint64_t i   = r * H;
+    for (;; ++i) {
+        cnt += slotFree_[(size_t)i];
+        if (cnt == target) break;
+    }
+    return 2 * (frame * F + i + 1);
+}
+
+// ---------------------------------------------------------------------------
 // Frame-memory arithmetic (manual 6.7, Figure 6.14(b)).
 // ---------------------------------------------------------------------------
 int Hd63484::bitsPerPixel() const {
@@ -826,6 +1045,7 @@ void Hd63484::stepPatternX() {
 }
 
 void Hd63484::stepPatternY() {
+    ++rows_;                                      // one row of a plane command: Table 3's B
     if (pzcy_ < pzy_) {
         ++pzcy_;
         return;
@@ -858,6 +1078,7 @@ uint16_t Hd63484::applyOpm(uint16_t data, uint16_t color, uint32_t /*addr*/, int
 // pointer steps on either way -- a clipped dash is still a dash's worth of pattern.
 void Hd63484::drawPixel(int x, int y) {
     if (stopped_) return;
+    ++dots_;                                      // a visited position: Table 3's L and d
     if (areaAllows(x, y)) {
         bool     draw = false;
         uint16_t color = colorFor(draw);
@@ -1067,6 +1288,7 @@ void Hd63484::paint(bool e) {
         int xl = x, xr = x;
         while (fillable(xl - 1, y)) seen[key(--xl, y)] = true;
         while (fillable(xr + 1, y)) seen[key(++xr, y)] = true;
+        ++rows_;                                // a span: PAINT's B (Table 3)
         for (int xi = xl; xi <= xr; ++xi) {
             patternAt(xi - x0, y - y0, ppx0, pzcx0, ppy0, pzcy0);
             drawPixel(xi, y);
@@ -1130,7 +1352,9 @@ void Hd63484::graphicCopy(int xs, int ys, int dx, int dy, bool s, int dsd) {
     const int      nSlow = (s ? std::abs(dx) : std::abs(dy)) + 1;
     const int      x0 = cpx_, y0 = cpy_;
     for (int j = 0; j < nSlow; ++j) {
+        ++rows_;                                // Table 3's B...
         for (int i = 0; i < nFast; ++i) {
+            ++dots_;                            // ...and A, clipped pixels included
             uint32_t sa = 0;
             int      sh = 0;
             wordAddress(xs + i * ss.fx + j * ss.sx, ys + i * ss.fy + j * ss.sy, sa, sh);
@@ -1359,6 +1583,10 @@ void Hd63484::serialize(StateWriter& w) const {
     w.u16((uint16_t)stopY_);
     w.u32((uint32_t)rpending_.size());
     for (uint16_t v : rpending_) w.u16(v);
+    w.u64(now_);
+    w.boolean(busy_);
+    w.u64(busyUntil_);
+    w.u8(pendingSr_);
 }
 
 void Hd63484::deserialize(StateReader& r) {
@@ -1409,6 +1637,11 @@ void Hd63484::deserialize(StateReader& r) {
     uint32_t nr = r.u32();
     rpending_.clear();
     for (uint32_t i = 0; i < nr && i < 65536; ++i) rpending_.push_back(r.u16());
+    now_       = r.u64();
+    busy_      = r.boolean();
+    busyUntil_ = r.u64();
+    pendingSr_ = r.u8();
+    timelineStale_ = true;
     if (wfifoN_ < 0 || wfifoN_ > kFifoBytes) wfifoN_ = 0;
     if (rfifoN_ < 0 || rfifoN_ > kFifoBytes) rfifoN_ = 0;
     dirty_ = true;

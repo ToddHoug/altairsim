@@ -225,7 +225,9 @@ constexpr char     kMagic[8]     = {'A', 'L', 'T', 'R', 'S', 'N', 'P', '1'};
 // snapshot lacks it and is rejected with the format-mismatch message rather than misread.
 // 3: the HD63484 (cadzilla) keeps one RWP instead of four, and gained its read-FIFO wait
 // queue, the transfer direction and the AREA stop point.
-constexpr uint32_t kFormatVersion = 3;
+// 4: cadzilla's drawing time -- the HD63484 keeps its 2CLK time, the command being paid
+// for and the flags it owes; the board keeps its T-state -> 2CLK carry.
+constexpr uint32_t kFormatVersion = 4;
 }  // namespace
 
 bool Machine::snapshot(const std::string& path, std::string& err) const {

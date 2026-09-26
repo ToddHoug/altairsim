@@ -1241,10 +1241,29 @@ guest must set the ACRTC to 8 bits per pixel and an address increment of +8. `SH
 build with no display runs in the same way and shows nothing. `SHOW <id>` gives these live
 values: `video`, `picture` (the size of the picture and its position in the frame), `wiring`,
 the MODE register as `hspol`, `vspol`, `amode` and `olen`, the ACRTC `status`, and `irq` (whether
-the board asserts an interrupt now). It also gives the straps: `port`, `mode`, `width` and
-`interrupt`. The `interrupt` strap sets the S-100 line for the IRQ\* output of the board. It is
-`none` by default. The strap is switch 8 of SW1 on the real board. The frame memory is 2 MB, and
-you cannot change it.
+the board asserts an interrupt now). It also gives the straps: `port`, `mode`, `draw_rate`,
+`width` and `interrupt`. The `interrupt` strap sets the S-100 line for the IRQ\* output of the
+board. It is `none` by default. The strap is switch 8 of SW1 on the real board. The frame memory
+is 2 MB, and you cannot change it.
+
+**The `draw_rate` strap sets the drawing speed.** With `full` (the default), the ACRTC completes
+each command immediately. The write FIFO is always empty, and the guest never waits for the
+chip. This is the fastest setting when you develop a program. With `real`, each command takes
+the time that the Hitachi data sheet gives for it. The ACRTC draws only in the memory cycles
+that the display does not use. These depend on the access mode and on the priority bit of the
+operation mode register. While the chip draws, the next command words stay in the write FIFO.
+The FIFO status bits and the command-end bit (CED) then change at the times that the real chip
+changes them. Use `real` for a program that is sensitive to time, for example a game:
+
+```
+SET cad0 draw_rate=real
+```
+
+The ACRTC clock comes from the pixel clock of the `mode`. It is the pixel clock divided by 8 in
+single access mode, or by 4 in interleaved access mode. The `draw_rate` strap does not depend on
+the `clock_hz` of the CPU. When `clock_hz` is `0`, the simulator runs at full speed, but the
+guest program cannot see a difference. A drawing command takes the same number of CPU
+instructions at each `clock_hz`.
 
 The `cadzilla` machine is the board alone, with a console for you to type at. The board does
 every drawing command of the ACRTC: lines, rectangles, circles, ellipses, arcs, area paint,

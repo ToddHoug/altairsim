@@ -23,11 +23,11 @@ constexpr int kPixelsPerFetch = 16;
 // porch -> 6 cycles = 96, 40 px front porch -> 2 = 32; 1024x768: 136 px sync -> 8 cycles,
 // 24 px front porch -> 2), which is what a timing PROM on a real card would have done.
 //
-//                name         w     h   hsw hbp hfp  vsw vbp vfp     pixel clock
+//                name         w     h   hsw hbp hfp  vsw vbp vfp  pixel clock (60 Hz)
 const CadzillaBoard::Mode kModes[] = {
-    {"640x480",   640,  480,   6,  3,  1,   2, 33, 10},   // 25.175 MHz, 60 Hz
-    {"800x600",   800,  600,   8,  6,  2,   4, 23,  1},   // 40.000 MHz, 60 Hz
-    {"1024x768", 1024,  768,   8, 10,  2,   6, 29,  3},   // 65.000 MHz, 60 Hz
+    {"640x480",   640,  480,   6,  3,  1,   2, 33, 10, 25175000},
+    {"800x600",   800,  600,   8,  6,  2,   4, 23,  1, 40000000},
+    {"1024x768", 1024,  768,   8, 10,  2,   6, 29,  3, 65000000},
 };
 
 } // namespace
@@ -42,6 +42,71 @@ void CadzillaBoard::setDisplay(Display* d) { g_display = d; }
 
 // 2 MB (1 M sixteen-bit words) fixed -- the reference design's SRAM fit, not a strap.
 CadzillaBoard::CadzillaBoard() : acrtc_(kVramWords) {}
+
+CadzillaBoard::~CadzillaBoard() {
+    if (clock_) clock_->cancel(wake_);
+}
+
+// ---------------------------------------------------------------------------
+// Drawing time. The ACRTC counts 2CLK; the machine counts T-states. sync() carries the
+// one into the other exactly -- the remainder travels, so no 2CLK is lost or invented
+// however the accesses fall -- and at the rate in force since the last sync, which is why
+// a change of rate (AMODE, `mode`) syncs first. The split division keeps every product
+// inside 64 bits without a 128-bit type (MSVC has none).
+// ---------------------------------------------------------------------------
+long long CadzillaBoard::twoClkHz() const {
+    return currentMode().pclk / ((modeReg_ & kModeAmode) ? 4 : 8);
+}
+
+void CadzillaBoard::sync() {
+    if (!clock_) return;
+    const uint64_t t = clock_->now();
+    if (t > lastT_) {
+        const uint64_t dT  = t - lastT_;
+        const uint64_t hz  = (uint64_t)clock_->hz();
+        const uint64_t f   = (uint64_t)twoClkHz();
+        const uint64_t num = (dT % hz) * f + rem_;
+        acc2clk_ += (dT / hz) * f + num / hz;
+        rem_      = num % hz;
+    }
+    lastT_ = t;
+    acrtc_.advance(acc2clk_);
+}
+
+// The one deadline: the T-state at which the 2CLK count reaches the end of what the ACRTC
+// is drawing -- the least dT past the LAST SYNC (acc2clk_ and rem_ are as of lastT_, not
+// necessarily now: a restored board has not synced yet) with dT x 2CLK + rem >= owed x
+// CPU Hz. Nobody need touch the board for the command to end; an interrupt on CED or WFE
+// is a wire, and a wire moves when it moves (DESIGN.md 7.5).
+void CadzillaBoard::arm() {
+    if (!clock_) return;
+    clock_->cancel(wake_);
+    wake_ = Clock::kNone;
+    if (!acrtc_.busy()) return;
+    const uint64_t hz = (uint64_t)clock_->hz();
+    const uint64_t f  = (uint64_t)twoClkHz();
+    uint64_t       dT = 0;
+    if (acrtc_.busyUntil() > acc2clk_) {
+        const uint64_t owed = (acrtc_.busyUntil() - acc2clk_) * hz - rem_;
+        dT = (owed + f - 1) / f;
+    }
+    uint64_t when = lastT_ + dT;
+    if (when <= clock_->now()) when = clock_->now() + 1;   // overdue: never AT now (a drain loop re-firing)
+    wake_ = clock_->at(when, [this] {
+        wake_ = Clock::kNone;
+        sync();
+        intChanged();   // CED (or WFE, or a flag the command raised) may have moved IRQ*
+        arm();
+    });
+}
+
+// A different Clock (a machine file is built in a scratch Machine, then moved): its time
+// is not the old one's, and a handle from the old queue means nothing in the new.
+void CadzillaBoard::clockAttached() {
+    wake_  = Clock::kNone;
+    lastT_ = clock_ ? clock_->now() : 0;
+    arm();
+}
 
 // ---------------------------------------------------------------------------
 // Bus: one 8-port block from BASE, no memory. BASE+3 is not decoded; BASE+1 (MODE) is
@@ -65,7 +130,9 @@ uint8_t CadzillaBoard::read(const BusCycle& c) {
     uint8_t off = (uint8_t)(c.port() - port_);
     uint8_t v;
     if (off == 0 || off == 2) {
+        sync();
         v = acrtc_.read(off == 2);      // RS: BASE+0 = 0 (status), BASE+2 = 1 (data/FIFO)
+        arm();                          // a read that makes room can start the next command
         intChanged();
     } else {
         v = dac_.read(off & 3);         // C1C0 = A1A0 (off is 4..7 here)
@@ -76,13 +143,17 @@ uint8_t CadzillaBoard::read(const BusCycle& c) {
 void CadzillaBoard::write(const BusCycle& c) {
     uint8_t off = (uint8_t)(c.port() - port_);
     if (off == 0 || off == 2) {
+        sync();
         acrtc_.write(off == 2, c.data);
+        arm();
         intChanged();
         return;
     }
     if (off == 1) {
         if (c.data != modeReg_) dirty_ = true;      // AMODE moves the picture; the rest is status
+        sync();                                     // AMODE is also 2CLK: the time so far at the old rate
         modeReg_ = c.data;
+        arm();
         return;
     }
     dac_.write(off & 3, c.data);
@@ -101,8 +172,10 @@ void CadzillaBoard::reset(Reset r) {
         // reprogram both the ACRTC's timing and the board's glue after a reset, which is
         // the simplest thing to be right about.
         if (modeReg_ != 0) dirty_ = true;
+        sync();                                     // AMODE (2CLK) goes back to single
         modeReg_ = 0;
         dirty_   = true;
+        arm();          // the ACRTC's command in flight went with RES*
         intChanged();   // RESET* clears CCR's enables (acrtc_.reset()) -- IRQ* stands down
     }
 }
@@ -112,6 +185,11 @@ void CadzillaBoard::power() {
     dac_.reset();
     modeReg_ = 0;
     dirty_   = true;   // the monitor shows its (black) frame from power-on, signal or not
+    // 2CLK restarts with the Clock (powered first; its queue, and our deadline, are gone).
+    lastT_   = clock_ ? clock_->now() : 0;
+    acc2clk_ = 0;
+    rem_     = 0;
+    wake_    = Clock::kNone;
     intChanged();       // a fresh chip asserts nothing
 }
 
@@ -123,6 +201,9 @@ void CadzillaBoard::serialize(StateWriter& w) const {
     acrtc_.serialize(w);
     dac_.serialize(w);
     w.u8(modeReg_);
+    w.u64(lastT_);
+    w.u64(acc2clk_);
+    w.u64(rem_);
 }
 
 void CadzillaBoard::deserialize(StateReader& r) {
@@ -130,7 +211,11 @@ void CadzillaBoard::deserialize(StateReader& r) {
     acrtc_.deserialize(r);
     dac_.deserialize(r);
     modeReg_ = r.u8();
+    lastT_   = r.u64();
+    acc2clk_ = r.u64();
+    rem_     = r.u64();
     dirty_   = true;  // the restored picture owes the host a full redraw
+    arm();             // a Handle never travels: the command in flight re-arms its end
     intChanged();      // the restored SR/CCR may be mid-interrupt
 }
 
@@ -291,13 +376,38 @@ std::vector<Property> CadzillaBoard::properties() {
         x.set     = [this](const Value& v, std::string& err) {
             for (int i = 0; i < modeCount(); ++i) {
                 if (v.s() == mode(i).name) {
+                    sync();                 // the pixel clock is 2CLK too: settle the old rate first
                     mode_  = i;
                     dirty_ = true;
+                    arm();
                     return true;
                 }
             }
             err = "mode is 640x480, 800x600 or 1024x768";
             return false;
+        };
+        p.push_back(std::move(x));
+    }
+    {
+        Property x;
+        x.name    = "draw_rate";
+        x.help    = "Drawing speed: full (as fast as the host can -- every ACRTC command finishes "
+                    "at once) | real (each command takes its datasheet time, so the write FIFO "
+                    "fills and CED comes late, as on the card)";
+        x.kind    = Kind::Enum;
+        x.choices = {"full", "real"};
+        x.get     = [this] { return Value::ofStr(drawReal_ ? "real" : "full"); };
+        x.set     = [this](const Value& v, std::string& err) {
+            if (v.s() != "full" && v.s() != "real") {
+                err = "draw_rate is full or real";
+                return false;
+            }
+            sync();
+            drawReal_ = v.s() == "real";
+            acrtc_.setTimed(drawReal_);   // to full: what was in flight finishes now
+            arm();
+            intChanged();
+            return true;
         };
         p.push_back(std::move(x));
     }
