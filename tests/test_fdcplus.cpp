@@ -12,6 +12,7 @@
 #include "boards/farmtek-fdcplus.h"
 #include "core/bus.h"
 #include "core/clock.h"
+#include "core/debuglog.h"
 #include "core/statefile.h"
 #include "host/cardimg.h"
 #include "host/endpoint.h"
@@ -20,6 +21,9 @@
 #include "test.h"
 
 #include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -27,6 +31,29 @@
 using namespace altair;
 
 namespace {
+
+// Route the debug sink to a scratch file while `f` runs, and return what landed there.
+std::string debugCapture(const std::function<void()>& f) {
+    namespace fs = std::filesystem;
+    std::string    err;
+    const fs::path p = fs::temp_directory_path() / "altair_fdcplus_debug.log";
+    std::error_code ec;
+    fs::remove(p, ec);
+    dbg::setSink(dbg::Sink::File, p.string(), err);
+    f();
+    dbg::setSink(dbg::Sink::Stderr, "", err);  // closes + flushes the file
+    std::ifstream      in(p, std::ios::binary);
+    const std::string  s((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    in.close();
+    fs::remove(p, ec);
+    return s;
+}
+
+int countOf(const std::string& s, const std::string& what) {
+    int n = 0;
+    for (size_t at = s.find(what); at != std::string::npos; at = s.find(what, at + 1)) ++n;
+    return n;
+}
 
 constexpr int kSlot   = 137;
 constexpr int kLen8   = 32 * kSlot;  // 4384
@@ -842,6 +869,59 @@ void test_fdcplus() {
         CHECK(!log.empty() && log[0].find("writes are lost") != std::string::npos,
               "the operator is told");
         CHECK(r.srv->got.back().cmd == "READ", "and the READ still goes");
+    }
+
+    SECTION("FDC+ -- DEBUG=error: a silent server, a bad track and a refused write are reported");
+    {
+        Rig r;
+        r.b.id = "fdc0";
+        r.b.ensureDebugChannel();
+        std::string err;
+        CHECK(r.b.debugChannel()->enable("error", err), "the error flag exists");
+        std::string text = debugCapture([&] {
+            r.srv->silent = true;
+            for (int i = 0; i < 5; ++i) {  // five STATs, none answered
+                r.statRound();
+                r.ns += FdcPlusBoard::kTimeoutNs;
+                r.pump();
+            }
+            r.srv->silent = false;
+            r.statRound();
+            r.statRound();
+        });
+        CHECK(countOf(text, "server not answering") == 1, "a silent server: said once, not five times");
+        CHECK(countOf(text, "server answering again") == 1, "and once when it comes back");
+
+        text = debugCapture([&] {
+            r.srv->badTrack = true;
+            r.ready(0);
+            r.in(0x09);
+            r.pump(2);
+        });
+        CHECK(countOf(text, "BAD CHECKSUM") == 1, "a track with a bad checksum");
+
+        text = debugCapture([&] {
+            CHECK(r.find(0), "sector 0");
+            r.out(0x09, 0x80);
+            r.out(0x0A, 0x55);
+            r.srv->notReady = 5;
+            r.out(0x09, 0x01);
+            r.clk.advance(11 * kMs);
+            r.in(0x09);
+            r.pump(6);
+        });
+        CHECK(countOf(text, "WRIT drive=0 track=0: drive not ready") == 3, "each refused WRIT");
+        CHECK(countOf(text, "(try 3 of 3)") == 1, "numbered");
+        CHECK(countOf(text, "send READ") == 0, "error alone: none of link's traffic");
+
+        CHECK(r.b.debugChannel()->disable("error", err), "flag off");
+        text = debugCapture([&] {
+            r.srv->silent = true;
+            r.statRound();
+            r.ns += FdcPlusBoard::kTimeoutNs;
+            r.pump();
+        });
+        CHECK(text.empty(), "flag off: nothing");
     }
 
     SECTION("FDC+ -- 8\": head unloaded for 1.3 s -> write back and forget the track");

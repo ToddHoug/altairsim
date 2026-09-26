@@ -935,6 +935,19 @@ A slower line makes a slower disk. At 38400 baud, a track takes about one second
 is not using the disk, the board writes changed tracks back to the server after about one second.
 It also writes them back before a `DISCONNECT`, a `POWER`, or when you quit.
 
+**If nothing comes after `RUN FF00`, the server did not answer.** The boot PROM has no time
+limit: it waits until the drive is ready, and the drive is ready only when the server answers.
+A real FDC+ does the same. To see what the line does, turn on the board's `error` debug flag:
+
+```
+altairsim> SET fdc0 DEBUG=error
+```
+
+It reports a server that does not answer (one time, and again when it answers), a track with a
+bad checksum, a track that did not arrive in full, and each write that the server did not take.
+The `link` flag shows the same, and also each request and each track. The debugging guide
+tells you where the reports go.
+
 #### The 1.5 MB floppy (drive type 5)
 
 With `drivetype = 5`, the FDC+ runs a high-density floppy drive in a format of its own: each
