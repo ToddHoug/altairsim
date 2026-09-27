@@ -193,6 +193,9 @@ void test_debuglog() {
         m.running = false;  // and it dashes again the moment the machine stops
         const std::string stopped = capture([&] { dbg::line(ch) << "y\n"; });
         CHECK(stopped.rfind("----  mds0: y", 0) == 0, "stopping returns the column to dashes");
+
+        // The provider holds a reference to m; it must not outlive it.
+        dbg::setPcProvider(nullptr);
     }
 
     SECTION("a raw terminal: CR LF, and a report never starts on the guest's line");
