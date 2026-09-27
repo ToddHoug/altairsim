@@ -2,7 +2,7 @@
 #
 # Build cpm22b23-56k-drawdemo.dsk: the stock CP/M floppy, with room made for DRAWDEMO.COM.
 #
-#     examples/cadzilla/make-drawdemo-disk.sh
+#     tools/make-drawdemo-disk.sh
 #
 # WHY A FLOPPY. drawdemo was developed on an 8 MB hard-disk image, which is far too big to
 # track. The CADzilla example ships on the same 330 KB 8" floppy as examples/cpm instead --
@@ -25,11 +25,11 @@
 
 set -eu
 
-here=$(cd "$(dirname "$0")" && pwd)
-root=$(cd "$here/../.." && pwd)
+root=$(cd "$(dirname "$0")/.." && pwd)
+ex=$root/examples/cadzilla             # the example: its HEX in, its disk out
 sim=${ALTAIRSIM:-$root/build/altairsim}   # a caller with its own binary says so
 src=$root/examples/cpm/cpm22b23-56k.dsk
-out=$here/cpm22b23-56k-drawdemo.dsk
+out=$ex/cpm22b23-56k-drawdemo.dsk
 
 # The SHA-256 of the DRAWDEMO.COM that LOAD makes from DRAWDEMO.HEX. If the program is rebuilt,
 # commit the new .ASM and .HEX and change this line with them.
@@ -37,7 +37,7 @@ EXPECT=2c31535afb916a859351cfb71bc62e5a87b383fb78842600dc9a78f1b18dad37
 
 [ -x "$sim" ] || { echo "make-drawdemo-disk: no $sim -- build first." >&2; exit 1; }
 [ -f "$src" ] || { echo "make-drawdemo-disk: no $src" >&2; exit 1; }
-[ -f "$here/DRAWDEMO.HEX" ] || { echo "make-drawdemo-disk: no $here/DRAWDEMO.HEX" >&2; exit 1; }
+[ -f "$ex/DRAWDEMO.HEX" ] || { echo "make-drawdemo-disk: no $ex/DRAWDEMO.HEX" >&2; exit 1; }
 
 sha256() {
   if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1
@@ -51,7 +51,7 @@ CR=$(printf '\r')
 
 cp "$src" "$work/work.dsk"
 mkdir -p "$work/host"
-cp "$here/DRAWDEMO.HEX" "$work/host/"
+cp "$ex/DRAWDEMO.HEX" "$work/host/"
 
 # A BARE CR IN FRONT OF EVERY COMMAND -- a lightning rod. The BIOS re-initialises the 2SIO on
 # each warm boot, and the byte waiting there when a program exits is lost. The rod gets eaten

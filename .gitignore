@@ -202,10 +202,9 @@ examples/**
 !examples/dazzler/KSCOPE.PRN
 !examples/dazzler/KSCOPE.HEX
 # The CADzilla example is drawdemo on a standard 8" floppy: the disk (the examples/cpm system
-# disk with MBASIC and the BASIC programs taken off and DRAWDEMO.COM put on), the script that
-# makes it, and the program's source and Intel HEX -- the script's input.
+# disk with MBASIC and the BASIC programs taken off and DRAWDEMO.COM put on), and the program's
+# source and Intel HEX -- the input of tools/make-drawdemo-disk.sh, which makes the disk.
 !examples/cadzilla/cpm22b23-56k-drawdemo.dsk
-!examples/cadzilla/make-drawdemo-disk.sh
 !examples/cadzilla/DRAWDEMO.ASM
 !examples/cadzilla/DRAWDEMO.HEX
 !examples/printing/PRINT.ASM
