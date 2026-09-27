@@ -18,9 +18,9 @@
 # the folder boots wherever it is copied to.
 #
 # THE DISK is cpm22b23-56k.dsk from examples/cpm, with MBASIC and the BASIC programs taken
-# off to make room for DRAWDEMO.COM (make-drawdemo-disk.sh is the recipe). ASM, LOAD, DDT,
-# M80/L80 and the host-bridge R/W/HDIR are all still on it. Drive 0 is read/write: there is
-# no undo, so copy the image first if you are about to test writes.
+# off to make room for DRAWDEMO.COM (tools/make-drawdemo-disk.sh is the recipe). ASM, LOAD,
+# DDT, M80/L80 and the host-bridge R/W/HDIR are all still on it. Drive 0 is read/write: there
+# is no undo, so copy the image first if you are about to test writes.
 
 [machine]
 name    = "drawdemo"

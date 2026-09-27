@@ -204,7 +204,7 @@ makes the blob auditable rather than mysterious. Everything else on the disk is 
 **`cpm22b23-56k-drawdemo.dsk` is derived from that tracked disk in turn**, so it has no download
 to check against. 18K free did not hold the 18K `DRAWDEMO.COM`, so `MBASIC.COM` and the four
 BASIC programs that need it (`LUNAR`, `STARINS`, `STARTRK`, `TICTAK`) come off, and 60K is left
-free. The recipe is `examples/cadzilla/make-drawdemo-disk.sh`: it copies `examples/cpm`'s disk,
+free. The recipe is `tools/make-drawdemo-disk.sh`: it copies `examples/cpm`'s disk,
 erases those five files, fetches `DRAWDEMO.HEX` with `R`, `LOAD`s it into `DRAWDEMO.COM` on the
 disk, and then boots the result again and `W`s the program back out to check its SHA-256
 against the one pinned in the script. drawdemo is original software written for this board;
