@@ -69,6 +69,7 @@ DIR  examples/acr        <=  examples/acr
 DIR  examples/hdsk       <=  examples/hdsk
 DIR  examples/printing   <=  examples/printing
 DIR  examples/dazzler    <=  examples/dazzler
+DIR  examples/cadzilla   <=  examples/cadzilla
 
 # NOT AN EXAMPLE, and the one DIR here not under examples/. hostbridge/ is the SOURCE of the
 # file-transfer utilities the file-transfer chapter sends across the host bridge -- R/W/HDIR as

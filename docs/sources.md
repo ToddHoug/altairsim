@@ -187,6 +187,7 @@ back, so `.gitignore` names these, one line each (2026-07-18):
 | `mits-88mds/cpm22/CPM56K-2.DSK` | `0f6480b1…586db` | Its tools disk (B:) — `cpm22-mini.toml` mounts both, so one without the other does not boot. |
 | `examples/diskbasic/Disk BASIC 4.1.dsk` | `e1fb7255…36b69` | Altair BASIC Rev 4.1 [Disk Extended Version], MITS 1977. `acceptance-diskbasic`. Added 2026-07-19. |
 | `examples/cpm/CPM22-48K-HDF.dsk` | `6cb1d68b…5c413eb` | 48K CP/M 2.2b for the FDC+ **1.5 MB floppy** (drive type 5), from `…/1.5mb_floppy/CPM 2.2/`. Untouched. `examples/cpm/cpm22-fdcplus-hdf.toml` boots it, and `acceptance-examples` checks that it does. Added 2026-09-25. |
+| `examples/cadzilla/cpm22b23-56k-drawdemo.dsk` | *derived*; tracked `25909be4…7b9141` | The CADzilla example's floppy: `cpm22b23-56k.dsk` above with `DRAWDEMO.COM` put on. `acceptance-examples`. Added 2026-09-26. |
 
 **The Disk BASIC image came from deramp.com** (Patrick, 2026-07-19), like everything else above,
 but it arrived by hand rather than through `fetch-disk-images.sh` — so the SHA recorded for it is
@@ -200,6 +201,15 @@ our `R.COM`, `W.COM` and `HDIR.COM` installed (26K free → 18K), so the host-br
 somewhere other than as `.HEX` in `cpm/hostbridge/`. The SHA above is the **pristine upstream** file;
 the recipe that turns it into the tracked one is `tools/install-hostbridge-utils.sh`, which is what
 makes the blob auditable rather than mysterious. Everything else on the disk is untouched.
+
+**`cpm22b23-56k-drawdemo.dsk` is derived from that tracked disk in turn**, so it has no download
+to check against. 18K free did not hold the 18K `DRAWDEMO.COM`, so `MBASIC.COM` and the four
+BASIC programs that need it (`LUNAR`, `STARINS`, `STARTRK`, `TICTAK`) come off, and 60K is left
+free. The recipe is `tools/make-drawdemo-disk.sh`: it copies `examples/cpm`'s disk,
+erases those five files, fetches `DRAWDEMO.HEX` with `R`, `LOAD`s it into `DRAWDEMO.COM` on the
+disk, and then boots the result again and `W`s the program back out to check its SHA-256
+against the one pinned in the script. drawdemo is original software written for this board;
+`DRAWDEMO.ASM` beside the disk is its source, and `DRAWDEMO.HEX` is what CP/M's `ASM` made from it.
 
 Everything not tracked is one command away — `tools/fetch-disk-images.sh` downloads the 8.6 MB FDC+
 image and the 24K floppy and checks both against pinned SHA-256s. It **never writes to what it

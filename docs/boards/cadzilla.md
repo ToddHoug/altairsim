@@ -397,7 +397,11 @@ interrupt raised by the deadline alone, and a restored board re-arming its comma
 
 No period software exists for this board; the register table above is what a program would
 load, and `machines/cadzilla.toml`'s header walks the default 1024x768 case from the monitor
-prompt.
+prompt. **`examples/cadzilla/`** ships a whole program: drawdemo, under CP/M 2.2 on an 8"
+floppy, steps through every drawing command at 1024x768, one screen each (`drawdemo.toml` at
+`draw_rate = "full"`, `drawdemo-real.toml` at a 2 MHz 8080 and `draw_rate = "real"`).
+`acceptance-examples` boots it from a copy of the folder, runs DRAWDEMO, and checks through
+`SHOW` that it started the board at 1024x768 with the wiring right.
 
 ## References
 

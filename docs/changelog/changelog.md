@@ -7,6 +7,7 @@ as it is now; this document is the record of how it got there.
 ---
 
 ## Unreleased
+
 ### `cadzilla` — an HD63484 ACRTC graphics board, and a way to prove a picture
 
 A new video board, a new custom product based on period components: Hitachi's **HD63484
@@ -49,6 +50,14 @@ clock is the monitor's pixel clock divided by 8 (single access) or 4 (interleave
 sensitive to time. The setting does not depend on the CPU's `clock_hz`. Snapshots from an earlier
 build do not load in this one.
 
+### The CADzilla example ships
+
+`examples/cadzilla/` runs **drawdemo** under CP/M 2.2 on an 8" floppy. Boot it, type `DRAWDEMO`,
+and a 1024x768 window steps through every drawing command of the ACRTC, one screen for each
+command, 21 screens in all. `drawdemo.toml` draws at full speed. `drawdemo-real.toml` is the
+same machine with a 2 MHz 8080 and `draw_rate = "real"`, so each screen takes the time it takes
+on the real board. The disk is the CP/M disk from `examples/cpm` with `MBASIC` and its BASIC
+programs removed to make room.
 
 ## 1.2.0
 
