@@ -134,6 +134,7 @@ const struct {
     {"terminal", test_terminal},
     {"dazzler", test_dazzler},
     {"multiwindow", test_multiwindow},
+    {"framedump", test_framedump},
     {"d7a", test_d7a},
     {"sol", test_sol},
     {"tapemount", test_tapemount},
