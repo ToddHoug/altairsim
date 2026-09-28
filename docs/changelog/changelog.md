@@ -59,6 +59,13 @@ same machine with a 2 MHz 8080 and `draw_rate = "real"`, so each screen takes th
 on the real board. The disk is the CP/M disk from `examples/cpm` with `MBASIC` and its BASIC
 programs removed to make room.
 
+### 8″ disks need a 2 MHz processor, as on a real Altair
+
+The `dcdd` and `mds` data port now holds one byte, as the real board does, and not a queue. The
+software for 8″ disks times its second byte for a 2 MHz processor, so with `clock_hz` faster than
+2 MHz it now cannot read the disk. A real Altair behaves the same way. Full speed and 2 MHz work
+as before, and minidisk software works at 4 MHz too.
+
 ### A new board: the FDC+ serial drive
 
 The new `fdcplus` board is the FarmTek FDC+ in its serial drive mode (drive types 6 and 7). A
@@ -67,7 +74,8 @@ over a serial line, as a real FDC+ does. Now the simulator and a real FDC+ Altai
 images through one server, and you can test a drive server without a real FDC+. Type 7 is an 8″
 drive, including the 8 MB disk, and type 6 is a minidisk. The boards chapter tells you how to set
 it up, and `examples/cpm/cpm22-fdcplus.toml` boots CP/M from a server: set your serial port in the
-file and run it (#560).
+file and run it (#560). `SET fdc0 DEBUG=error` reports the line's faults: a server that does not
+answer, a bad track, a write the server did not take (#594).
 
 ### The FDC+ runs the 1.5 MB floppy
 
@@ -109,6 +117,13 @@ refuses it and tells you to send `65280`. A missing required argument is an erro
 `run` now obeys `SET BUS UNCLAIMED`, as `RUN` at the monitor does. With `HALT`, it stops with
 `stopped: "unclaimed"` and names the port. With `WARN`, the warning line comes back in the new
 `warnings` list. `run` now also stops on a `BREAK TAPE STOP`, with `stopped: "tape-stop"`.
+
+### Debug reports line up while a guest runs
+
+A `DEBUG=` report on the terminal while a guest ran ended with a line feed and no carriage
+return, so the next line started where the report ended. A report could also start in the
+middle of a line that the guest was printing. Now each report starts on a new line and ends at
+the left edge.
 
 ### MOUNT and UNMOUNT say the right thing
 

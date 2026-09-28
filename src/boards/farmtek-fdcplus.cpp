@@ -485,7 +485,11 @@ void FdcPlusBoard::step() {
 
     case Link::Stat:
         if (rx_.size() >= kMsgLen) {
-            if (takeReply("STAT", code, data)) {
+            if (const char* why = takeReply("STAT", code, data)) {
+                if (faultsOn()) dbg::line(*dc) << "STAT reply: " << why << "\n";
+            } else {
+                if (serverUp_ == 0 && faultsOn()) dbg::line(*dc) << "server answering again\n";
+                serverUp_ = 1;
                 if (trace && data != ready_) dbg::line(*dc) << "server drives=" << data << "\n";
                 ready_ = data;
                 // "Verify the server still has the currently selected drive ready. If not, set
@@ -498,8 +502,13 @@ void FdcPlusBoard::step() {
             link_   = Link::Idle;
             statAt_ = hostNs() + kStatNs;
         } else if (timedOut) {
-            link_   = Link::Idle;
-            statAt_ = hostNs() + kStatNs;
+            // Once, on the change: STAT goes ten times a second, and a silent server would
+            // otherwise say so ten times a second.
+            if (serverUp_ != 0 && faultsOn())
+                dbg::line(*dc) << "server not answering (no STAT reply in 1 s)\n";
+            serverUp_ = 0;
+            link_     = Link::Idle;
+            statAt_   = hostNs() + kStatNs;
         }
         break;
 
@@ -513,13 +522,16 @@ void FdcPlusBoard::step() {
             const uint16_t ck = (uint16_t)(rx_[len] | (rx_[len + 1] << 8));
             const bool bad = sum16(rx_.data(), len) != ck;
             if (bad) key_ |= 0x8000;
-            if (trace)
+            if (trace || (bad && faultsOn()))
                 dbg::line(*dc) << "read drive=" << ((key_ >> 12) & 7) << " track="
                                << (key_ & 0x0FFF) << (bad ? " BAD CHECKSUM" : "") << "\n";
             done = true;
         } else if (timedOut) {
             key_ |= 0x8000;  // "force drive:track to not match"
-            if (trace) dbg::line(*dc) << "read timed out after " << rx_.size() << " bytes\n";
+            if (faultsOn())
+                dbg::line(*dc) << "read drive=" << ((key_ >> 12) & 7) << " track="
+                               << (key_ & 0x0FFF) << " timed out after " << rx_.size() << " of "
+                               << len + 2 << " bytes\n";
             done = true;
         }
         if (done) {
@@ -533,21 +545,27 @@ void FdcPlusBoard::step() {
 
     case Link::WritAsk:
         if (rx_.size() >= kMsgLen) {
-            if (takeReply("WRIT", code, data) && code == 0) {
+            const char* why = takeReply("WRIT", code, data);
+            if (!why && code == 0) {
                 sendTrack();
                 link_ = Link::WritSta;
             } else {
+                writeFault("WRIT", why ? why : code == 1 ? "drive not ready" : "refused");
                 finishWrite(false);
             }
         } else if (timedOut) {
+            writeFault("WRIT", "no reply in 1 s");
             finishWrite(false);
         }
         break;
 
     case Link::WritSta:
         if (rx_.size() >= kMsgLen) {
-            finishWrite(takeReply("WSTA", code, data) && code == 0);
+            const char* why = takeReply("WSTA", code, data);
+            if (why || code != 0) writeFault("WSTA", why ? why : "track not written");
+            finishWrite(!why && code == 0);
         } else if (timedOut) {
+            writeFault("WSTA", "no reply in 1 s");
             finishWrite(false);
         }
         break;
@@ -583,13 +601,29 @@ void FdcPlusBoard::send(const char* cmd, uint16_t p1, uint16_t p2) {
                            << " track=" << (p1 & 0x0FFF) << "\n";
 }
 
-bool FdcPlusBoard::takeReply(const char* cmd, uint16_t& code, uint16_t& data) {
-    const uint8_t* m  = rx_.data();
-    const bool     ok = std::memcmp(m, cmd, 4) == 0 && sum16(m, 8) == (uint16_t)(m[8] | (m[9] << 8));
+// nullptr for a good reply; otherwise what was wrong with it, for the debug channel.
+const char* FdcPlusBoard::takeReply(const char* cmd, uint16_t& code, uint16_t& data) {
+    const uint8_t* m   = rx_.data();
+    const char*    why = std::memcmp(m, cmd, 4) != 0                            ? "wrong reply"
+                         : sum16(m, 8) != (uint16_t)(m[8] | (m[9] << 8)) ? "bad checksum"
+                                                                          : nullptr;
     code = (uint16_t)(m[4] | (m[5] << 8));
     data = (uint16_t)(m[6] | (m[7] << 8));
     rx_.erase(rx_.begin(), rx_.begin() + (std::ptrdiff_t)kMsgLen);
-    return ok;  // a bad checksum is ignored, as the firmware ignores it
+    return why;  // a bad reply is dropped, as the firmware drops it
+}
+
+bool FdcPlusBoard::faultsOn() {
+    auto* dc = debugChannel();
+    return dc && (dc->on(FAULT) || dc->on(LINK));
+}
+
+// One try of a track write failed. finishWrite() retries, or gives up and says so.
+void FdcPlusBoard::writeFault(const char* what, const char* why) {
+    if (!faultsOn()) return;
+    dbg::line(*debugChannel()) << what << " drive=" << ((key_ >> 12) & 7) << " track="
+                               << (key_ & 0x0FFF) << ": " << why << " (try "
+                               << kWriteTries - tries_ + 1 << " of " << kWriteTries << ")\n";
 }
 
 // readTrack: the drive:track is taken NOW, from wherever the head is, not from when the
@@ -673,7 +707,8 @@ void FdcPlusBoard::resetLink() {
     link_ = Link::Idle;
     tx_.clear();
     rx_.clear();
-    ready_   = 0;  // nothing is ready until a server says so
+    ready_    = 0;  // nothing is ready until a server says so
+    serverUp_ = -1;
     key_ |= 0x8000;
     secsBuf_ = 0;
     statAt_  = 0;
