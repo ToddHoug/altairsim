@@ -13,6 +13,7 @@ DRIVING-WITH-AI.md       for an AI assistant that controls the machine. See belo
 cheatsheet.md            the same reference as plain text, for an AI assistant to read.
 LICENSE                  the MIT license of altairsim.
 LICENSE-SDL3             the license of SDL3, which is built into the program.
+LICENSE-MAME-HD63484     the notice for the source of the HD63484 model's structure (MAME).
 examples/                machines that boot, with their media.
 recipes/                 build a machine yourself, one typed line at a time.
 hostbridge/              the file-transfer utilities: source, HEX and COM.
@@ -50,7 +51,9 @@ a fault from that prompt. Each document tells you at the top where to start.
 
 `altairsim` is one program that needs no other files. It uses one outside library, **SDL3**,
 to open the window for the video boards. SDL3 is built into the program, so its license is in
-the package as `LICENSE-SDL3`.
+the package as `LICENSE-SDL3`. `LICENSE-MAME-HD63484` is in the package for a similar reason. The
+model of the HD63484 video controller uses the structure of the MAME model, and the MAME license
+tells you to keep its notice with that code.
 
 The **Developer Guide** is not in the package. It is with the source, at the address in
 [What is not in the package: the source](#what-is-not-in-the-package-the-source). You need it

@@ -83,6 +83,7 @@ and within a group the boards are in **alphabetical order**.
 
 | Type | What it is |
 |---|---|
+| [`cadzilla`](#cadzilla) | CADzilla: HD63484 ACRTC graphics board with a Bt453 RAMDAC |
 | [`dazzler`](#dazzler) | Cromemco Dazzler: color graphics |
 | [`vdb8024`](#vdb8024) | SD Systems VDB-8024: 80x24 video terminal board |
 | [`vdm1`](#vdm1) | Processor Technology VDM-1: 16x64 memory-mapped video |
@@ -981,6 +982,30 @@ MITS 88-PIO: 8-bit parallel port, units 'out'/'in'. Two ports at BASE+0..1 (defa
 
 
 ## Video
+
+### `cadzilla`
+
+CADzilla: an HD63484 ACRTC graphics board with a Bt453 RAMDAC and 2 MB of fixed frame memory, on a fixed VESA monitor (mode: 640x480, 800x600, 1024x768 (default)). One 8-port I/O block at BASE (default 70): ACRTC RS=0 at +0, MODE register at +1 (write-only: HSPOL/VSPOL/AMODE/OLEN), ACRTC RS=1 at +2, Bt453 at +4..+7. Draws by command through the ACRTC FIFO; wired for 8 bpp, GAI +8, single or interleaved access set by MODE AMODE. Interrupts (SW1-8) optional (interrupt=none|int|vi0..vi7). Needs a Display
+
+#### Board properties
+
+| Key | Kind | Default | Legal | Meaning |
+|---|---|---|---|---|
+| `port` | int | `0x70` | `0x0` .. `0xF8` | I/O base -- one 8-port block: BASE the ACRTC address/status, BASE+1 the MODE register, BASE+2 the ACRTC data/FIFO port, BASE+4..+7 the Bt453. A multiple of 8; default 70 |
+| `mode` | enum | `1024x768` | `640x480` \| `800x600` \| `1024x768` | The monitor: a fixed-frequency VESA raster the ACRTC's picture is placed in by its HDS/VDS. 640x480, 800x600 or 1024x768 (default) |
+| `draw_rate` | enum | `full` | `full` \| `real` | Drawing speed. full: each ACRTC command completes at once. real: each command takes its HD63484 data-sheet time, and the write FIFO fills as on the real board |
+| `width` | string | `auto` | text | Video window width in pixels: 'auto' (default) opens about half the screen wide, or a number like 1024. The height follows the board's own aspect, and the picture is a whole multiple of its pixels so it stays crisp |
+| `interrupt` | enum | `none` | `none` \| `int` \| `vi0` \| `vi1` \| `vi2` \| `vi3` \| `vi4` \| `vi5` \| `vi6` \| `vi7` | SW1-8: the S-100 line for the ACRTC's IRQ*. none (default) disconnects it. int (pin 73) or vi0..vi7 is asserted while an enabled status flag is set *(interrupt strap)* |
+| `video` | string | — | — | LIVE: whether the ACRTC is displaying -- OMR STR and DCR SE1 both set. Read-only **(read-only — not a key you may set)** |
+| `picture` | string | — | — | LIVE: the size in pixels of the picture that the ACRTC is set to show, and the position of its top-left corner in the monitor's frame. Read-only **(read-only — not a key you may set)** |
+| `wiring` | string | — | — | LIVE: 'ok' when the ACRTC settings agree with the board's wiring (CCR GBM 8 bpp, OMR GAI +8 words, OMR ACM the same as MODE AMODE). If not, it names the setting that is wrong, and the picture is scrambled. Read-only **(read-only — not a key you may set)** |
+| `hspol` | string | — | — | LIVE: MODE register bit 0, the horizontal sync polarity. The simulator shows the value but does not use it. Read-only **(read-only — not a key you may set)** |
+| `vspol` | string | — | — | LIVE: MODE register bit 1, the vertical sync polarity. The simulator shows the value but does not use it. Read-only **(read-only — not a key you may set)** |
+| `amode` | string | — | — | LIVE: MODE register bit 2, the access mode of the board's fetch logic: single or interleaved. The ACRTC's OMR ACM bit must agree (see wiring). Read-only **(read-only — not a key you may set)** |
+| `olen` | bool | — | — | LIVE: MODE register bit 3, overlay enable. The board does not use this bit. Read-only **(read-only — not a key you may set)** |
+| `status` | int | — | — | LIVE: the ACRTC status register -- CER ARD CED LPD RFF RFR WFR WFE. Read-only **(read-only — not a key you may set)** |
+| `irq` | bool | — | — | LIVE: whether IRQ* is asserted right now -- an enabled status flag pending AND the interrupt strap not 'none'. Read-only **(read-only — not a key you may set)** |
+
 
 ### `dazzler`
 

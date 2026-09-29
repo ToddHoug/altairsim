@@ -8,6 +8,35 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+### The CADzilla graphics board
+
+A new board, `cadzilla`: a new design built from two chips of the mid 1980s. The Hitachi
+**HD63484 ACRTC** is a CRT controller with a drawing processor and 2 MB of its own frame memory.
+The Brooktree **Bt453** is a RAMDAC: a color table of 256 entries. The board uses one block of 8
+I/O ports and no memory.
+
+The guest writes drawing commands into the ACRTC's FIFO. The board does every command of the
+chip, in every operation, color and area mode. The commands draw lines, rectangles, polygons,
+circles, ellipses, arcs, area paint, patterns and block copies. The picture has 8 bits for each
+pixel. It shows on a fixed-frequency VESA monitor that you select with `mode`: `640x480`,
+`800x600` or `1024x768` (the default). The window is the same kind as the Dazzler's and the
+VDM-1's.
+
+The `draw_rate` strap sets the drawing speed. With `full`, the default, each command completes
+immediately. With `real`, each command takes the time that the HD63484 data sheet gives it. The
+write FIFO fills, and the command-end bit comes late, as on the real board. Use `real` for a game
+or any guest that is sensitive to time. The `interrupt` strap connects the ACRTC's IRQ\* to `int`
+or `vi0`..`vi7`. It is `none` by default. `SHOW <id>` has a `wiring` line. It tells you when the
+guest set the ACRTC in a way that the board is not wired for.
+
+The source repository has an example, `examples/cadzilla/`, that is not in the release package.
+It runs **drawdemo** under CP/M 2.2 on an 8" floppy. Type `DRAWDEMO`, and the window shows
+every drawing command of the ACRTC, one screen for each.
+
+For developers, a test can now check the **whole picture** of a video board as a text grid. When
+the check fails, it writes what the board drew as a `.ppm` file that you can open. The new
+Developer Guide chapter *Writing a video board* shows how.
+
 ## 1.2.0
 
 **1.2.0 is the release that puts a disk at the other end of a serial line, and makes the

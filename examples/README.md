@@ -38,5 +38,5 @@ altairsim examples/debugger/debugger.toml      # a bench for learning the symbol
 ## Other machines
 
 The other folders under `examples/` are not in the release package: Cromemco boards, the SD
-Systems, Tarbell and iCOM disk systems, a Sol-20, the dual-card storage boards, and others. Each
-carries its own README saying what it is and what to type.
+Systems, Tarbell and iCOM disk systems, a Sol-20, the dual-card storage boards, the CADzilla
+graphics board, and others. Each carries its own README saying what it is and what to type.

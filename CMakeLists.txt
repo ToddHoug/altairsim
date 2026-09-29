@@ -386,6 +386,11 @@ add_library(altair_core STATIC
   # HostFile). openHostMedia() is the resolver both mains install (src/host/cardimg.h).
   src/host/cardimg.cpp
   src/host/disk.cpp
+  # A video board's frame, OUT of the seam: resolved through its palette to a PPM image
+  # and to a one-character-per-pixel text grid, so a test can diff a whole picture and a
+  # person can open what the board drew (src/host/framedump.h). Pure functions over a
+  # Surface; no board and no window involved.
+  src/host/framedump.cpp
   # ImageDisk (.IMD) -> raw sibling .DSK, at the MOUNT layer. Pure (bytes in, bytes out),
   # so DiskImage stays raw-only and the container never reaches it (src/host/imd.h).
   src/host/imd.cpp
@@ -430,6 +435,14 @@ add_library(altair_core STATIC
   # The Intel 8259A -- a programmable interrupt controller; INT is a pure function of the
   # live IR levels the card supplies. The CompuPro System Support 1 carries two (cascade).
   src/chips/intel8259a.cpp
+  # The Brooktree Bt453 -- a 256 x 24 color-palette RAMDAC: four MPU locations, a hidden
+  # modulo-3 R/G/B phase, and lookup() as the video side. The CADzilla video board
+  # carries one between its ACRTC and the monitor (src/chips/bt453.h).
+  src/chips/bt453.cpp
+  # The Hitachi HD63484 ACRTC -- a CRT controller with a drawing processor and its own
+  # frame memory: the register file, the FIFOs, a command subset and the scan-out. The
+  # CADzilla video board carries one (src/chips/hd63484.h).
+  src/chips/hd63484.cpp
   src/boards/s100-memory.cpp
   src/boards/bankmem.cpp
   src/boards/mits-88cpu.cpp
@@ -533,6 +546,9 @@ add_library(altair_core STATIC
   # host Display seam as the VDM-1 and takes its keyboard from a ByteStream like the
   # Sol. See sd-vdb8024.h.
   src/boards/sd-vdb8024.cpp
+  # CADzilla: an HD63484 ACRTC + Bt453 RAMDAC graphics board with its own frame memory;
+  # six I/O ports, no memory decoded. Renders the same host Display seam. See cadzilla.h.
+  src/boards/cadzilla.cpp
   # The Cromemco D+7A: analog + parallel I/O. A block of eight ports -- one parallel
   # port and seven two's-complement A/D-in/D/A-out channels -- that reads one or two
   # JS-1 joysticks from an injected host Joystick service (src/host/joystick.h), like
@@ -781,6 +797,8 @@ add_executable(altair_tests
   tests/test_vdm1.cpp
   tests/test_dazzler.cpp
   tests/test_multiwindow.cpp
+  tests/framecheck.cpp
+  tests/test_framedump.cpp
   tests/test_d7a.cpp
   tests/test_sol.cpp
   tests/test_tapemount.cpp
@@ -789,6 +807,9 @@ add_executable(altair_tests
   tests/test_telnet.cpp
   tests/test_wd17xx.cpp
   tests/test_i8257.cpp
+  tests/test_bt453.cpp
+  tests/test_hd63484.cpp
+  tests/test_cadzilla.cpp
   tests/test_versafloppy.cpp
   tests/test_tarbell.cpp
   tests/test_cromemco-fdc.cpp

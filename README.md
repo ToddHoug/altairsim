@@ -6,7 +6,7 @@ A C++ simulator of the **MITS Altair 8800** and the **S-100 bus**.
 
 It boots Altair 4K and 8K BASIC (and the 1975 8080 BASIC 1.0) off cassettes, MITS Programming System II (polled *and* interrupt-driven), CP/M 2.2 off 8″ and 5¼″ floppies, CP/M 3 off CompactFlash and SD cards, Cromemco CDOS, SD Systems SDOS, and iCOM FDOS — every one a real period artifact, running unmodified.
 
-Every one of those boots is an **acceptance test**: it runs the period software on the whole machine through the real CLI and checks what lands on the terminal. There are more than forty of them. Three CP/M images are tracked in git — one 8″ floppy and the minidisk's two — so a fresh clone boots CP/M and runs those tests without downloading anything first. The eight examples that ship live in `examples/`, one directory each, and `acceptance-examples` boots them from a scratch directory with no repository in sight. The larger images that no test needs are fetched by `tools/fetch-disk-images.sh`.
+Every one of those boots is an **acceptance test**: it runs the period software on the whole machine through the real CLI and checks what lands on the terminal. There are more than forty of them. Three CP/M images are tracked in git — one 8″ floppy and the minidisk's two — so a fresh clone boots CP/M and runs those tests without downloading anything first. The examples that ship live in `examples/`, one directory each, and `acceptance-examples` boots them from a scratch directory with no repository in sight. The larger images that no test needs are fetched by `tools/fetch-disk-images.sh`.
 
 ```
 $ altairsim basic4k
@@ -34,7 +34,7 @@ That is the whole of it: put the tape in, toggle in the bootstrap MITS printed i
 
 **There are no dependencies.** A C++20 compiler and CMake ≥ 3.20 is the entire list. The TOML parser, the JSON encoder, the terminal emulator and the line editor are all in-tree, so a fresh clone builds with nothing to download.
 
-**SDL3 is the one exception, and it is detected rather than required.** Install it and the video boards (`vdm1`, `sol`, `dazzler`, `vdb8024`) open a real window — as does the built-in `terminal:` VT100; leave it out and they build headless against a null display, every test still passes, and the build never asks you for anything. `-DALTAIRSIM_ENABLE_SDL=OFF` forces headless even where SDL3 is present.
+**SDL3 is the one exception, and it is detected rather than required.** Install it and the video boards (`vdm1`, `sol`, `dazzler`, `vdb8024`, `cadzilla`) open a real window — as does the built-in `terminal:` VT100; leave it out and they build headless against a null display, every test still passes, and the build never asks you for anything. `-DALTAIRSIM_ENABLE_SDL=OFF` forces headless even where SDL3 is present.
 
 ```sh
 git clone https://github.com/deltecent/altairsim.git
@@ -115,6 +115,7 @@ in the monitor prints this list with a one-line description of each (`SHOW BOARD
 |---|---|
 | `vdm1` | Processor Technology VDM-1 — memory-mapped 16×64 video. |
 | `dazzler` | Cromemco Dazzler — color graphics from a framebuffer in main RAM. |
+| `cadzilla` | CADzilla — HD63484 ACRTC graphics processor and Bt453 RAMDAC; draws by command into 2 MB of its own frame memory, on a fixed VESA monitor. |
 | `vdb8024` | SD Systems VDB-8024 — an 80×24 video terminal on one board. |
 | `sol` | Processor Technology Sol-PC — serial, keyboard, parallel and CUTS tape as one card. |
 
@@ -143,7 +144,7 @@ names them all. The Altairs proper — `default`, `original` (as it left Albuque
 `basic4k`, `basic8k`, `ps2`, `ps2int`. The disk machines — `minidisk`, `tarbell`,
 `tarbelldd`, `icom`. Other CPUs and other makers — `z80`, `8085`, `sbc200`,
 `sbc200v`, `dualsd`, `dualide`, `dualidesd`. And the peripheral demos — `vdm1`, `dazzler`,
-`sol20`, `lineprinter`, `parallel`, `bankmem`, `compupro`.
+`cadzilla`, `sol20`, `lineprinter`, `parallel`, `bankmem`, `compupro`.
 
 **All three Intel cores are exerciser-validated.** The 8080 passes TST8080, 8080PRE, CPUTEST and 8080EXM — all 25 CRC groups of the exerciser; the 8085 passes its own 8085EXM; the Z80 passes ZEXDOC and ZEXALL. Each core passed its gate *before* a single board was built on top of it. They are `ctest` targets, and they run in CI.
 

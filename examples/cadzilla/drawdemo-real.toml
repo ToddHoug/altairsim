@@ -1,0 +1,27 @@
+# CADzilla's drawing demo under CP/M 2.2, at the speed of the real hardware.
+#
+#     cd examples/cadzilla && altairsim drawdemo-real.toml
+#
+# The same machine and the same disk as drawdemo.toml -- boot to A>, type DRAWDEMO -- but run
+# as a real CADzilla in a real 2 MHz Altair would run it. The big filled rectangles, the
+# circles and the PAINT screens now take visible time to draw.
+#
+# THIS FILE IS A DELTA on drawdemo.toml, the file beside it. It changes two settings:
+#
+#   - cpu0  clock_hz = 2000000. The Altair's 2 MHz 8080 in wall-clock time: one emulated
+#           second takes one real second.
+#   - cad0  draw_rate = "real". Each ACRTC command takes the time the HD63484 data sheet gives
+#           it, in the memory cycles the display leaves free: the write FIFO fills and the
+#           command-end flag comes late, as on the board.
+
+[machine]
+name = "drawdemo-real"
+base = "drawdemo.toml"
+
+[[board]]
+id       = "cpu0"
+clock_hz = 2000000
+
+[[board]]
+id        = "cad0"
+draw_rate = "real"

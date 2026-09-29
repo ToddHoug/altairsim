@@ -193,6 +193,7 @@ The boards are in groups, in the same order as the sections below.
 | `vdm1` | Processor Technology VDM-1: memory-mapped video. Needs a display |
 | `dazzler` | Cromemco Dazzler: color graphics. Needs a display |
 | `vdb8024` | SD Systems VDB-8024: an 80×24 video terminal on one board. Needs a display |
+| `cadzilla` | CADzilla: an HD63484 ACRTC graphics board with a Bt453 color table. Needs a display |
 | `sol` | Processor Technology Sol-PC: the onboard I/O of the Sol-20, on one board |
 
 **Interrupts and the clock**
@@ -1215,6 +1216,86 @@ The Dazzler example in `examples/` runs **Li-Chen Wang's Kaleidoscope**, a patte
 and is mirrored four ways. `STOP` gives you the monitor. The `dazzler` machine is the plain
 board, for you to build on. A 64×64 picture is very small, so the board's `width` property
 (above) makes the window about the size of a VDM-1 window.
+
+### `cadzilla`: an HD63484 ACRTC graphics board
+
+This board is **a new custom product based on period components**, not a period product. It
+uses two real chips from the middle of the 1980s. The **Hitachi HD63484 ACRTC** is a CRT
+controller with a *drawing processor* and up to 2 MB of its own frame memory. The **Brooktree
+Bt453** is a RAMDAC: a color table of 256 entries, with three video DACs on one chip.
+
+The VDM-1 and the Dazzler show a picture from the machine's RAM. The CADzilla board keeps its
+picture in its own memory, and the processor never addresses a pixel. The guest **draws with
+commands**, for example "move here", "draw a line to there" and "clear this block". The guest
+writes each command into the FIFO of the ACRTC, one word at a time, and the chip draws.
+
+The board decodes one block of 8 I/O ports from `port` (default `70`):
+
+| Port | What it is |
+|---|---|
+| `port` | The ACRTC address register (write) and status register (read). |
+| `port+1` | The board's own MODE register, write only. It holds the sync polarity and the access mode of the board's fetch logic. |
+| `port+2` | The ACRTC control register that the address names, one byte at a time. The high byte is at an even address, and the low byte is at the odd address. |
+| `port+3` | Not decoded. On the real board, it is the high byte of a 16-bit transfer. An 8080 or Z80 does only 8-bit transfers. |
+| `port+4` to `port+7` | The Bt453: the address register, the color table (red, green, then blue), the address again, and the overlay colors. |
+
+The timing and display registers of the ACRTC increment the address after each byte. For this
+reason, one address write loads a whole block of these registers.
+
+The ACRTC sends out an 8-bit value for each pixel. The Bt453 changes that value into a color from
+its table. A guest sets its colors when it loads the table. A new table changes the colors of the
+picture with no redraw.
+
+**The monitor is part of the board.** The `mode` property sets a fixed-frequency VESA display:
+`640x480`, `800x600` or `1024x768` (the default). Set it in the machine file or with `SET`. The
+window always has the size of the mode, as the frame of a real monitor does. The timing
+registers of the ACRTC set where the picture is in that frame. A picture that starts where the
+back porch of the mode ends fills the frame. A picture that starts one cycle early or late moves,
+and its edge is cut off.
+
+The shift register of the board is wired for **8 bits per pixel and 8 words for each fetch**. A
+guest must set the ACRTC to 8 bits per pixel and an address increment of +8. `SHOW <id>` has a
+`wiring` line. The line shows `ok`, or it names the setting that is wrong.
+
+**The board needs a display.** An SDL3 build opens a window with the board's id as its title. A
+build with no display runs in the same way and shows nothing. The frame memory is 2 MB, and you
+cannot change it.
+
+`SHOW <id>` gives these straps and live values:
+
+| Name | What it is |
+|---|---|
+| `port`, `mode`, `draw_rate`, `width` | Straps. You set them in the machine file or with `SET`. |
+| `interrupt` | A strap. It sets the S-100 line for the IRQ\* output of the board: `none` (the default), `int`, or `vi0` to `vi7`. On the real board, it is switch 8 of SW1. |
+| `video` | Live. `on` when the ACRTC shows a picture. |
+| `picture` | Live. The size of the picture, and its position in the frame. |
+| `wiring` | Live. `ok`, or the ACRTC setting that does not agree with the board. |
+| `hspol`, `vspol`, `amode`, `olen` | Live. The bits of the MODE register. |
+| `status` | Live. The ACRTC status register. |
+| `irq` | Live. Whether the board asserts an interrupt now. |
+
+**The `draw_rate` strap sets the drawing speed.** With `full` (the default), the ACRTC completes
+each command immediately. The write FIFO is always empty, and the guest never waits for the
+chip. This is the fastest setting when you develop a program. With `real`, each command takes
+the time that the Hitachi data sheet gives for it. The ACRTC draws only in the memory cycles
+that the display does not use. These depend on the access mode and on the priority bit of the
+operation mode register. While the chip draws, the next command words stay in the write FIFO.
+The FIFO status bits and the command-end bit (CED) change at the times that the real chip
+changes them. Use `real` for a guest that is sensitive to time, for example a game:
+
+```
+SET cad0 draw_rate=real
+```
+
+The ACRTC clock comes from the pixel clock of the `mode`. It is the pixel clock divided by 8 in
+single access mode, or by 4 in interleaved access mode. The processor's `clock_hz` does not
+change the drawing time that the guest sees. At each `clock_hz`, a drawing command takes the
+same number of processor instructions. With `clock_hz = 0`, the host does not wait, and the
+guest sees no change.
+
+The `cadzilla` machine is the board alone, with a console for you to type at. The board does
+every drawing command of the ACRTC: lines, rectangles, circles, ellipses, arcs, area paint,
+patterns, and block and area copies.
 
 ### `vdb8024`: SD Systems VDB-8024
 
