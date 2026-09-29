@@ -23,8 +23,8 @@
 // words deep, not 16; a line's pattern scan starts at PPX, not PSX). Nothing here was
 // derived by running it.
 //
-// It knows nothing about S-100 and nothing about the board's ports. The CARD decodes two
-// consecutive I/O locations onto some base and forwards each as RS (0 or 1); the card
+// It knows nothing about S-100 and nothing about the board's ports. The BOARD decodes the
+// two host locations somewhere in its I/O map and forwards each as RS (0 or 1); the board
 // also decided how much DRAM it fitted (the constructor) and how the 16-bit frame-memory
 // word reaches its shift register (see scanline()).
 //

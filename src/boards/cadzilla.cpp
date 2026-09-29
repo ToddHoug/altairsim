@@ -21,7 +21,7 @@ constexpr int kPixelsPerFetch = 16;
 // units -- memory cycles of 16 pixels horizontally, rasters vertically. Where a VESA porch
 // is not a whole number of cycles it is rounded and the line total kept (800x600: 88 px back
 // porch -> 6 cycles = 96, 40 px front porch -> 2 = 32; 1024x768: 136 px sync -> 8 cycles,
-// 24 px front porch -> 2), which is what a timing PROM on a real card would have done.
+// 24 px front porch -> 2), which is what a timing PROM on the board would do.
 //
 //                name         w     h   hsw hbp hfp  vsw vbp vfp  pixel clock (60 Hz)
 const CadzillaBoard::Mode kModes[] = {
@@ -172,7 +172,6 @@ void CadzillaBoard::reset(Reset r) {
         // leaving it, which real flip-flops might or might not do) means a driver must
         // reprogram both the ACRTC's timing and the board's glue after a reset, which is
         // the simplest thing to be right about.
-        if (modeReg_ != 0) dirty_ = true;
         sync();                                     // AMODE (2CLK) goes back to single
         modeReg_ = 0;
         dirty_   = true;
@@ -392,9 +391,9 @@ std::vector<Property> CadzillaBoard::properties() {
     {
         Property x;
         x.name    = "draw_rate";
-        x.help    = "Drawing speed: full (as fast as the host can -- every ACRTC command finishes "
-                    "at once) | real (each command takes its datasheet time, so the write FIFO "
-                    "fills and CED comes late, as on the card)";
+        x.help    = "Drawing speed. full: each ACRTC command completes at once. real: each command "
+                    "takes its HD63484 data-sheet time, and the write FIFO fills as on the real "
+                    "board";
         x.kind    = Kind::Enum;
         x.choices = {"full", "real"};
         x.get     = [this] { return Value::ofStr(drawReal_ ? "real" : "full"); };
@@ -418,8 +417,8 @@ std::vector<Property> CadzillaBoard::properties() {
     // uses; docs/devguide/adding-a-board.md.
     p.push_back(irqJumperProperty(
         "interrupt",
-        "SW1-8: where the ACRTC's IRQ* lands -- none (default, disconnected) or the S-100 "
-        "line (int = pin 73, or vi0..vi7) to raise while an enabled status flag is pending",
+        "SW1-8: the S-100 line for the ACRTC's IRQ*. none (default) disconnects it. int "
+        "(pin 73) or vi0..vi7 is asserted while an enabled status flag is set",
         irq_));
 
     // ---- LIVE STATUS (read-only: no setter, so SHOW says so and CONFIG SAVE skips it) ----
@@ -434,10 +433,8 @@ std::vector<Property> CadzillaBoard::properties() {
     {
         Property x;
         x.name = "picture";
-        x.help = "LIVE: the picture the ACRTC is programmed to show -- its size in pixels "
-                 "(HDW memory cycles by the enabled split-screen rasters) and where its top-left "
-                 "corner lands in the monitor's frame, from HDS/VDS against the mode's back "
-                 "porch. Read-only";
+        x.help = "LIVE: the size in pixels of the picture that the ACRTC is set to show, and the "
+                 "position of its top-left corner in the monitor's frame. Read-only";
         x.kind = Kind::Str;
         x.get  = [this] {
             return Value::ofStr(std::to_string(programmedWidth()) + "x" +
@@ -450,9 +447,9 @@ std::vector<Property> CadzillaBoard::properties() {
     {
         Property x;
         x.name = "wiring";
-        x.help = "LIVE: whether the ACRTC is programmed the way the board is wired -- CCR GBM = "
-                 "8 bpp, OMR GAI = +8 words, and OMR ACM agreeing with MODE AMODE. 'ok', or "
-                 "what is off (the picture is then scrambled, as on the hardware). Read-only";
+        x.help = "LIVE: 'ok' when the ACRTC settings agree with the board's wiring (CCR GBM 8 "
+                 "bpp, OMR GAI +8 words, OMR ACM the same as MODE AMODE). If not, it names the "
+                 "setting that is wrong, and the picture is scrambled. Read-only";
         x.kind = Kind::Str;
         x.get  = [this] { return Value::ofStr(wiring()); };
         p.push_back(std::move(x));
@@ -463,9 +460,8 @@ std::vector<Property> CadzillaBoard::properties() {
     {
         Property x;
         x.name = "hspol";
-        x.help = "LIVE: MODE register HSPOL -- horizontal sync polarity the board was told to "
-                 "use. Recorded, not modeled: nothing here generates a sync pulse to invert. "
-                 "Read-only";
+        x.help = "LIVE: MODE register bit 0, the horizontal sync polarity. The simulator shows "
+                 "the value but does not use it. Read-only";
         x.kind = Kind::Str;
         x.get  = [this] { return Value::ofStr((modeReg_ & kModeHspol) ? "negative" : "positive"); };
         p.push_back(std::move(x));
@@ -473,8 +469,8 @@ std::vector<Property> CadzillaBoard::properties() {
     {
         Property x;
         x.name = "vspol";
-        x.help = "LIVE: MODE register VSPOL -- vertical sync polarity the board was told to "
-                 "use. Recorded, not modeled, like hspol. Read-only";
+        x.help = "LIVE: MODE register bit 1, the vertical sync polarity. The simulator shows "
+                 "the value but does not use it. Read-only";
         x.kind = Kind::Str;
         x.get  = [this] { return Value::ofStr((modeReg_ & kModeVspol) ? "negative" : "positive"); };
         p.push_back(std::move(x));
@@ -482,8 +478,8 @@ std::vector<Property> CadzillaBoard::properties() {
     {
         Property x;
         x.name = "amode";
-        x.help = "LIVE: MODE register AMODE -- the access mode the board's OWN fetch logic runs "
-                 "(not the ACRTC's OMR ACM bit, which must agree with it -- see wiring). Read-only";
+        x.help = "LIVE: MODE register bit 2, the access mode of the board's fetch logic: single "
+                 "or interleaved. The ACRTC's OMR ACM bit must agree (see wiring). Read-only";
         x.kind = Kind::Str;
         x.get  = [this] { return Value::ofStr((modeReg_ & kModeAmode) ? "interleaved" : "single"); };
         p.push_back(std::move(x));
@@ -491,8 +487,8 @@ std::vector<Property> CadzillaBoard::properties() {
     {
         Property x;
         x.name = "olen";
-        x.help = "LIVE: MODE register OLEN -- overlay enable. TBD: not wired to anything yet, "
-                 "so setting it changes nothing today. Read-only";
+        x.help = "LIVE: MODE register bit 3, overlay enable. The board does not use this bit. "
+                 "Read-only";
         x.kind = Kind::Bool;
         x.get  = [this] { return Value::ofBool((modeReg_ & kModeOlen) != 0); };
         p.push_back(std::move(x));

@@ -12,7 +12,7 @@
 //                BASE+2  ACRTC RS=1 (the 16-bit register the address names, one byte per
 //                        cycle, or the command FIFOs)
 //                BASE+3  the high byte of a 16-bit Command/FIFO transfer on the real
-//                        card (SW1-7) -- an 8080/Z80 never makes one, so nothing answers
+//                        board (SW1-7) -- an 8080/Z80 never makes one, so nothing answers
 //                BASE+4..+7  Bt453 by C1C0 -- address register, color palette RAM, address
 //                        register again, overlay registers -- all read/write
 //              The ACRTC's own RS=0/RS=1 pair is therefore NOT adjacent on this board --
@@ -67,18 +67,18 @@
 //   the window's second phase would need its own fetch path.
 //
 //   Also: OL1..0 tied low (no overlay source); IRQ* wired to the `interrupt` strap (SW1-8
-//   on the real card enables it; off, the default, disconnects it -- see below).
+//   on the board enables it; off, the default, disconnects it -- see below).
 //
 //   2CLK IS THE BOARD'S. The ACRTC's clock comes from the monitor's pixel clock (PCLK, the
 //   VESA rate of `mode`): PCLK/8 in single access mode, PCLK/4 in interleaved -- selected
 //   by MODE AMODE, the board's glue, not the chip's OMR ACM. A memory cycle is then 16
 //   pixels single and 8 interleaved, which is why the horizontal registers double.
 //
-// DRAWING TIME -- the `draw_rate` strap. `full` (the default): the ACRTC draws in no time,
-// as it always has here -- the fastest bench for developing a program. `real`: each command
+// DRAWING TIME -- the `draw_rate` strap. `full` (the default): the ACRTC draws in no time --
+// the fastest bench for developing a program. `real`: each command
 // costs its datasheet Table 3 time in 2CLK (chips/hd63484.h, DRAWING TIME), so the write
 // FIFO backs up and CED comes late exactly as a timing-sensitive program -- a game -- would
-// see on the card. The board turns T-states into 2CLK (sync) and arms one Clock deadline
+// see on the board. The board turns T-states into 2CLK (sync) and arms one Clock deadline
 // at the command's end (arm), so an interrupt on CED lands on time with the CPU halted.
 // It is not the CPU's `clock_hz`: that only decides whether the host waits, and the guest
 // cannot see it; the drawing time is emulated time, the same number of instructions long
@@ -165,7 +165,7 @@ public:
     //
     // Horizontal figures are memory cycles of 16 pixels (single access mode); vertical
     // are rasters. Where the VESA pixel counts are not multiples of 16 the board rounds
-    // its porches to whole cycles and keeps the total, as a real card's timing PROM
+    // its porches to whole cycles and keeps the total, as a timing PROM on the board
     // would; the pixel clocks are the VESA ones.
     struct Mode {
         const char* name;
@@ -225,7 +225,7 @@ private:
     static constexpr uint8_t kModeOlen  = 0x08;
 
     // 2 MB (1 M sixteen-bit words) -- the reference design's fixed SRAM fit; the ACRTC's
-    // own 20-bit address space, exactly. Not a strap: the real card has no jumper for it.
+    // own 20-bit address space, exactly. Not a strap: the board has no jumper for it.
     static constexpr size_t kVramWords = 1u << 20;
 
     // ---- Straps ----

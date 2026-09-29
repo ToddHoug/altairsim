@@ -8,56 +8,34 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
-### `cadzilla` — an HD63484 ACRTC graphics board, and a way to prove a picture
+### The CADzilla graphics board
 
-A new video board, a new custom product based on period components: Hitachi's **HD63484
-ACRTC** — a CRT controller with a drawing processor and its own frame memory — and Brooktree's **Bt453** 256-entry color look-up table, on six
-I/O ports and no memory. The CPU draws by command through the ACRTC's FIFO (lines, rectangles,
-polylines, circles, ellipses, arcs, filled rectangles, area paint, patterns, dots, block clears,
-block and graphic copies and word transfers -- every command the chip has, in every operation,
-color and area mode), the picture scans out at 8 bits per pixel through the Bt453's table onto a **fixed VESA
-monitor** the board carries (`mode`: the three primary VESA resolutions, 640x480, 800x600 or
-1024x768 -- the default), in single or interleaved access, out of a fixed 2 MB of its own frame
-memory, and the window is the same host display the Dazzler and VDM-1 draw into. Both chips are models in their own right
-(`src/chips/`), built from the Hitachi and Brooktree data sheets, so the next board that carries one
-gets it for free.
-The drawing pattern behaves as the chip's own does: a dash carries on around the corners of a
-rectangle, polyline or polygon, zoom counters start where a driver sets them, and the pattern
-pointer reads back where drawing left it.
+A new board, `cadzilla`: a new design built from two chips of the mid 1980s. The Hitachi
+**HD63484 ACRTC** is a CRT controller with a drawing processor and 2 MB of its own frame memory.
+The Brooktree **Bt453** is a RAMDAC: a color table of 256 entries. The board uses one block of 8
+I/O ports and no memory.
 
-The board is one 8-port I/O block: the ACRTC at `port`/`port+2`, a write-only **MODE register**
-at `port+1` between the ACRTC's own two ports (the board's own glue, not a chip register --
-`HSPOL`/`VSPOL` sync polarity, `AMODE` the access mode the board's *own* fetch logic runs, `OLEN`
-reserved), and the Bt453 fixed at `port+4`..`port+7` -- there is no separate `dac` strap any
-more, the RAMDAC moves with the ACRTC. `SHOW <id>` decodes MODE into read-only
-`hspol`/`vspol`/`amode`/`olen`, and `wiring` now also flags a driver that programmed OMR ACM and
-MODE AMODE in disagreement. Interrupts are wired: `interrupt` (`none` by default, or
-`int`/`vi0`..`vi7`) matches the real card's SW1-8, and `SHOW <id>` reports whether IRQ\* is
-asserted right now as `irq`.
+The guest writes drawing commands into the ACRTC's FIFO. The board does every command of the
+chip, in every operation, color and area mode. The commands draw lines, rectangles, polygons,
+circles, ellipses, arcs, area paint, patterns and block copies. The picture has 8 bits for each
+pixel. It shows on a fixed-frequency VESA monitor that you select with `mode`: `640x480`,
+`800x600` or `1024x768` (the default). The window is the same kind as the Dazzler's and the
+VDM-1's.
 
-Alongside it, a video board's frame can now leave the simulator: a test asserts on the **whole
-picture** as a text grid and, when it disagrees, writes what the board actually drew as a `.ppm`
-you can open. The Developer Guide's new *Writing a video board* chapter walks through it.
+The `draw_rate` strap sets the drawing speed. With `full`, the default, each command completes
+immediately. With `real`, each command takes the time that the HD63484 data sheet gives it. The
+write FIFO fills, and the command-end bit comes late, as on the real board. Use `real` for a game
+or any guest that is sensitive to time. The `interrupt` strap connects the ACRTC's IRQ\* to `int`
+or `vi0`..`vi7`. It is `none` by default. `SHOW <id>` has a `wiring` line. It tells you when the
+guest set the ACRTC in a way that the board is not wired for.
 
-### `cadzilla` draws at the real chip's speed if you ask it to
+The source repository has an example, `examples/cadzilla/`, that is not in the release package.
+It runs **drawdemo** under CP/M 2.2 on an 8" floppy. Type `DRAWDEMO`, and the window shows
+every drawing command of the ACRTC, one screen for each.
 
-The new `draw_rate` strap on `cadzilla` sets how fast the ACRTC draws. With `full`, the default,
-each command completes immediately, as before. With `real`, each command takes the time that
-the HD63484 data sheet gives it. The chip draws only in the memory cycles that the display does
-not use, so the write FIFO fills and the command-end bit comes late, as on the card. The ACRTC
-clock is the monitor's pixel clock divided by 8 (single access) or 4 (interleaved access). Use
-`SET cad0 draw_rate=real`, or put it in the machine file, for a game or any program that is
-sensitive to time. The setting does not depend on the CPU's `clock_hz`. Snapshots from an earlier
-build do not load in this one.
-
-### The CADzilla example ships
-
-`examples/cadzilla/` runs **drawdemo** under CP/M 2.2 on an 8" floppy. Boot it, type `DRAWDEMO`,
-and a 1024x768 window steps through every drawing command of the ACRTC, one screen for each
-command, 21 screens in all. `drawdemo.toml` draws at full speed. `drawdemo-real.toml` is the
-same machine with a 2 MHz 8080 and `draw_rate = "real"`, so each screen takes the time it takes
-on the real board. The disk is the CP/M disk from `examples/cpm` with `MBASIC` and its BASIC
-programs removed to make room.
+For developers, a test can now check the **whole picture** of a video board as a text grid. When
+the check fails, it writes what the board drew as a `.ppm` file that you can open. The new
+Developer Guide chapter *Writing a video board* shows how.
 
 ## 1.2.0
 

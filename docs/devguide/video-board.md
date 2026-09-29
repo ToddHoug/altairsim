@@ -26,7 +26,7 @@ method each, and the other two are the Limitations section.
 | 5 | **Geometry.** Native w×h — fixed, decoded from registers each frame, or **the monitor's**: a board with a real CRT controller can carry a fixed-frequency display and place the chip's picture in it. `PixelFormat::Indexed8` is the only format the seam has | the `mode` strap's VESA frame (one of the three primary VESA resolutions, 1024x768 by default); the ACRTC's picture placed by HDS/VDS against the mode's porches | `render()`, `acquire()` |
 | 6 | **Palette.** How many entries, from where. Dazzler: 16 from an RGBI nibble. VDM-1: 2. CADzilla: **256, and they are a chip** | `Bt453::palette()` | `setPalette()` |
 | 7 | **Observable timing.** A status bit a guest can *time* (vblank, scan parity) comes off `clock_->now()` — never a poll counter. An oscillator the guest cannot observe (a cursor blink) comes off `Display::hostSeconds()` | the drawing time at `draw_rate=real`: T-states carried into 2CLK (`sync()`, remainder kept), one Clock deadline at the command's end (`arm()`) so an interrupt lands with no bus cycle; the raster counter is not modeled | `sync()`, `arm()` |
-| 8 | **Straps vs live status.** A strap has a setter and round-trips through `CONFIG SAVE`; live status has **no setter**, and that absence is the whole signal. A register that is write-only *on the wire* (a chip's format byte, or a board's own glue register) is still reflected as read-only live status — the board keeps the shadow the wire cannot give back. A fixed hardware fact with no jumper on the real card (CADzilla's 2 MB of SRAM) is neither a strap nor live status — it is a constant. Every video board pushes `Display::widthProperty(videoWidth_)` | `port`, `mode`, `draw_rate`, `width`, `interrupt`; live `video`, `picture`, `wiring`, `hspol`/`vspol`/`amode`/`olen`, `status`, `irq` | `properties()` |
+| 8 | **Straps vs live status.** A strap has a setter and round-trips through `CONFIG SAVE`; live status has **no setter**, and that absence is the whole signal. A register that is write-only *on the wire* (a chip's format byte, or a board's own glue register) is still reflected as read-only live status — the board keeps the shadow the wire cannot give back. A fixed hardware fact with no jumper on the board (CADzilla's 2 MB of SRAM) is neither a strap nor live status — it is a constant. Every video board pushes `Display::widthProperty(videoWidth_)` | `port`, `mode`, `draw_rate`, `width`, `interrupt`; live `video`, `picture`, `wiring`, `hspol`/`vspol`/`amode`/`olen`, `status`, `irq` | `properties()` |
 | 9 | **Snapshot.** Runtime state only — never a strap, never the `Display*`. If no memory board holds your pixels, **they travel with you** | both chips, frame memory as a `blob` | `serialize()` |
 
 Two things that are *not* the board's business, and each is the classic mistake: a **keyboard**
@@ -57,7 +57,7 @@ what the overlay inputs are tied to, where IRQ\* is strapped. Draw the line wher
 the ACRTC only ever puts an *address* on its bus, so `Hd63484` answers address-level questions
 (`backgroundRaster()`, `windowRaster()`, `gaiWords()`) and the *board* fetches words and makes
 pixels of them — which is also why a program that sets the chip to 4 bpp gets a scrambled
-picture here, as it would on the card, instead of a helpfully re-unpacked one.
+picture here, as it would on the board, instead of a helpfully re-unpacked one.
 
 ## 3. The board: three gates and one call
 

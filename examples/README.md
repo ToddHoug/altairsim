@@ -22,7 +22,6 @@ altairsim examples/hdsk/hdsk.toml              # CP/M off an 88-HDSK hard disk
 altairsim examples/acr/mitstapes.toml          # CP/M + WRTAPE, writing MITS cassettes to an 88-ACR
 altairsim examples/printing/printer.toml       # an 88-C700 printer, wired to a real host printer
 altairsim examples/debugger/debugger.toml      # a bench for learning the symbolic debugger
-altairsim examples/cadzilla/drawdemo.toml      # CADzilla graphics: every ACRTC drawing command
 ```
 
 | | What it is |
@@ -34,11 +33,10 @@ altairsim examples/cadzilla/drawdemo.toml      # CADzilla graphics: every ACRTC 
 | [`acr/`](acr/) | Mike Douglas's **MITS Tapes** CP/M disk and **WRTAPE**, the utility that writes any of the MITS distribution BASICs back out through an **88-ACR** — a bootable audio cassette you can then load on `basic4k` / `basic8k` / `ps2`, or on real hardware. |
 | [`printing/`](printing/) | An **88-C700 line printer**, and a banner program that prints through it. The README sets up a real printer on your host — a network printer over `socket:`, or a CUPS queue over `printer:` — and a page comes out. Per-OS host setup (macOS, Linux; Windows pending). |
 | [`debugger/`](debugger/) | A 46-byte program with its **symbols** and a guided walk through the monitor's debugger: `SYMBOLS LOAD`, symbolic `DISASM`, single-step, break on a label, run. |
-| [`cadzilla/`](cadzilla/) | **CADzilla**, the HD63484 ACRTC graphics board, running **drawdemo** under CP/M 2.2 on an 8" floppy: 21 screens, one for each drawing command of the ACRTC. `drawdemo.toml` draws at full speed. `drawdemo-real.toml` runs a 2 MHz 8080 and the chip's data-sheet drawing times. |
 | [`ai-mcp/`](ai-mcp/) | A working directory for an **AI assistant driving altairsim over MCP**: a CP/M machine and a tiny `HELLO.ASM` with one deliberate bug the assistant assembles, runs, single-steps to find, and fixes — all through the simulator's MCP tools. See `DRIVING-WITH-AI.md`. |
 
 ## Other machines
 
 The other folders under `examples/` are not in the release package: Cromemco boards, the SD
-Systems, Tarbell and iCOM disk systems, a Sol-20, the dual-card storage boards, and others. Each
-carries its own README saying what it is and what to type.
+Systems, Tarbell and iCOM disk systems, a Sol-20, the dual-card storage boards, the CADzilla
+graphics board, and others. Each carries its own README saying what it is and what to type.

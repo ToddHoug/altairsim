@@ -1221,8 +1221,8 @@ board, for you to build on. A 64×64 picture is very small, so the board's `widt
 
 This board is **a new custom product based on period components**, not a period product. It
 uses two real chips from the middle of the 1980s. The **Hitachi HD63484 ACRTC** is a CRT
-controller with a *drawing processor* and up to one megaword of its own frame memory. The
-**Brooktree Bt453** is a color table of 256 entries, with three video DACs on one chip.
+controller with a *drawing processor* and up to 2 MB of its own frame memory. The **Brooktree
+Bt453** is a RAMDAC: a color table of 256 entries, with three video DACs on one chip.
 
 The VDM-1 and the Dazzler show a picture from the machine's RAM. The CADzilla board keeps its
 picture in its own memory, and the processor never addresses a pixel. The guest **draws with
@@ -1233,11 +1233,11 @@ The board decodes one block of 8 I/O ports from `port` (default `70`):
 
 | Port | What it is |
 |---|---|
-| `port` | the ACRTC address register (write) and status register (read) |
-| `port+1` | the board's own MODE register, write only: the sync polarity, and the access mode of the board's fetch logic |
-| `port+2` | the ACRTC control register that the address names, one byte at a time: the high byte at an even address, the low byte at the odd address |
-| `port+3` | not decoded: on the real board it is the high byte of a 16-bit transfer, and an 8080 or Z80 does only 8-bit transfers |
-| `port+4` to `port+7` | the Bt453: the address register, the color table (red, green, then blue), the address again, and the overlay colors |
+| `port` | The ACRTC address register (write) and status register (read). |
+| `port+1` | The board's own MODE register, write only. It holds the sync polarity and the access mode of the board's fetch logic. |
+| `port+2` | The ACRTC control register that the address names, one byte at a time. The high byte is at an even address, and the low byte is at the odd address. |
+| `port+3` | Not decoded. On the real board, it is the high byte of a 16-bit transfer. An 8080 or Z80 does only 8-bit transfers. |
+| `port+4` to `port+7` | The Bt453: the address register, the color table (red, green, then blue), the address again, and the overlay colors. |
 
 The timing and display registers of the ACRTC increment the address after each byte. For this
 reason, one address write loads a whole block of these registers.
@@ -1258,13 +1258,21 @@ guest must set the ACRTC to 8 bits per pixel and an address increment of +8. `SH
 `wiring` line. The line shows `ok`, or it names the setting that is wrong.
 
 **The board needs a display.** An SDL3 build opens a window with the board's id as its title. A
-build with no display runs in the same way and shows nothing. `SHOW <id>` gives these live
-values: `video`, `picture` (the size of the picture and its position in the frame), `wiring`,
-the MODE register as `hspol`, `vspol`, `amode` and `olen`, the ACRTC `status`, and `irq` (whether
-the board asserts an interrupt now). It also gives the straps: `port`, `mode`, `draw_rate`,
-`width` and `interrupt`. The `interrupt` strap sets the S-100 line for the IRQ\* output of the
-board. It is `none` by default. The strap is switch 8 of SW1 on the real board. The frame memory
-is 2 MB, and you cannot change it.
+build with no display runs in the same way and shows nothing. The frame memory is 2 MB, and you
+cannot change it.
+
+`SHOW <id>` gives these straps and live values:
+
+| Name | What it is |
+|---|---|
+| `port`, `mode`, `draw_rate`, `width` | Straps. You set them in the machine file or with `SET`. |
+| `interrupt` | A strap. It sets the S-100 line for the IRQ\* output of the board: `none` (the default), `int`, or `vi0` to `vi7`. On the real board, it is switch 8 of SW1. |
+| `video` | Live. `on` when the ACRTC shows a picture. |
+| `picture` | Live. The size of the picture, and its position in the frame. |
+| `wiring` | Live. `ok`, or the ACRTC setting that does not agree with the board. |
+| `hspol`, `vspol`, `amode`, `olen` | Live. The bits of the MODE register. |
+| `status` | Live. The ACRTC status register. |
+| `irq` | Live. Whether the board asserts an interrupt now. |
 
 **The `draw_rate` strap sets the drawing speed.** With `full` (the default), the ACRTC completes
 each command immediately. The write FIFO is always empty, and the guest never waits for the
@@ -1272,23 +1280,22 @@ chip. This is the fastest setting when you develop a program. With `real`, each 
 the time that the Hitachi data sheet gives for it. The ACRTC draws only in the memory cycles
 that the display does not use. These depend on the access mode and on the priority bit of the
 operation mode register. While the chip draws, the next command words stay in the write FIFO.
-The FIFO status bits and the command-end bit (CED) then change at the times that the real chip
-changes them. Use `real` for a program that is sensitive to time, for example a game:
+The FIFO status bits and the command-end bit (CED) change at the times that the real chip
+changes them. Use `real` for a guest that is sensitive to time, for example a game:
 
 ```
 SET cad0 draw_rate=real
 ```
 
 The ACRTC clock comes from the pixel clock of the `mode`. It is the pixel clock divided by 8 in
-single access mode, or by 4 in interleaved access mode. The `draw_rate` strap does not depend on
-the `clock_hz` of the CPU. When `clock_hz` is `0`, the simulator runs at full speed, but the
-guest program cannot see a difference. A drawing command takes the same number of CPU
-instructions at each `clock_hz`.
+single access mode, or by 4 in interleaved access mode. The processor's `clock_hz` does not
+change the drawing time that the guest sees. At each `clock_hz`, a drawing command takes the
+same number of processor instructions. With `clock_hz = 0`, the host does not wait, and the
+guest sees no change.
 
 The `cadzilla` machine is the board alone, with a console for you to type at. The board does
 every drawing command of the ACRTC: lines, rectangles, circles, ellipses, arcs, area paint,
-patterns, and block and area copies. The Developer Guide lists each difference between the model
-and the chip.
+patterns, and block and area copies.
 
 ### `vdb8024`: SD Systems VDB-8024
 

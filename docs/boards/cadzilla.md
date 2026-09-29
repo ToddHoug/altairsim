@@ -1,21 +1,17 @@
 # CADzilla — an HD63484 ACRTC graphics board with a Bt453 RAMDAC
 
-**Status:** milestone 1 — registers, FIFOs, a drawing subset, scan-out through the LUT into a
-fixed VESA monitor. Built 2026-09-18; the monitor model and the 8 bpp / GAI +8 wiring added
-2026-09-19; the MODE register and the single 8-port I/O map added 2026-09-21; the I/O map
-reordered (MODE between the ACRTC's two ports), interrupts (SW1-8), and 2 MB of fixed SRAM
-added 2026-09-23; the monitor modes narrowed to the three primary VESA resolutions (640x400
-dropped -- it was never a VESA standard, just a VGA text-mode timing) and the default raised
-to 1024x768, 2026-09-24.
+**Status:** done — every ACRTC command in every operation, color and area mode; scan-out at 8 bpp
+through the Bt453 onto a fixed VESA monitor; data-sheet drawing time with `draw_rate = real`.
+What is not modeled is under *Limitations*.
 
 ## The real hardware
 
 CADzilla is **a new custom product based on period components**, not a period product. It is
-based on two vintage chips of the mid 1980s the way a CAD-station card of that era was.
+based on two vintage chips of the mid 1980s the way a CAD-station graphics board of that era was.
 
 - **Hitachi HD63484 ACRTC** (Advanced CRT Controller, 1984). A CRT controller with a
   microcoded *drawing processor* and its own frame-buffer interface: up to 2 MB of memory on the
-  card that the host never addresses — CADzilla fits 2 MB of **SRAM**. The host sets ~30
+  board that the host never addresses — CADzilla fits 2 MB of **SRAM**. The host sets ~30
   timing and display registers, then draws by writing 16-bit *commands* into an 8-word FIFO — move, line, rectangle,
   polyline, polygon, circle, ellipse, arc, paint, pattern, copy — in logical X-Y pixel coordinates
   at 1, 2, 4, 8 or 16 bits per pixel. Four logical screens (upper, base, lower, window), zoom,
@@ -74,7 +70,7 @@ MODE, not OMR — that is what "the board's own fetch logic" means concretely.
 
 VESA timings in the board's units — memory cycles of 16 pixels (single access mode) and
 rasters. Where a VESA porch is not a whole number of cycles the board's timing rounds it and
-keeps the line total, as a timing PROM on a real card would.
+keeps the line total, as a timing PROM on the board would.
 
 | `mode` | Pixel clock | H: sync / back porch / active / front porch (cycles) | V: sync / back porch / active / front porch (rasters) |
 |---|---|---|---|
@@ -274,7 +270,7 @@ and the same three for *inside*).
 - **Interrupts**: `assertsInt()`/`assertsVi()` read `Hd63484::irq()` — already a pure,
   combinational function of SR against CCR's own enable bits — and gate it on `interrupt`
   (SW1-8): `none`, the default (SW1-8 off), asserts nothing, exactly as an unstrapped IRQ\*
-  on the real card reaches nothing. `intChanged()` is called after every ACRTC register and
+  on the board reaches nothing. `intChanged()` is called after every ACRTC register and
   FIFO access, and on reset, power-on and snapshot restore, so the S-100 interrupt line
   tracks the chip's own request the instant it can move.
 - **Snapshot**: both chips — registers, FIFOs, a command in flight, the drawing state, the
@@ -316,7 +312,7 @@ and the same three for *inside*).
 | AGCPY/RGCPY copy in **logical pixels** with CPY's S and DSD scans (Tables C37-1/C37-2), from (Xs, Ys) — relative to CP for RGCPY — to CP, so they turn a block 90° or mirror it; CP ends one line past the last (AGCPY-5: CP (4,2), S = 1, DX = 13 → (4,16)). COL is fixed at 00: the source pixel is the color data, OPM combines it with the destination, AREA judges the destination, and the pattern RAM is not used | a rotated copy comes out transposed the wrong way, or a driver chaining copies from CP lands them on top of each other |
 | CPY/SCPY scan the source by **S** (rows or columns, from the corner the signs of AX/AY name) and write the destination from RWP in **DSD**'s order — bit 2 columns, bit 1 leftward, bit 0 downward (Tables C14-1/C14-2, read from the scan) — so S ≠ DSD bit 2 transposes the block; RWPe ends **one line past** the last on the slow axis (CPY-6: `$B0` → `$70`), unlike CLR's | a rotated or mirrored copy comes out in the wrong orientation, or a chained copy overlaps its predecessor by a line |
 | DRD/DWT/DMOD with **negative AX/AY** walk the block the way CLR does: leftward, and down in Y (up in memory) (DRD-2, DWT-2) | a bottom-up block transfer is rejected, or lands mirrored |
-| The shift register is 8 bpp × 8 words whatever CCR/OMR say: a wrong GBM packs pixels the board will not unpack, a wrong GAI makes each fetch overlap the last | an off-spec program shows a coherent picture here and garbage on the card, or the reverse |
+| The shift register is 8 bpp × 8 words whatever CCR/OMR say: a wrong GBM packs pixels the board will not unpack, a wrong GAI makes each fetch overlap the last | an off-spec program shows a coherent picture here and garbage on the board, or the reverse |
 | **MODE AMODE, not OMR ACM, governs the board's own fetch pattern** — the two are independent straps a driver must agree, and only `wiring` compares them | a driver that sets the ACRTC to interleaved but forgets `port+1` gets a SINGLE-access picture out of doubled registers: half the frame, or a picture that never fills |
 | MODE (`port+1`) is write-only and the ACRTC's own two ports are not adjacent — `port+3` is only the high byte of a 16-bit transfer, which an 8-bit host never makes | a driver probing the block with `IN` for a live register at `+1` or `+3` finds nothing, correctly; one that assumes RS=0/RS=1 are back to back writes its FIFO data to MODE instead |
 | In interleaved mode every horizontal register is in doubled units and a memory cycle is 8 frame pixels | the picture is half as wide as intended, or the timing is off by half a line |
@@ -397,8 +393,8 @@ interrupt raised by the deadline alone, and a restored board re-arming its comma
 
 No period software exists for this board; the register table above is what a program would
 load, and `machines/cadzilla.toml`'s header walks the default 1024x768 case from the monitor
-prompt. **`examples/cadzilla/`** ships a whole program: drawdemo, under CP/M 2.2 on an 8"
-floppy, steps through every drawing command at 1024x768, one screen each (`drawdemo.toml` at
+prompt. **`examples/cadzilla/`** (in the repository, not in the release package) holds a whole
+program: drawdemo, under CP/M 2.2 on an 8" floppy, steps through every drawing command at 1024x768, one screen each (`drawdemo.toml` at
 `draw_rate = "full"`, `drawdemo-real.toml` at a 2 MHz 8080 and `draw_rate = "real"`).
 `acceptance-examples` boots it from a copy of the folder, runs DRAWDEMO, and checks through
 `SHOW` that it started the board at 1024x768 with the wiring right.

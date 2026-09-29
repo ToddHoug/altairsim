@@ -76,7 +76,7 @@ port = 10
 # choice): every command is done the moment it lands, so a program under development never
 # waits on the chip. `real`: each command takes the time the HD63484 data sheet gives it,
 # paid in the memory cycles the display leaves free -- the write FIFO fills and CED comes
-# late, as on the card. Use `real` for anything timing-sensitive, a game above all
+# late, as on the board. Use `real` for anything timing-sensitive, a game above all
 # (`SET cad0 draw_rate=real` at the prompt). It is independent of `cpu0 clock_hz`: that only
 # decides whether the host waits, and the drawing time is the same number of instructions
 # at any CPU speed setting.

@@ -97,5 +97,7 @@ Drive 0 is read/write, as on a real machine. Nothing restores the disk after CP/
 Make a copy of the image before you test writes.
 
 `DRAWDEMO.HEX` is the Intel HEX file of the program. CP/M's `LOAD` makes `DRAWDEMO.COM` from it.
-The source, `DRAWDEMO.ASM`, and `tools/make-drawdemo-disk.sh`, the script that makes the disk
-from the `examples/cpm` disk, stay in the repository and are not in the package.
+`DRAWDEMO.ASM` is the source. `tools/make-drawdemo-disk.sh` makes the disk from the
+`examples/cpm` disk.
+
+This example is in the source repository only. It is not in the release package.
