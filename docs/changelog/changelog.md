@@ -8,203 +8,84 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
-### 8″ disks need a 2 MHz processor, as on a real Altair
+## 1.2.0
 
-The `dcdd` and `mds` data port now holds one byte, as the real board does, and not a queue. The
-software for 8″ disks times its second byte for a 2 MHz processor, so with `clock_hz` faster than
-2 MHz it now cannot read the disk. A real Altair behaves the same way. Full speed and 2 MHz work
-as before, and minidisk software works at 4 MHz too.
+**1.2.0 is the release that puts a disk at the other end of a serial line, and makes the
+documents easier to read.** A new board gets its disks from an FDC+ drive server, as a real
+FDC+ does. Several boards now do what the real board did and not less. And the User Manual,
+*The Monitor* and *The Debugger* are rewritten in short, simple sentences.
 
-### A new board: the FDC+ serial drive
+### The FDC+ serial drive
 
-The new `fdcplus` board is the FarmTek FDC+ in its serial drive mode (drive types 6 and 7). A
-drive server on another computer keeps the disk images, and the board gets them a track at a time
-over a serial line, as a real FDC+ does. Now the simulator and a real FDC+ Altair can use the same
-images through one server, and you can test a drive server without a real FDC+. Type 7 is an 8″
-drive, including the 8 MB disk, and type 6 is a minidisk. The boards chapter tells you how to set
-it up, and `examples/cpm/cpm22-fdcplus.toml` boots CP/M from a server: set your serial port in the
-file and run it (#560). `SET fdc0 DEBUG=error` reports the line's faults: a server that does not
-answer, a bad track, a write the server did not take (#594).
+The new `fdcplus` board is the FarmTek FDC+. In its serial drive mode (drive types 6 and 7), a
+drive server on another computer keeps the disk images, and the board gets them a track at a
+time over a serial line. So the simulator and a real FDC+ Altair can use the same images through
+one server, and you can test a drive server without a real FDC+. Type 7 is an 8″ drive,
+including the 8 MB disk, and type 6 is a minidisk. `examples/cpm/cpm22-fdcplus.toml` boots CP/M
+from a server: set your serial port in the file and run it. `SET fdc0 DEBUG=error` reports the
+line's faults: a server that does not answer, a bad track, a write that the server did not take.
 
-### The FDC+ runs the 1.5 MB floppy
-
-The `fdcplus` board now also does drive type 5, the FDC+'s 1.5 MB floppy: one 10,240-byte sector
-to a track, on both sides of the disk. Put a disk image in `drive0` to `drive3` with `MOUNT`. The
-stock DBL boot PROM boots it, as on the real board, because the FDC+ gives the PROM a boot sector
-of its own. `examples/cpm/cpm22-fdcplus-hdf.toml` boots Mike Douglas's 1.5 MB CP/M 2.2, and the
-disk is in the package.
-
-### The VDM-1 shows its whole character set
-
-The VDM-1 now shows the graphics characters for codes 00 to 1F. Before, it always showed them as
-blanks. The board uses the MCM6576 character ROM, and by default it shows every code, as the board
-did when it left the factory. The new `blanking` property sets the SW5/SW6 switches: it can blank the
-control codes, blank the rest of a line after a CR and the rest of the screen after a VT, or blank
-all characters. The screen RAM now holds random bytes at power-on, as real RAM does. Set
-`fill = zero` or a `seed` if you need the same screen at each power-on.
-
-### A `-s` script runs from any folder
-
-A path in a script that you run with `altairsim -s` is now relative to the script's folder, as
-in a script that you run with `DO`. Before, it was relative to the machine's folder. So
-`altairsim -s examples/cpm/cpm22-buffered.ini` now boots CP/M from the top of the package, and
-each `.ini` in the examples runs from any folder. You still name the script from the folder that
-you are in. `SHOW PATHS` and `HELP DO` now say this.
-
-### An empty ROM socket is empty
-
-A `rom` region with no `mount` now reads `FF` even when it has a `size`. Before, a `size` made it
-read `00`. A `rom` region takes its size from its image, so it ignores `size`. The program also
-no longer prints `power: cannot open ''` for an empty socket.
-
-### The MCP server checks its arguments, and `run` obeys `SET BUS UNCLAIMED`
-
-A tool argument of the wrong type is now an error that names the argument. Before, the server
-read it as 0 and gave no error. `run {"from": "0xFF00"}` ran from address 0; now the server
-refuses it and tells you to send `65280`. A missing required argument is an error too.
-
-`run` now obeys `SET BUS UNCLAIMED`, as `RUN` at the monitor does. With `HALT`, it stops with
-`stopped: "unclaimed"` and names the port. With `WARN`, the warning line comes back in the new
-`warnings` list. `run` now also stops on a `BREAK TAPE STOP`, with `stopped: "tape-stop"`.
-
-### Debug reports line up while a guest runs
-
-A `DEBUG=` report on the terminal while a guest ran ended with a line feed and no carriage
-return, so the next line started where the report ended. A report could also start in the
-middle of a line that the guest was printing. Now each report starts on a new line and ends at
-the left edge.
-
-### MOUNT and UNMOUNT say the right thing
-
-When `MOUNT` cannot find a file, it shows the command to type with `CREATE` added. If you put
-the path in quotes, that command now has both quotes, so you can paste it back as it is.
-`UNMOUNT` now says what is true of the unit: a drive or a tape recorder is empty. Only a ROM
-socket says that its pages float to `FF`. `HELP UNMOUNT` covers all three.
-
-### The CP/M disks carry the current file-transfer utilities
-
-The CP/M disks in `examples/cpm` and `examples/ai-mcp` now have the current `R.COM`, `W.COM` and
-`HDIR.COM`, the same programs as in `hostbridge/`. `HDIR` on those disks now lists one file on
-each line, with its size and date. The hard-disk image in `examples/hdsk` now has all three
-utilities too, so you can move files in and out of that machine with no paste.
-
-### The Monitor document reads more plainly
-
-*The Monitor* is rewritten in shorter, simpler sentences. Its `HELP` menu matches the program
-again, and it now shows `DO`, `MACHINE` and `STARTUP`. It points to the User Manual for the board
-reference. It also no longer says that the machine keeps running during a `!` shell command. The
-machine stays stopped, as it does at every monitor prompt. The section on board names now explains
-the two shorter forms. You can omit the digits at the end of a board's id, and you can omit a unit
-when only one unit fits the command.
-
-### The Debugger document reads more plainly
-
-*The Debugger* is rewritten in the same shorter, simpler sentences as *The Monitor*. Each thing
-has one name: a **cycle breakpoint** for `BREAK MEM` and `BREAK IO`, a **diagnostic channel** and
-its **debug flags** for `SET … DEBUG`, and the **instruction history** and **bus history** for
-`HISTORY`. The steps to set up an AI assistant are now numbered. The `SHOW DEBUG` example now
-lists the channels in the order that the program shows them.
-
-### The User Manual reads more plainly
-
-The User Manual is being rewritten in the same shorter, simpler sentences as *The Monitor* and
-*The Debugger*, one chapter at a time. *What altairsim is* now names *The Monitor* and *The
-Debugger* as the documents that describe the monitor's commands. *What is in the package* now
-says where the Developer Guide is (with the source, not on the release page), and it describes
-the version line as the program prints it today. *Running it* now shows the Windows command,
-and it says that `-x BOARDS` loads a machine to look at it, not that it boots one. It also says
-that a folder with an `altairsim.toml` in it gives you that machine, not `default`. In the
-*Quick start*, the command to write-protect the CP/M disk works now, and the `DIR` listing
-shows every file that is on the disk. The *Quick start* is now numbered steps, shows the whole
-boot output, and tells you how to leave BASIC (`SYSTEM`). *Machines* now lists the `--mirror` option, and so does the cheatsheet.
-`altairsim --help` and the manual now write the command line as `altairsim [machine]
-[options]`, with the machine first. Both orders still work. *The machine file* now lists the
-`[terminal]` table and the `history` and `log` console keys, and its `base` example is the real
-CP/M example file. That example now opens the chapter, before the reference. The chapter now
-says that a decimal `#16` must be in quotes in a machine file, because `#` starts a comment. *Boards* now describes how the PMMI modem dials and answers over TCP
-(`dial=`, `answer=`, `telnet`), and `SHOW BOARD pmmi` no longer says that it cannot. The
-chapter's board list now includes `gsio`, `io4`, `16fdc` and `64fdc`, and its SBC, 88-SIO and
-ExpandoRAM II sections describe what those boards do today. It now has a section for the Cromemco 16FDC and 64FDC, and the
-sections for disk controllers whose example is not in the package now say that you supply the
-disk image. The `pb1` section no longer depends on an example that is not in the package, and it says
-that its default control port is the same as the 2SIO's. *Disks* no longer says that the CP/M disk hides
-most of its files from `DIR`, or that a path you type starts from your shell. It now says that
-the package has a hard-disk image too. *Tapes* now says which machine to start before you load 4K BASIC by
-hand, and it points to the Boards chapter for the sense switches. *Serial ports, sockets and telnet* now says
-that the 2SIO's baud rate is a jumper, and that the format jumpers are on the 88-SIO and 88-ACR,
-not on the 6850. *Disks*, *Tapes* and *Serial ports, sockets and telnet* are now arranged for
-the reader: the safety rules for a disk are in one section, the scratch-disk steps end at a
-working `B:`, the tape chapter starts with the steps to load BASIC, and the serial chapter
-explains the console settings one time. The serial chapter now says that the default for
-`bsdel` is `off`, and that the `default` machine sets `bs`. *Boards* now starts with the commands that add, remove and show
-boards, and the conflict check. The front panel comes first in the list of boards, and the
-notes for every video window are in one place. It no longer says that a cassette loads in the
-same number of T-states at any processor speed, and `sense = 0x80` on `basic4k` now reads as a
-cassette load. *Moving files in and out* now says that a relative `hostdir` starts from the
-machine's folder whether you type it or write it in the file, and its `LOAD R` sample matches the
-current `R.HEX`. *Worked examples* now shows the real `DIR` listings of the CP/M and hard disks,
-and says that `rate=real`, not the processor clock, makes a tape load at its real speed. *The MCP server* chapter is now written for the person who
-sets up an assistant: setup first, then a first session with the `ai-mcp` example, watching with
-`--mirror`, and running a project. The protocol details for someone who writes their own client
-are now in `DRIVING-WITH-AI.md`, which also explains how to stop a `run` early and what `status`
-reports. `DRIVING-WITH-AI.md`, the `altairsim` skill and the `ai-mcp` example now give `from` as a
-decimal number (`65280` for `FF00`), because JSON has no hex. *Troubleshooting* now has a section for disk errors in the guest. The simulator adds no disk
-errors, so the section checks a `media` line that forces the wrong format, write protection,
-and the image itself. It also gives `rate=real` for a slow tape load,
-and `REGS`, not `SHOW REG`, for the registers. The *Glossary* adds **guest** and **machine file**, and its
-**endpoint** entry points to the complete list in the serial chapter, and its **DBL** entry says
-what DBL reads from the disk. *What is in the package* now explains the `tree` row of
-`SHOW VERSION`. *The machine file* now says why the board reference is always current, and that a
-wrong `type` on a base board loads with no error.
-
-### SHOW BOARDS fits on a screen
-
-`SHOW BOARDS` now lists each board type on one line, with a short summary. The full description,
-which used to wrap under every board and run the list to several screens, is now shown only by
-`SHOW BOARD <type>`, above that board's settings. The MCP `board_types` tool reports the short
-summary too, beside the full description.
-
-### The Generic SIO's Rev 0 profile is really Rev 0 now
-
-The `gsio` and `propio` profile called `sior0` was wired the way a **Rev 1** MITS 88-SIO is —
-"byte waiting" on bit 0 and "ready to send" on bit 7, both inverted. It is now named **`sior1`**,
-and it is still the default, so a machine that never named a profile behaves exactly as before. The
-name **`sior0`** now means a real Rev 0 board: "byte waiting" on bit 5 and "ready to send" on bit
-1, not inverted. A machine file that says `profile = "sior0"` by hand and wants the old wiring
-should say `sior1`. A file written by `CONFIG SAVE` is not affected: it records every strap as well
-as the profile.
+The board also does drive type 5, the FDC+'s 1.5 MB floppy, from disk images that you `MOUNT`.
+The stock DBL boot PROM boots it, as on the real board. `examples/cpm/cpm22-fdcplus-hdf.toml`
+boots Mike Douglas's 1.5 MB CP/M 2.2, and the disk is in the package.
 
 ### The SciTronics RTC-100 clock board
 
-A new board, `rtc100`: the SciTronics RTC-100, an S-100 battery-backed calendar clock from
-1980. It reads your host's date and time, a guest can set it and the setting survives a RESET,
-and it can interrupt once a second with an `RST` of your choosing. Four ports from a base that
-must be a multiple of 4, and the clock chip is the OKI MSM5832 the System Support 1 already
-carried.
+A new board, `rtc100`: the SciTronics RTC-100, a battery-backed S-100 calendar clock from 1980.
+It reads your computer's date and time. A guest can set it, and the setting stays after a RESET.
+It can interrupt once a second with an `RST` that you select.
 
-### Recipes: build a machine yourself, one typed line at a time
+### Boards that do what the real board did
 
-A new kind of document ships in the package: **`recipes/`**, a folder of short walkthroughs, each
-its own PDF. Every one walks the same road — start with an empty chassis (`altairsim -n`), fit the
-boards by hand, watch the machine answer each line, save what you built with `CONFIG SAVE`, quit,
-and load it back into a fresh chassis. One builds a CP/M Altair, one builds a Cromemco Dazzler
-machine with a Z80 in it, and one starts from a machine that already works and changes it.
+- **The VDM-1 shows its whole character set.** Codes 00 to 1F now show the graphics characters
+  of the board's MCM6576 ROM, as the board did when it left the factory. Before, they were
+  always blank. The new `blanking` property sets the SW5/SW6 switches. The screen RAM now holds
+  random bytes at power-on, as real RAM does; set `fill = zero` or a `seed` to get the same
+  screen each time.
+- **8″ disks need a 2 MHz processor.** The `dcdd` and `mds` data port now holds one byte, as
+  the real board does, and not a queue. The 8″ software times its second byte for 2 MHz, so a
+  faster `clock_hz` cannot read the disk — the same as on a real Altair. Full speed and 2 MHz
+  work as before, and minidisk software works at 4 MHz too.
+- **The Generic SIO's `sior0` is really Rev 0.** The profile that was called `sior0` was wired
+  as a Rev 1 88-SIO. It is now named `sior1`, and it is still the default, so a machine that
+  names no profile is not changed. `sior0` is now a real Rev 0 board. A machine file that says
+  `profile = "sior0"` and wants the old wiring must now say `sior1`.
+- **An empty ROM socket is empty.** A `rom` region with no `mount` now reads `FF`, even when it
+  has a `size`.
 
-Getting from an empty backplane to a machine file you can load back used to be documented in two
-halves, in two chapters, and neither half was a walkthrough. The machine chapter of the manual now
-carries that whole arc in one place as well.
+### Documents that are easier to read
 
-### Color graphics in the package
+The User Manual, *The Monitor* and *The Debugger* are rewritten in shorter, simpler sentences,
+with one name for each thing. Many facts in them were checked against the program and
+corrected on the way.
 
-The **Dazzler example ships**, which it never did before: `examples/dazzler/` boots Li-Chen Wang's
-Kaleidoscope on a Cromemco Dazzler, so a package holder gets the S-100's first color graphics card
-by unzipping the archive instead of cloning the repository. Its machine now runs a `z80` board at
-4 MHz, the speed a Cromemco Z-1 ran.
+A new kind of document is in the package: **`recipes/`**, short walkthroughs that you type
+along with. Each one starts with an empty chassis (`altairsim -n`), adds the boards one line at
+a time, saves the machine with `CONFIG SAVE`, and loads it back. One builds a CP/M Altair, one
+builds a Cromemco Dazzler machine with a Z80, and one changes a machine that already works. The
+**Dazzler example is now in the package** too: `examples/dazzler/` boots Li-Chen Wang's
+Kaleidoscope.
 
-### Name a machine at the prompt
+### At the prompt and over `--mcp`
 
-`SET MACHINE name=<name>` renames the machine you are running, so a machine built at the prompt
-and written out with `CONFIG SAVE` no longer lands in the file as `name = "none"`.
+`SHOW BOARDS` now lists each board type on one line; `SHOW BOARD <type>` gives the full
+description. `SET MACHINE name=<name>` names the running machine, so a machine that you build at
+the prompt is not saved as `name = "none"`. A path in an `altairsim -s` script is now relative
+to the script's folder, as in a `DO` script, so each `.ini` in the examples runs from any
+folder.
+
+The MCP server now checks the type of each tool argument and gives an error that names it.
+Before, `run {"from": "0xFF00"}` ran from address 0. `run` now obeys `SET BUS UNCLAIMED` and
+stops on a `BREAK TAPE STOP`, and the `--mcp` console follows the console's transforms when
+you change them.
+
+### Smaller things
+
+`MOUNT` and `UNMOUNT` messages now fit the unit, and a suggested `MOUNT … CREATE` keeps the
+quotes of your path. `DEBUG=` reports line up while a guest runs. The CP/M disks in the examples
+carry the current `R.COM`, `W.COM` and `HDIR.COM`, and so does the hard-disk image; `W` no
+longer puts CP/M attribute bits in the name of the file that it writes. `CONFIG SAVE` now writes
+a value that contains a `"` so that it loads back.
 
 ## 1.1.0
 
