@@ -16,6 +16,8 @@ is described.
 
 **We do not read other emulators' source code to learn how hardware works.** That includes SIMH / AltairZ80. Second-hand facts inherit second-hand mistakes, and the whole value of this project rests on the hardware model being *right*, not on it matching somebody else's model.
 
+**One narrow exception:** MAME's HD63484 model is the structural basis of `src/chips/hd63484`, never a source of facts. It was authorized on #599, `docs/sources.md` records the terms, and they cover no other chip.
+
 > **If a spec is missing, ask Patrick — he will source the manual.** Do not guess, do not reconstruct from memory, and do not go read another simulator. A wrong bit layout that "seems to work" is the most expensive kind of bug in a project like this, because the software will paper over it until one day it doesn't.
 
 When two sources disagree, say so in the board's `.md` and say which one won and why.
