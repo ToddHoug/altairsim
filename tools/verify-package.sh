@@ -28,6 +28,13 @@
 # know is a LOUD FAILURE ("add it here"), never a silent skip. That asymmetry is the point: a
 # new `$ altairsim {{MACHINE_NEWTHING}}` in a chapter cannot slip past unverified.
 #
+# A COMMAND WITH OPTIONS after the machine file (`$ altairsim {{MACHINE_CPM}} --mcp`) is not a
+# boot-to-prompt walkthrough -- it starts an MCP server, or runs `-x` commands on a disk the reader
+# made earlier -- so no driver runs it. It still gets the check that catches the #308 fault: the
+# machine file it names must be in the package, and it must be one the dispatch table knows. It
+# is tallied apart from the boot checks and named in a closing NOTE, so the PASS line's claim
+# ("reached their documented prompt") stays true and an unrun option never looks verified.
+#
 # THREE OF THE FIVE NEED A PTY, NOT A PIPE, which is not a preference -- a pipe hands the guest
 # keystrokes it never asked for and, for the Sol-20, the output never reaches stdout at all
 # (it paints the VDM-1's video RAM). Those three reuse the existing acceptance `.exp` scripts
@@ -154,6 +161,8 @@ expand() { printf '%s' "$1" | sed -f "$sedscript"; }
 #    pairs) and drops the machines/running/package comparison TABLES, which always stack two or
 #    three `$ altairsim` lines with trailing prose in one block. awk emits, per surviving block,
 #    a tab-separated record:  FILE <tab> LINE <tab> SETUP-LINE-or-empty <tab> ALTAIRSIM-LINE
+#    The ALTAIRSIM-LINE may carry options after the machine file; route() below decides what
+#    such a line is checked for.
 # ---------------------------------------------------------------------------
 records=$scratch/.records
 awk '
@@ -187,6 +196,7 @@ total=0
 passed=0
 failed=0
 skipped=0
+optchecked=0
 
 # assert_piped <label> <captured-output>  (required strings: newline-list on stdin)
 assert_piped() {
@@ -294,6 +304,19 @@ EOF
   else failed=$((failed + 1)); echo "  ---- FAIL $_cmd"; fi
 }
 
+# route <driver> <target> <detail> <human-cmd>: a bare machine file goes to its boot driver; one
+# with options only has to be in the package (see the header).
+route() {
+  if [ -z "$mrest" ]; then dispatch "$@"; return; fi
+  if [ -f "$rundir/$toml_run" ]; then
+    optchecked=$((optchecked + 1))
+    echo "  FILE $mpath is in the package (options not run: $mrest)"
+  else
+    echo "verify-package: FAIL -- $rel:$line names $mpath, which is not in the package." >&2
+    failed=$((failed + 1))
+  fi
+}
+
 echo "verify-package: running the manual's documented commands against"
 echo "                $archive"
 echo
@@ -316,6 +339,10 @@ while [ "$rec_i" -lt "$nrec" ]; do
   rel=${file#"$root"/}
   arg=${acmd#\$ altairsim }
   argx=$(expand "$arg")
+  # The machine file is the first word; anything after it is options (see route()).
+  mpath=${argx%% *}
+  mrest=""
+  case $argx in *' '*) mrest=${argx#* } ;; esac
 
   case $argx in
     *'{{'*'}}'*)
@@ -327,7 +354,7 @@ while [ "$rec_i" -lt "$nrec" ]; do
   # Only PATH-shaped args are packaged-media examples. A bare word ($ altairsim basic4k) or an
   # empty arg ($ altairsim) is a built-in launch -- log and skip, do not dispatch.
   is_path=0
-  case $argx in */*|*.toml) is_path=1 ;; esac
+  case $mpath in */*|*.toml) is_path=1 ;; esac
   if [ "$is_path" -eq 0 ]; then
     echo "  SKIP (built-in, not packaged media): $rel:$line  \$ altairsim ${arg:-<default>}"
     continue
@@ -340,7 +367,7 @@ while [ "$rec_i" -lt "$nrec" ]; do
   #   cd D      : run from base/D with the bare filename.
   #   ls / none : run from base with the expanded path.
   rundir=$base
-  toml_run=$argx
+  toml_run=$mpath
   case $setup in
     '$ cp -R '*)
       _src=$(printf '%s' "$setup" | awk '{print $4}')
@@ -349,23 +376,23 @@ while [ "$rec_i" -lt "$nrec" ]; do
     '$ cd '*)
       _cd=$(printf '%s' "$setup" | awk '{print $3}')
       rundir=$base/$_cd
-      toml_run=$(basename "$argx") ;;
+      toml_run=$(basename "$mpath") ;;
   esac
 
   bn=$(basename "$toml_run")
   case $bn in
-    cpm22-buffered.toml) dispatch CPM   "$rundir" "$toml_run" "\$ altairsim $arg" ;;
-    hdsk.toml)           dispatch HDSK  "$rundir" "$toml_run" "\$ altairsim $arg" ;;
-    basic4k.toml)        dispatch BASIC "$rundir" "$toml_run" "\$ altairsim $arg" ;;
+    cpm22-buffered.toml) route CPM   "$rundir" "$toml_run" "\$ altairsim $arg" ;;
+    hdsk.toml)           route HDSK  "$rundir" "$toml_run" "\$ altairsim $arg" ;;
+    basic4k.toml)        route BASIC "$rundir" "$toml_run" "\$ altairsim $arg" ;;
     basic1.toml)
       _cwd=$(cd "$rundir/$(dirname "$toml_run")" && pwd)
-      dispatch BASIC1 "$_cwd" "" "\$ altairsim $arg" ;;
+      route BASIC1 "$_cwd" "" "\$ altairsim $arg" ;;
     diskbasic.toml)
       _dir=$(cd "$rundir/$(dirname "$toml_run")" && pwd)
-      dispatch DISKBASIC "$_dir" "" "\$ altairsim $arg" ;;
+      route DISKBASIC "$_dir" "" "\$ altairsim $arg" ;;
     trek80.toml)
       _tp="$rundir/$toml_run"
-      dispatch SOL "$_tp" "" "\$ altairsim $arg" ;;
+      route SOL "$_tp" "" "\$ altairsim $arg" ;;
     *)
       echo "verify-package: FAIL -- $rel:$line runs a documented example this check does not know:" >&2
       echo "    \$ altairsim $arg   ->   $argx" >&2
@@ -386,6 +413,10 @@ fi
 if [ "$skipped" -ne 0 ]; then
   echo "verify-package: NOTE -- $skipped pty command(s) were NOT verified (no expect on this box)." >&2
   echo "  Install expect to verify BASIC 1.0, disk BASIC and the Sol-20 too." >&2
+fi
+
+if [ "$optchecked" -ne 0 ]; then
+  echo "verify-package: NOTE -- $optchecked command(s) with options: machine file checked, options not run." >&2
 fi
 
 if [ "$failed" -ne 0 ]; then
