@@ -104,65 +104,6 @@ execute_process(
 )
 expect_cpm("${out}" "`altairsim -s examples/cpm/cpm22-buffered.ini` from the dist root did not boot CP/M")
 
-# cpm22-fdcplus-hdf.toml -- the FDC+'s 1.5 MB floppy, a disk the boot PROM cannot read. It puts CPM22-48K-HDF.dsk in an FDC+ at drive type 5 and boots it with
-# the stock DBL, which knows nothing of 10,240-byte tracks. The card's firmware hands DBL a
-# fake Altair sector of its own, whose loader reads the real track 0 -- so the banner alone
-# proves the fake sector, the loader's no-handshake track read at 2 MHz, and the BIOS after
-# it; `A: ASM      COM` is the directory read off the image. (media.cmake proves the same boot
-# on the simulator's own copy; this proves the file we ship.)
-function(expect_hdf out why)
-  foreach(want "48K CP/M 2.2b v1.2" "For Altair 1.5Mb Floppy" "A>" "A: ASM      COM")
-    string(FIND "${out}" "${want}" hit)
-    if(hit LESS 0)
-      message(FATAL_ERROR "examples: ${why}\n"
-                          "  '${want}' never reached the terminal.\n--- output ---\n${out}")
-    endif()
-  endforeach()
-endfunction()
-
-execute_process(
-  COMMAND           "${SIM}" cpm22-fdcplus-hdf.toml
-  WORKING_DIRECTORY "${cpm}"
-  INPUT_FILE        "${SRC}/tests/acceptance/cpm-dir.keys"
-  OUTPUT_VARIABLE   out
-  ERROR_VARIABLE    out
-  TIMEOUT           60
-)
-expect_hdf("${out}" "`cd examples/cpm && altairsim cpm22-fdcplus-hdf.toml` did not boot CP/M")
-
-# cpm22-fdcplus.toml boots off an FDC+ Serial Drive Server -- a real serial port and a real
-# server on the far end, which no test machine has. The file names ONE computer's port, and its
-# README's step 2 is "set `connect` on fdc0 to your serial port". So the test does that step on
-# the copy -- with `null`, the one endpoint every host has -- and the file is then LOADED, not
-# booted: over --mcp, where the startup (the RUN that would wait on the server) is not run, and
-# SHOW fdc0 proves the file built the board it says -- the drive type, the rate and the endpoint.
-# (Loading the file as shipped opens its port, which passes only on a machine that has it.)
-file(READ "${cpm}/cpm22-fdcplus.toml" fdcplus)
-string(REGEX REPLACE "\nconnect = \"serial:[^\"\n]*\"" "\nconnect = \"null\"" fdcplus_null "${fdcplus}")
-if(fdcplus_null STREQUAL fdcplus)
-  message(FATAL_ERROR "examples: cpm22-fdcplus.toml has no `connect = \"serial:...\"` line on fdc0 "
-                      "-- the line its README tells the reader to set.")
-endif()
-file(WRITE "${cpm}/cpm22-fdcplus.toml" "${fdcplus_null}")
-
-mcp_session("${dist}/fdcplus.jsonl"
-  [=[{"name":"monitor","arguments":{"command":"SHOW fdc0"}}]=])
-execute_process(
-  COMMAND           "${SIM}" cpm22-fdcplus.toml --mcp
-  WORKING_DIRECTORY "${cpm}"
-  INPUT_FILE        "${dist}/fdcplus.jsonl"
-  RESULT_VARIABLE   rc
-  OUTPUT_VARIABLE   out
-  ERROR_VARIABLE    out
-  TIMEOUT           30
-)
-expect_contains("${out}" "`altairsim cpm22-fdcplus.toml`, with its port set, did not load"
-                "fdc0  (fdcplus)" "drivetype        7" "baud             230400"
-                "connect          null")
-if(NOT rc EQUAL 0)
-  message(FATAL_ERROR "examples: cpm22-fdcplus.toml exited ${rc}.\n--- output ---\n${out}")
-endif()
-
 # cpm22-terminal.toml puts the console in the built-in windowed VT100. A build with SDL loads it
 # -- under SDL's dummy video driver, so no window opens on a test machine -- and the console
 # line must hold the terminal. A headless build (no SDL) must REFUSE it, with the one message
@@ -436,6 +377,9 @@ foreach(toml basic1.toml basic1-wav.toml)
     ERROR_VARIABLE    out
     TIMEOUT           60
   )
+  # The two paths below are joined by the program, which uses the host's separator: on Windows
+  # it prints a backslash. Match one form.
+  string(REPLACE "\\" "/" out "${out}")
   expect_contains("${out}" "`altairsim examples/basic1/${toml}` from the dist root did not start its loader"
     "acr0:tape: mounted examples/basic1/BASIC Ver 1-0."
     "loaded 20 bytes (1 page) from examples/basic1/LOAD10.HEX (1800-1813)"

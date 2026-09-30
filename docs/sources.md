@@ -189,7 +189,7 @@ shipped example carries the same image, git stores the two identical files once:
 | `mits-88mds/cpm22/CPM56K-1.DSK` | `41c87b01…32d3d` | The minidisk system disk (A:). `acceptance-minidisk`. |
 | `mits-88mds/cpm22/CPM56K-2.DSK` | `0f6480b1…586db` | Its tools disk (B:) — `cpm22-mini.toml` mounts both, so one without the other does not boot. |
 | `tests/media/diskbasic/Disk BASIC 4.1.dsk` | `e1fb7255…36b69` | Altair BASIC Rev 4.1 [Disk Extended Version], MITS 1977. `acceptance-diskbasic`. Added 2026-07-19. |
-| `tests/media/cpm/CPM22-48K-HDF.dsk` | `6cb1d68b…5c413eb` | 48K CP/M 2.2b for the FDC+ **1.5 MB floppy** (drive type 5), from `…/1.5mb_floppy/CPM 2.2/`. Untouched. `acceptance-media` boots it; the shipped copy is `examples/cpm/CPM22-48K-HDF.dsk` (`acceptance-examples`). Added 2026-09-25. |
+| `tests/media/cpm/CPM22-48K-HDF.dsk` | `6cb1d68b…5c413eb` | 48K CP/M 2.2b for the FDC+ **1.5 MB floppy** (drive type 5), from `…/1.5mb_floppy/CPM 2.2/`. Untouched. `acceptance-media` boots it. Added 2026-09-25. |
 | `tests/media/cadzilla/cpm22b23-56k-drawdemo.dsk` | *derived*; tracked `25909be4…7b9141` | The CADzilla floppy: `cpm22b23-56k.dsk` above with `DRAWDEMO.COM` put on (`tools/make-drawdemo-disk.sh`). `acceptance-media`. Added 2026-09-26. |
 
 **The Disk BASIC image came from deramp.com** (Patrick, 2026-07-19), like everything else above,

@@ -16,6 +16,10 @@ worked-examples chapter and the tapes chapter use it. `basic1` has Altair BASIC 
 one, as a `.tap` and as audio. More examples, with their media and more documentation, are at
 https://altairsim.com.
 
+The `cpm` example no longer has the two FDC+ machine files, `cpm22-fdcplus.toml` and
+`cpm22-fdcplus-hdf.toml`, and the 1.5 MB disk `CPM22-48K-HDF.dsk`. The boards chapter still tells
+you how to set up the FDC+ in the `default` machine.
+
 The `recipes/` folder is removed from the package. The worked-examples chapter no longer has the
 BASIC 1.0, 88-HDSK and Disk BASIC walkthroughs.
 

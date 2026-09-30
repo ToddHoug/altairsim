@@ -135,7 +135,6 @@ examples/**
 # package. One glob covers all of them, at any depth.
 !examples/**/README.pdf
 !examples/cpm/cpm22b23-56k.dsk
-!examples/cpm/CPM22-48K-HDF.dsk
 !examples/basic4k/4K BASIC Ver 3-1.tap
 !examples/basic4k/4K BASIC Ver 3-1.wav
 !examples/basic4k/4K BASIC (Kansas City).wav

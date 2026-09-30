@@ -928,9 +928,6 @@ The `default` machine's `dcdd` uses the same ports, so remove it first. On Windo
 a name such as `serial:COM3`. `CONFIG SAVE` writes the machine to a file, so that you do the
 setup only once.
 
-The package has this machine as a file: `examples/cpm/cpm22-fdcplus.toml`. Set your serial port
-and speed in it, and run it.
-
 A slower line makes a slower disk. At 38400 baud, a track takes about one second. When the machine
 is not using the disk, the board writes changed tracks back to the server after about one second.
 It also writes them back before a `DISCONNECT`, a `POWER`, or when you quit.
@@ -966,8 +963,7 @@ handshake: it reads a byte every 17 µs, slightly slower than the disk, and writ
 the processor, so the disk works. With a faster `clock_hz`, CP/M reads bytes before the disk has
 sent them, as on a real Altair with a fast processor, and the disk does not work.
 
-The package has CP/M for this drive: `examples/cpm/cpm22-fdcplus-hdf.toml` and the disk
-`CPM22-48K-HDF.dsk`. To do the same by hand in the `default` machine:
+To boot a CP/M disk image for this drive in the `default` machine:
 
 ```
 altairsim> BOARDS REMOVE dsk0
