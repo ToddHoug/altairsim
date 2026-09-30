@@ -2842,6 +2842,82 @@ void test_achieved_hz() {
               "and so are the parenthesised (read)/(write) markers");
     }
 
+    // HELP examples. A remark after a command reads as part of the command unless it is
+    // marked, so every remark starts with `;` (the monitor's own comment mark, so a pasted
+    // line still runs), all remarks of a block start in one column, and the block is set
+    // off from the prose by a blank line above and below.
+    SECTION("HELP examples -- remarks are ';' comments, aligned, and the block is set off");
+    {
+        auto splitLines = [](const std::string& t) {
+            std::vector<std::string> v;
+            std::istringstream       in(t);
+            for (std::string l; std::getline(in, l);) v.push_back(l);
+            return v;
+        };
+        auto firstWord = [](const std::string& l) {
+            size_t b = l.find_first_not_of(' ');
+            size_t e = l.find(' ', b);
+            return l.substr(b, e == std::string::npos ? std::string::npos : e - b);
+        };
+        // The column of a remark: a ';' that follows two or more blanks.
+        auto remarkCol = [](const std::string& l) -> int {
+            for (size_t i = 3; i < l.size(); ++i)
+                if (l[i] == ';' && l[i - 1] == ' ' && l[i - 2] == ' ' && l[i - 3] != ' ') return (int)i;
+            return -1;
+        };
+
+        int topics = 0;
+        for (const auto& c : commands()) {
+            if (!c.detail) continue;
+            ++topics;
+            auto v = splitLines(c.detail);
+            auto isExample = [&](const std::string& l) {
+                if (l.size() < 3 || l[0] != ' ' || l[1] != ' ' || l[2] == ' ') return false;
+                std::string w = firstWord(l);
+                if (w == "altairsim>" || w == "SET") return true;
+                const CommandDef* r = resolveCommand(w);
+                return r && r == resolveCommand(c.name) && std::none_of(w.begin(), w.end(), [](unsigned char ch) { return std::islower(ch); });
+            };
+            for (size_t i = 0; i < v.size();) {
+                if (v[i].empty() || v[i][0] != ' ') { ++i; continue; }
+                size_t j = i;
+                while (j < v.size() && !v[j].empty() && v[j][0] == ' ') ++j;  // the indented run [i,j)
+                bool  hasExample = false;
+                int   col        = -1;
+                bool  aligned    = true, marked = true;
+                for (size_t k = i; k < j; ++k) {
+                    if (!isExample(v[k])) continue;
+                    hasExample = true;
+                    // Two or more blanks then text that is not a ';' = an unmarked remark.
+                    size_t gap = v[k].find("  ", 2);
+                    if (gap != std::string::npos) {
+                        size_t t = v[k].find_first_not_of(' ', gap);
+                        if (t != std::string::npos && v[k][t] != ';') marked = false;
+                    }
+                    int rc = remarkCol(v[k]);
+                    if (rc >= 0) {
+                        if (col < 0) col = rc;
+                        else if (rc != col) aligned = false;
+                    }
+                }
+                if (hasExample) {
+                    CHECK(marked, (std::string("HELP ") + c.name +
+                                   ": a remark after an example must start with ';'").c_str());
+                    CHECK(aligned, (std::string("HELP ") + c.name +
+                                    ": the remarks of an example block start in one column").c_str());
+                    CHECK(i == 0 || v[i - 1].empty(),
+                          (std::string("HELP ") + c.name +
+                           ": a blank line above an example block").c_str());
+                    CHECK(j >= v.size() || v[j].empty(),
+                          (std::string("HELP ") + c.name +
+                           ": a blank line below an example block").c_str());
+                }
+                i = j;
+            }
+        }
+        CHECK(topics > 30, "the HELP example check looked at the command table");
+    }
+
     // -----------------------------------------------------------------------
     // The `!` shell escape. The monitor's OWN behaviour is what a unit test can
     // reach: the parse (a leading `!`, after any whitespace, is recognised and
