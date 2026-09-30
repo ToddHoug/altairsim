@@ -284,5 +284,169 @@ execute_process(
 )
 expect_cpm("${out}" "`altairsim -s examples/ai-mcp/cpm-ai.ini` from the dist root did not boot CP/M")
 
+# ---- 4. examples/basic4k -- Altair 4K BASIC off its cassette. ------------------------------
+#
+# The worked-examples and tapes chapters of the manual boot this one. From its own folder, by
+# path from the dist root, and its .ini twin by -s: the tape and the bootstrap are found beside
+# the file that names them every time. `TAPE OK` is the output of a program typed into a BASIC
+# that read itself off the .tap, which a machine that merely started cannot print.
+file(COPY "${SRC}/examples/basic4k" DESTINATION "${dist}/examples")
+set(basic "${dist}/examples/basic4k")
+
+function(expect_basic out why)
+  expect_contains("${out}" "${why}" "ALTAIR BASIC VERSION 3.1" "OK" "42" "TAPE OK")
+endfunction()
+
+execute_process(
+  COMMAND           "${SIM}" basic4k.toml
+  WORKING_DIRECTORY "${basic}"
+  INPUT_FILE        "${SRC}/tests/acceptance/basic4k.keys"
+  OUTPUT_VARIABLE   out
+  ERROR_VARIABLE    out
+  TIMEOUT           60
+)
+expect_basic("${out}" "`cd examples/basic4k && altairsim basic4k.toml` did not boot BASIC")
+
+execute_process(
+  COMMAND           "${SIM}" examples/basic4k/basic4k.toml
+  WORKING_DIRECTORY "${dist}"
+  INPUT_FILE        "${SRC}/tests/acceptance/basic4k.keys"
+  OUTPUT_VARIABLE   out
+  ERROR_VARIABLE    out
+  TIMEOUT           60
+)
+expect_basic("${out}" "`altairsim examples/basic4k/basic4k.toml` from the dist root did not boot BASIC")
+
+execute_process(
+  COMMAND           "${SIM}" -s examples/basic4k/basic4k.ini
+  WORKING_DIRECTORY "${dist}"
+  INPUT_FILE        "${SRC}/tests/acceptance/basic4k.keys"
+  OUTPUT_VARIABLE   out
+  ERROR_VARIABLE    out
+  TIMEOUT           60
+)
+expect_basic("${out}" "`altairsim -s examples/basic4k/basic4k.ini` from the dist root did not boot BASIC")
+
+# The same tape as 88-ACR audio: the tapes chapter mounts it, and basic4k-wav.toml boots it. The
+# program typed into it proves the WAV decoded to the same bytes as the .tap.
+execute_process(
+  COMMAND           "${SIM}" basic4k-wav.toml
+  WORKING_DIRECTORY "${basic}"
+  INPUT_FILE        "${SRC}/tests/acceptance/basic4k.keys"
+  OUTPUT_VARIABLE   out
+  ERROR_VARIABLE    out
+  TIMEOUT           60
+)
+expect_basic("${out}" "`cd examples/basic4k && altairsim basic4k-wav.toml` did not boot BASIC")
+
+execute_process(
+  COMMAND           "${SIM}" -s examples/basic4k/basic4k-wav.ini
+  WORKING_DIRECTORY "${dist}"
+  INPUT_FILE        "${SRC}/tests/acceptance/basic4k.keys"
+  OUTPUT_VARIABLE   out
+  ERROR_VARIABLE    out
+  TIMEOUT           60
+)
+expect_basic("${out}" "`altairsim -s examples/basic4k/basic4k-wav.ini` from the dist root did not boot BASIC")
+
+# The tapes chapter's two MOUNT transcripts, on the shipped files: the FSK tape decodes clean, and
+# the Kansas City tape is refused, because a real 88-ACR cannot hear it.
+execute_process(
+  COMMAND           "${SIM}" basic4k
+                    -x "MOUNT acr0:tape \"4K BASIC Ver 3-1.wav\""
+                    -x "MOUNT acr0:tape \"4K BASIC (Kansas City).wav\""
+                    -x QUIT
+  WORKING_DIRECTORY "${basic}"
+  OUTPUT_VARIABLE   out
+  ERROR_VARIABLE    out
+  TIMEOUT           60
+)
+expect_contains("${out}" "the tapes chapter's WAV mounts did not print what the chapter shows"
+  "4K BASIC Ver 3-1.wav: fsk300, 4439 bytes, 0 framing errors (100.0% of frames intact)"
+  "4K BASIC (Kansas City).wav: this board's modem cannot hear that tape -- it carries 2400 Hz / 1200 Hz, and this board reads fsk300")
+
+# ---- 5. examples/basic1 -- Altair BASIC 1.0, the two-step boot. ----------------------------
+#
+# LOAD10 copies the tape into 0000 and loops forever, so the boot is RUN 1800, ^E, RUN 0. A pipe
+# cannot give that ^E at the right moment (it fires the instant the run loop reads stdin, before
+# the tape is in), so the boot is driven over --mcp, where RUN 1800 only sets the PC and `run`
+# stops at `timeout_ms`. The whole tape is in memory after 50 ms flat out; 3 s is the margin.
+# `TAPE OK` after `RUN` is a program typed into a BASIC that read itself off the tape. (A stored
+# line gets no READY in BASIC 1.0, so that `run` stops when BASIC waits for the next key.)
+file(COPY "${SRC}/examples/basic1" DESTINATION "${dist}/examples")
+set(basic1 "${dist}/examples/basic1")
+
+set(basic1_boot
+  [=[{"name":"run","arguments":{"timeout_ms":3000}}]=]
+  [=[{"name":"run","arguments":{"from":0,"until":"MEMSIZ?","timeout_ms":30000}}]=]
+  [=[{"name":"run","arguments":{"input":"\r","until":"SIN-COS-ATN?","timeout_ms":30000}}]=]
+  [=[{"name":"run","arguments":{"input":"\r","until":"READY","timeout_ms":30000}}]=]
+  [=[{"name":"run","arguments":{"input":"10 PRINT \"TAPE OK\"\r","timeout_ms":30000}}]=]
+  [=[{"name":"run","arguments":{"input":"RUN\r","until":"TAPE OK","timeout_ms":30000}}]=])
+
+function(expect_basic1 out why)
+  expect_contains("${out}" "${why}" "2000 BYTES FREE" "8080 BASIC VER 1.0" "RUN\\r\\nTAPE OK")
+endfunction()
+
+# The machine files, from their own folder. MCP does not run `startup`, so the session types its
+# MOUNT and LOAD (typed paths resolve beside the machine file) and puts the PC at the loader.
+foreach(tape "BASIC Ver 1-0.tap" "BASIC Ver 1-0.wav")
+  if(tape MATCHES "wav$")
+    set(toml basic1-wav.toml)
+  else()
+    set(toml basic1.toml)
+  endif()
+  mcp_session("${dist}/basic1.jsonl"
+    "{\"name\":\"monitor\",\"arguments\":{\"command\":\"MOUNT acr0:tape \\\"${tape}\\\"\"}}"
+    [=[{"name":"monitor","arguments":{"command":"LOAD \"LOAD10.HEX\""}}]=]
+    [=[{"name":"monitor","arguments":{"command":"RUN 1800"}}]=]
+    ${basic1_boot})
+  execute_process(
+    COMMAND           "${SIM}" ${toml} --mcp
+    WORKING_DIRECTORY "${basic1}"
+    INPUT_FILE        "${dist}/basic1.jsonl"
+    OUTPUT_VARIABLE   out
+    ERROR_VARIABLE    out
+    TIMEOUT           60
+  )
+  expect_basic1("${out}" "`cd examples/basic1 && altairsim ${toml}` did not boot BASIC 1.0")
+endforeach()
+
+# ...and their startup lines, by path from the dist root: the tape and the bootstrap are found
+# beside the file, and RUN 1800 enters the loader. The ^E that stops it is the only key.
+string(ASCII 5 ctrl_e)
+file(WRITE "${dist}/ctrl-e.keys" "${ctrl_e}")
+foreach(toml basic1.toml basic1-wav.toml)
+  execute_process(
+    COMMAND           "${SIM}" examples/basic1/${toml}
+    WORKING_DIRECTORY "${dist}"
+    INPUT_FILE        "${dist}/ctrl-e.keys"
+    OUTPUT_VARIABLE   out
+    ERROR_VARIABLE    out
+    TIMEOUT           60
+  )
+  expect_contains("${out}" "`altairsim examples/basic1/${toml}` from the dist root did not start its loader"
+    "acr0:tape: mounted examples/basic1/BASIC Ver 1-0."
+    "loaded 20 bytes (1 page) from examples/basic1/LOAD10.HEX (1800-1813)"
+    "^E returns to the monitor")
+endforeach()
+
+# The .ini twins, by DO from the dist root over --mcp: the script builds the machine, its paths
+# resolve beside the script (#575), and its RUN 1800 leaves the PC at the loader.
+foreach(ini basic1.ini basic1-wav.ini)
+  mcp_session("${dist}/basic1.jsonl"
+    "{\"name\":\"monitor\",\"arguments\":{\"command\":\"DO examples/basic1/${ini}\"}}"
+    ${basic1_boot})
+  execute_process(
+    COMMAND           "${SIM}" --mcp
+    WORKING_DIRECTORY "${dist}"
+    INPUT_FILE        "${dist}/basic1.jsonl"
+    OUTPUT_VARIABLE   out
+    ERROR_VARIABLE    out
+    TIMEOUT           60
+  )
+  expect_basic1("${out}" "`DO examples/basic1/${ini}` from the dist root did not boot BASIC 1.0")
+endforeach()
+
 file(REMOVE_RECURSE "${dist}")
 message(STATUS "examples: every machine file in the shipped examples works from its own folder.")

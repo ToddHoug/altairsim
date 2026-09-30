@@ -1,6 +1,6 @@
 # PMMI MM-103 — Modem and Communications Adapter
 
-**Status:** done, with two things deliberately not modelled (below). Board type `pmmi`: the full four-port decode, the write-only control-register shadows, the UART data path onto a `ByteStream`, and the software-programmed frame (`OUT BA+0`) and baud divisor (`OUT BA+2`). `CONNECT pmmi0:line in:…,out:…` moves real bytes. See `examples/pmmi/pmmiterm.toml` and `tests/test_pmmi.cpp`.
+**Status:** done, with two things deliberately not modelled (below). Board type `pmmi`: the full four-port decode, the write-only control-register shadows, the UART data path onto a `ByteStream`, and the software-programmed frame (`OUT BA+0`) and baud divisor (`OUT BA+2`). `CONNECT pmmi0:line in:…,out:…` moves real bytes. See `tests/test_pmmi.cpp`.
 
 The **6860 Self Test** works: writing `OUT BA+3` with the modem enabled (DTR) and ST asserted (bit 4 = 0) loops the UART's line back on itself, so a transmitted character returns on receive — the card's model of the 6860 demodulator retuning to its own modulator. See *Limitations* for what it does and does not do.
 

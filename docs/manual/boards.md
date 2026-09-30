@@ -825,10 +825,9 @@ gets gamepad 1. Two controllers work with no setup, and each stick uses the keyb
 gamepad is not there. `SHOW <id>` shows what each stick uses now (a named controller, the
 keyboard, or nothing). `SHOW JOYSTICKS` lists the controllers that your computer has.
 
-The Dazzler example in `examples/` uses this board with color graphics. It sets the video window
-to be a **display, not a keyboard** (`[display] keyboard = none`), so your keys move the stick
-and do not go to a prompt. The sound output of the JS-1, which is a D/A that the processor
-writes a waveform to, is not modeled.
+A machine that uses the sticks can set its video window to be a **display, not a keyboard**
+(`[display] keyboard = none`). Your keys then move the stick and do not go to a prompt. The
+sound output of the JS-1, which is a D/A that the processor writes a waveform to, is not modeled.
 
 ## Floppy and disk controllers
 
@@ -991,9 +990,8 @@ floppy disk. It is a separate controller with a **command and handshake protocol
 does not shift bits in real time. It has eight ports, default `A0`–`A7`.
 
 The **HDBL** boot PROM at `FC00` reads the descriptor page of the disk and starts the system.
-The package has an example in `examples/` with the image. Run it, and you get an `A>` prompt on
-a CP/M 2.2 disk of several megabytes. The disk is **read/write**, and CP/M saves to it. The
-README of the example tells you how to start it.
+With a CP/M 2.2 disk image mounted, you get an `A0>` prompt. The disk is **read/write**, and
+CP/M saves to it.
 
 ### `versafloppy`: SD Systems VersaFloppy I & II
 
@@ -1212,10 +1210,8 @@ where the frame buffer is. The second sets the format: the resolution, the size 
 This gives four modes: **32×32 or 64×64** elements in color or grey, and **64×64 or 128×128**
 on/off elements, in **16 colors** or 16 greys.
 
-The Dazzler example in `examples/` runs **Li-Chen Wang's Kaleidoscope**, a pattern that turns
-and is mirrored four ways. `STOP` gives you the monitor. The `dazzler` machine is the plain
-board, for you to build on. A 64×64 picture is very small, so the board's `width` property
-(above) makes the window about the size of a VDM-1 window.
+The `dazzler` machine is the plain board, for you to build on. A 64×64 picture is very small, so
+the board's `width` property (above) makes the window about the size of a VDM-1 window.
 
 ### `cadzilla`: an HD63484 ACRTC graphics board
 

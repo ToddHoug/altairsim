@@ -6,7 +6,7 @@
 #>Bill and Paul's Excellent Adventure - Party on, dudes!
 #>
 #
-#     cd tests/media/basic && altairsim basic1.toml
+#     cd examples/basic1 && altairsim basic1.toml
 #     -> the tape loads, the machine goes quiet; press ^E, then type: RUN 0
 #     -> MEMSIZ?
 #

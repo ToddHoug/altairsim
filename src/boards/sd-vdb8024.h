@@ -33,7 +33,7 @@
 // lives in SdVdb16Emulator below. The generic built-in terminal (issue #244) is the same
 // three pieces with a different emulator and a serial byte stream in place of these ports.
 //
-// THE CONTROL-CODE MAP is the SD Systems VDB v1.6 firmware's (examples/sdsys/VDB16.LST),
+// THE CONTROL-CODE MAP is the SD Systems VDB v1.6 firmware's (VDB16.Z80),
 // the firmware sdmonv21's console was written against: CR=0D, LF=0A, BS=08, TAB=09,
 // cursor up=0B / right=0C, clear=1A, home=1E, new-line=1F, and ESC (1B) sequences
 // = (position), * / : (clear), T (erase-EOL), Y (erase-EOS), G (attribute), & / ' (half/

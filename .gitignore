@@ -117,11 +117,11 @@ disks/**
 
 # examples/ IS THE SHIPPED SET, and it is an allowlist for the same reason disks/ is.
 #
-# These are the examples the manual's quick start names, and they are the ONLY media that
-# goes in the package -- one home each, with the tests pointed at them (2026-07-19). The
-# rules above would hide most of it: `*.dsk` swallows the CP/M image, and a derived .WAV
-# is a 3.4 MB file that must be tracked deliberately rather than swept up by `git add -A`
-# on whatever a rebuild left lying about.
+# These are the examples that ship -- cpm, basic4k, basic1, debugger and ai-mcp -- and they
+# are what goes in the package. They are tested only as examples (acceptance-examples); the
+# simulator's own tests take their media from tests/media/ (above). The rules above would hide
+# most of it: `*.dsk` swallows the CP/M images. More examples are at
+# https://altairsim.com (2026-09-30).
 #
 # So each shipped file is named. If you add one and git does not see it, that is this
 # block doing its job -- add the line.
@@ -130,113 +130,27 @@ examples/**
 !examples/**/*.toml
 !examples/**/*.ini
 !examples/**/README.md
-!examples/cdos/CDOS258-8IN-DSDD.DSK
-!examples/cpm/cpm22b23-56k.dsk
-!examples/cpm/CPM22-48K-HDF.dsk
-!examples/hdsk/HDCPM22v16-48K.DSK
-!examples/diskbasic/Disk BASIC 4.1.dsk
-!examples/basic/4K BASIC Ver 3-1.tap
-!examples/basic/4K BASIC Ver 3-1.wav
-!examples/basic/4K BASIC (Kansas City).wav
-!examples/basic/BASIC Ver 1-0.tap
-!examples/basic/BASIC Ver 1-0.wav
-!examples/sdsys/SDOS-18B-SSDDR-256-32K-MASTER.DSK
-!examples/sdsys/SDOS-18B-SSDDV-256-32K.DSK
-!examples/sdsys/SD-CPM22R4-SSDDR-256-64K.DSK
-!examples/sdsys/CPM3-NB-SSDD-48K-DISK1.DSK
-!examples/sdsys/CPM3-NB-SSDD-DISK2.DSK
-!examples/sdsys/CPM3-NB-SSDD-DISK3.DSK
-!examples/sdsys/CPM3-B-SSDD-60K-DISK1.DSK
-!examples/sdsys/CPM3-B-SSDD-DISK2.DSK
-!examples/sdsys/CPM3-B-SSDD-DISK3.DSK
-!examples/tarbell/CPM22b15-48K-SSSD.DSK
-!examples/tarbell/TARBELLDD-CPM22-SSDD-48K.DSK
-!examples/tarbell/TARBELLDD-CPM22-SSDD-48K-DMA.DSK
-!examples/icom/CPM22v1.0-3712-48K.DSK
-!examples/icom/CPM22-3812-48K.dsk
-!examples/icom/FDOS-III (2SIO).DSK
-!examples/icom/FDOS-I (2SIO).DSK
-!examples/acr/MITS Tapes.dsk
-# The Dual SD example ships two card images, each a raw .img plus its .geo sidecar (a
-# truncated bootable card and a blank spare). `*.img` (above) would swallow the images and
-# `examples/**` the sidecars.
-!examples/dualsd/cpm3-sd.img
-!examples/dualsd/cpm3-sd.geo
-!examples/dualsd/blank.img
-!examples/dualsd/blank.geo
-# The Dual IDE (CF) example ships one card image, a raw .img plus its .geo sidecar (a truncated
-# bootable CompactFlash card). `*.img` and `examples/**` would otherwise swallow both.
-!examples/dualide/cpm3-cf.img
-!examples/dualide/cpm3-cf.geo
-# The combination (Dual IDE + Dual SD) example ships four cards -- the bootable CF system (A:), a
-# byte-copy of it on SD (C:, proving portability), and two blank spares (B: CF, D: SD) -- each a raw
-# .img plus its .geo sidecar. `*.img` and `examples/**` would otherwise swallow all eight files.
-!examples/dualidesd/cpm3-cf.img
-!examples/dualidesd/cpm3-cf.geo
-!examples/dualidesd/cpm3-sd.img
-!examples/dualidesd/cpm3-sd.geo
-!examples/dualidesd/cf-blank.img
-!examples/dualidesd/cf-blank.geo
-!examples/dualidesd/sd-blank.img
-!examples/dualidesd/sd-blank.geo
-!examples/basic/LDR4K31.HEX
-!examples/basic/LOAD10.HEX
-!examples/uio/8K BASIC Ver 3-2.tap
-!examples/uio/LDR8K32.HEX
-!examples/sol20/TREK80.ENT
-!examples/sol20/TRK80.TAP
-!examples/sol20/TRK80.WAV
-!examples/sol20/Trek80 Manual.pdf
-!examples/sol20/make-trek80-tape.sh
-!examples/sol20/ATC.WAV
-!examples/sol20/PACMAN.WAV
-!examples/sol20/RAIDERS.WAV
-!examples/sol20/ATC Manual.pdf
-!examples/debugger/HELLO.ASM
-!examples/debugger/HELLO.PRN
-!examples/debugger/HELLO.HEX
 # Every example's README is rendered to a sibling README.pdf (tools/build-docs.sh, committed
 # by CI) so a file manager with no Markdown viewer can read it, and so it travels in the
 # package. One glob covers all of them, at any depth.
 !examples/**/README.pdf
-# The Dazzler example is KSCOPE and nothing else: the program, its listing, and the Intel HEX
-# the machine file LOADs. The disks that used to live here -- a CP/M system disk and two disks
-# of period Dazzler software, plus a CDOS disk and its scanned game manuals -- were removed
-# with the machine files that mounted them, so their allowlist lines went too. An entry for a
-# file that is not there is worse than no entry: it reads as a promise that something is
-# tracked.
-!examples/dazzler/KSCOPE.ASM
-!examples/dazzler/KSCOPE.PRN
-!examples/dazzler/KSCOPE.HEX
-# The CADzilla example is drawdemo on a standard 8" floppy: the disk (the examples/cpm system
-# disk with MBASIC and the BASIC programs taken off and DRAWDEMO.COM put on), and the program's
-# source and Intel HEX -- the input of tools/make-drawdemo-disk.sh, which makes the disk.
-!examples/cadzilla/cpm22b23-56k-drawdemo.dsk
-!examples/cadzilla/DRAWDEMO.ASM
-!examples/cadzilla/DRAWDEMO.HEX
-!examples/printing/PRINT.ASM
-!examples/printing/PRINT.HEX
-!examples/pmmi/PMMITERM.ASM
-!examples/pmmi/PMMITERM.HEX
-# examples/pb1 ships SSM's four PB1 driver routines from the manual (sections 4.2-4.5),
-# source + assembled Intel HEX. `examples/**` would otherwise swallow the .ASM/.HEX.
-!examples/pb1/PROG2708.ASM
-!examples/pb1/PROG2708.HEX
-!examples/pb1/PROG2716.ASM
-!examples/pb1/PROG2716.HEX
-!examples/pb1/ERACHK.ASM
-!examples/pb1/ERACHK.HEX
-!examples/pb1/CPYVFY.ASM
-!examples/pb1/CPYVFY.HEX
+!examples/cpm/cpm22b23-56k.dsk
+!examples/cpm/CPM22-48K-HDF.dsk
+!examples/basic4k/4K BASIC Ver 3-1.tap
+!examples/basic4k/4K BASIC Ver 3-1.wav
+!examples/basic4k/4K BASIC (Kansas City).wav
+!examples/basic4k/LDR4K31.HEX
+!examples/basic1/BASIC Ver 1-0.tap
+!examples/basic1/BASIC Ver 1-0.wav
+!examples/basic1/LOAD10.HEX
+!examples/debugger/HELLO.ASM
+!examples/debugger/HELLO.PRN
+!examples/debugger/HELLO.HEX
 # examples/ai-mcp ships the CP/M disk (with HELLO.ASM baked on for an assistant to build over
 # MCP); HELLO.ASM is here too as the pristine planted bug -- kept to rebuild the disk, stripped
 # from the package like every other .ASM beside an image (tools/build-package.sh).
 !examples/ai-mcp/cpm22b23-56k.dsk
 !examples/ai-mcp/HELLO.ASM
-!examples/frontpanel/KILLBITS.ASM
-!examples/frontpanel/KILLBITS.PRN
-!examples/frontpanel/KILLBITS.HEX
-!examples/frontpanel/Displaying Data on Altair LEDs.pdf
 
 # Scanned manuals and datasheets. Same reasoning as the disk images, and then
 # some: they are enormous (the 88-DCDD manual alone is 52 MB) and they are not

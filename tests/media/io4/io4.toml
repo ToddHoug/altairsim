@@ -1,6 +1,6 @@
 # An Altair with an SSM IO-4 (2P + 2S) board as its console.
 #
-#     cd examples/io4 && altairsim io4.toml
+#     cd tests/media/io4 && altairsim io4.toml
 #
 # The IO-4 is SSM's combined I/O card: two full-duplex serial channels AND four
 # latched 8212 parallel ports on one board. Here its Serial A channel is the

@@ -181,8 +181,6 @@ Two more commands are often part of a machine. `CONFIG SAVE` saves both of them:
   called `none` until you give it a name. `CONFIG SAVE` writes the name, and the `base =` key of
   another file uses it.
 
-The recipes in `recipes/` go through these steps slowly, for three different machines.
-
 ## The path rule: one base directory
 
 This rule lets you copy an example folder to any place, and the machine still boots:

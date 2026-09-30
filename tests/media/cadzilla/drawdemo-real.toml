@@ -1,6 +1,6 @@
 # CADzilla's drawing demo under CP/M 2.2, at the speed of the real hardware.
 #
-#     cd examples/cadzilla && altairsim drawdemo-real.toml
+#     cd tests/media/cadzilla && altairsim drawdemo-real.toml
 #
 # The same machine and the same disk as drawdemo.toml -- boot to A>, type DRAWDEMO -- but run
 # as a real CADzilla in a real 2 MHz Altair would run it. The big filled rectangles, the

@@ -1,12 +1,7 @@
 # A Cromemco Dazzler in an Altair -- the bench for the S-100's first color graphics card.
 #
 # `altairsim dazzler` comes up at the monitor prompt. The Dazzler draws nothing until a
-# program turns it on and points it at a framebuffer in RAM; the ready-made demo is
-# `examples/dazzler/` (Li-Chen Wang's Kaleidoscope):
-#
-#     cd examples/dazzler && altairsim dazzler.toml
-#     LOAD KSCOPE.HEX
-#     RUN 0
+# program turns it on and points it at a framebuffer in RAM.
 #
 # The Dazzler needs a host Display. With SDL3 present the picture shows in a window; in a
 # headless build the machine runs identically and draws nothing -- so this is a normal,

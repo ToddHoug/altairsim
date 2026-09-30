@@ -137,7 +137,7 @@ def main():
     # A private profile so parallel builds never collide. The debugging port is 0: Chrome picks
     # a free one itself and writes it to <profile>/DevToolsActivePort. Picking the port here and
     # handing Chrome the number left a gap in which another process could take it (issue #554).
-    # build-docs.sh prints every recipe and example through the same readme.pdf, so the profile
+    # build-docs.sh prints every example README through the same readme.pdf, so the profile
     # can be one a previous Chrome used: remove its DevToolsActivePort, or we read a dead port.
     profile = pdf + ".chrome-profile"
     os.makedirs(profile, exist_ok=True)

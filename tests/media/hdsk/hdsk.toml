@@ -1,6 +1,6 @@
 # Altair CP/M 2.2 on an 88-HDSK "Datakeeper" hard disk.
 #
-#     cd examples/hdsk && altairsim hdsk.toml
+#     cd tests/media/hdsk && altairsim hdsk.toml
 #     -> CP/M on an Altair hard disk
 #        A>
 #

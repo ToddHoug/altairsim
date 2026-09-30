@@ -1,8 +1,8 @@
 # Dual IDE (CF) — S100Computers 8255 IDE/CompactFlash controller
 
 **Status:** done (2026-08). Boots **CP/M 3** (non-banked) to `A>` off a CompactFlash card image,
-through the V2 Z80 CPU board's MASTER monitor. `altairsim dualide`; see `examples/dualide/`. Pair
-with `dualsd` for the full A:/B:(CF) + C:/D:(SD) system (`examples/dualidesd/`).
+through the V2 Z80 CPU board's MASTER monitor. `altairsim dualide`. Pair
+with `dualsd` for the full A:/B:(CF) + C:/D:(SD) system (`altairsim dualidesd`).
 
 ## The real hardware
 

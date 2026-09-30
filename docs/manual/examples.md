@@ -3,11 +3,11 @@
 These are complete sessions. **Every transcript below was captured from the program.** None of
 them was typed from memory.
 
-This chapter goes through some of the machines in `examples/` in detail, because each one shows
-something about how the machine works, not only how to start it. **It does not describe all the
-examples.** Every folder in `examples/` has its own README, in Markdown and as a PDF, that says
-what the machine is and what to type. To see what you have, look in the folder, not in this
-chapter.
+This chapter goes through two of the machines in `examples/` in detail. Each one shows something
+about how the machine works, not only how to start it. Every folder in `examples/` has its own
+README, in Markdown and as a PDF, that says what the machine is and what to type.
+
+More examples, with more documentation, are at https://altairsim.com.
 
 ---
 
@@ -113,7 +113,7 @@ chapter tells you why.
 ## 2. Altair BASIC from a cassette
 
 ```
-$ altairsim examples/basic/basic4k.toml
+$ altairsim examples/basic4k/basic4k.toml
 ```
 
 ```
@@ -201,144 +201,13 @@ The load now takes 110 seconds. **The guest sees the same result.** The tape has
 separate from the processor's `clock_hz`, as on the real hardware. The tapes chapter describes
 both clocks.
 
-### The version before this one: BASIC 1.0
-
-Beside the 4K file is `basic1.toml`. It boots **"8080 BASIC VER 1.0"**, the oldest Altair BASIC,
-which Bill Gates and Paul Allen wrote in 1975. It works in the same way, with one difference:
-
-```
-$ altairsim examples/basic/basic1.toml
-```
-
-**It needs two steps, not one.** The bootstrap of 4K BASIC jumps into BASIC by itself when the
-tape ends. The bootstrap of BASIC 1.0 does not. It copies the tape into memory from `0000`, and
-then it loops forever, because it does not know how long the tape is. The 1975 operator had the
-same problem. For this reason:
-
-1. Watch the tape load. The tape counter on the console counts up to `(100%)`.
-2. Press **`Ctrl-E`** when the tape is at the end.
-3. Type **`RUN 0`** to start BASIC. This is what a real operator did at the front panel.
-
-```
-altairsim> RUN 0
-
-MEMSIZ? 
-WANT SIN-COS-ATN? 
-
-2000 BYTES FREE
-
-8080 BASIC VER 1.0
-
-READY
-```
-
-The prompt really is `MEMSIZ?`. Microsoft set the end-of-message bit on the `Z`, and did not use
-a byte for a final `E`. At the default speed, the tape loads at once, so the counter shows the
-tape at the end when you first see it. Type `SET acr0:tape rate=real` before you run, to play
-the tape at the true 300-baud speed. The counter then counts through the two and a half minutes
-that the load took in 1975.
-
----
-
-## 3. CP/M 2.2 from an 88-HDSK hard disk
-
-```
-$ altairsim examples/hdsk/hdsk.toml
-```
-
-Example 1 boots CP/M from an 8" floppy disk. This example boots the *same operating system* from
-a **hard disk**, a five-megabyte platter, where the floppy disk holds a third of a megabyte. The
-88-HDSK works differently from the floppy disk boards. It is a separate controller with its own
-processor, and it gives the Altair whole sectors through a handshake protocol.
-
-```
-startup> RUN FC00
-[console -- ^E returns to the monitor]
-
-HDBL 2.00
-LOADING FROM 0
-
-48K CP/M 2.2b v1.6
-For MITS 88-HDSK
-
-A0>
-```
-
-`RUN FC00` is the whole `startup` of the machine file, and it runs before you see the prompt. On
-a real machine, this was EXAMINE `FC00` and RUN. `FC00` is **HDBL**, the hard-disk boot PROM. It
-reads the Pack Descriptor Page of the platter, loads the boot pages that it names, and jumps
-into CP/M. `LOADING FROM 0` tells you which platter HDBL used. Sense switch A11 selects it, and
-the default is drive 0.
-
-**The prompt is `A0>`, not `A>`.** This CP/M numbers the platter as well as the drive: `A0` is
-drive A, platter 0. In other ways, it is the same CP/M as in example 1. `DIR`, `TYPE`, `STAT`
-and the other commands work:
-
-```
-A0>DIR
-A: BOOT     ASM : BIOS     ASM : MOVCPMH  COM : MAKEMOV  COM
-A: SYSGEN   ASM : DUMP     COM : XSUB     COM : SUBMIT   COM
-A: LOAD     COM : SYSGEN   COM : ACOPY    ASM : PIP      COM
-A: STAT     COM : DDT      COM : ASM      COM : MAC      COM
-A: AFORMAT  ASM : NSWP     COM : CATCHUM  COM : CRC      COM
-A: L80      COM : LADDER   COM : M80      COM : MBASIC   COM
-A: MITSCNVT COM : PCGET    COM : PCPUT    COM : SURVEY   COM
-A: WM       COM : ZORK1    COM : ZORK2    COM : ZORK3    COM
-A: IOBYTE   TXT : AFORMAT  COM : CATCHUM  DAT : LADDER   DAT
-A: ZORK1    DAT : ZORK2    DAT : ZORK3    DAT : MITSCNVT TXT
-A: ACOPY    COM : LS       COM
-A0>
-```
-
-The disk has the source of its own bootstrap (`BOOT.ASM`) and BIOS (`BIOS.ASM`), the usual CP/M
-tools, and games, among them the three Zork games. `Ctrl-E` (STOP) gives the keyboard to the
-monitor at any time, and `RUN` continues. `Ctrl-C` is CP/M's warm boot, and CP/M gets it.
-
-**There is no undo.** Drive 0 is mounted read/write, as on a real machine, and CP/M writes to
-`A:` for everything that you create. The package has no second copy of the original image. Copy
-the folder before you test writes, or add `readonly = true` to the drive in the machine file.
-
----
-
-## 4. Altair Disk Extended BASIC 4.1 from a floppy disk
-
-```
-$ altairsim examples/diskbasic/diskbasic.toml
-```
-
-The BASIC in example 2 comes from a cassette, and it forgets everything when you turn it off.
-This BASIC is on an 8" floppy disk, and it has files, a directory and a `SAVE` that takes a
-name. It boots from the same DBL PROM at `FF00` as CP/M. The `startup` list runs it for you.
-
-**It asks five questions first**, and in this example, the answers are important:
-
-```
-MEMORY SIZE? 
-LINEPRINTER? C
-HIGHEST DISK NUMBER? 0
-HOW MANY FILES? 
-HOW MANY RANDOM FILES? 
-
-37033 BYTES FREE
-ALTAIR BASIC REV. 4.1
-[DISK EXTENDED VERSION]
-COPYRIGHT 1977 BY MITS INC.
-OK
-```
-
-Three of the five take only Return. `HIGHEST DISK NUMBER?` is `0`, because there is one drive,
-and it is numbered from zero.
-
-**`LINEPRINTER?` takes only `C`, `O` or `Q`, and asks again, with no message, for anything
-else.** If you answer with Return or `N`, you get the same prompt again. It looks as if the
-machine has stopped, but it has not. The tapes chapter tells you more.
-
 ---
 
 ## Where to go next
 
 - **The examples that this chapter does not describe:** `examples/`, and the README in each
   folder.
+- **More machines:** https://altairsim.com has more examples and their documentation.
 - **Move a file between CP/M and your computer:** the file-transfer chapter (`R`, `W`, `HDIR`).
 - **Use telnet to connect to the guest, or connect it to a real serial port:** the serial
   chapter.

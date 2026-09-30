@@ -4,7 +4,7 @@
 port reversal, the word-format switches), all four 8212 parallel ports with their
 service-request flip-flops and the §3.2.2 status/data console strap, the S3/S4 address
 switches with their overlap rule, and the W4 interrupt header. Board type `io4`. See
-`examples/io4/io4.toml` and `tests/test_io4.cpp`.
+`tests/test_io4.cpp`.
 
 **Not modelled:** the current-loop and EIA electrical options, separate RX and TX rates on the
 W3 header, the UART error flags (they read inactive), and the parallel *output* handshake. See

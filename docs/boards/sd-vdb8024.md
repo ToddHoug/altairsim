@@ -22,7 +22,7 @@ bits, and an optional keyboard→S-100 vectored interrupt. By default the host p
 |---|---|---|
 | Distilled emulation reference | `reference/SD Systems VDB-8024.md` | primary (port map, status bits, control codes) |
 | VDB-8024 manual (deramp scan) | `SDS_VDB8024.pdf` §II–III, App. E | the CRT-5027 program, the control-code set, and the **character-generator font** (App. E) |
-| Onboard firmware v1.6 (1979) | `examples/sdsys/VDB16.LST` | the exact control-code semantics reproduced (CR/LF/clear/home/ESC sequences) |
+| Onboard firmware v1.6 (1979) | `VDB16.Z80` (deramp.com archive; `docs/sources.md`) | the exact control-code semantics reproduced (CR/LF/clear/home/ESC sequences) |
 | SD monitor, video build | `roms/SDMONV21` (`SDMONV21.Z80`) | corroborates ports 00/01 and status **D1** polarity from software written for the board |
 
 Where the manual's "shipped firmware" §III map disagrees with the archived v1.6 firmware (§III
@@ -110,5 +110,5 @@ answer (`FF00`) back off the screen, proving the keyboard→guest→display loop
 
 - `reference/SD Systems VDB-8024.md` — the distilled emulation reference.
 - `reference/SD Systems Monitor.md` — `sdmonv21` vs `msmonr21`, and the console ports.
-- `examples/sdsys/VDB16.LST` — the v1.6 onboard firmware, the control-code map's source.
-- `machines/sbc200v.toml`, `examples/sdsys/sbc200v.toml` — the machine and the example.
+- `VDB16.Z80` — the v1.6 onboard firmware, the control-code map's source.
+- `machines/sbc200v.toml` — the machine.

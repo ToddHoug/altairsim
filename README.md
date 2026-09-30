@@ -10,10 +10,10 @@ Every one of those boots is an **acceptance test**: it runs the period software 
 
 ```
 $ altairsim basic4k
-altairsim> MOUNT acr0:tape "examples/basic/4K BASIC Ver 3-1.tap"
-acr0:tape: mounted examples/basic/4K BASIC Ver 3-1.tap
-altairsim> LOAD "examples/basic/LDR4K31.HEX"
-loaded 20 bytes from examples/basic/LDR4K31.HEX (0000-0013)
+altairsim> MOUNT acr0:tape "examples/basic4k/4K BASIC Ver 3-1.tap"
+acr0:tape: mounted examples/basic4k/4K BASIC Ver 3-1.tap
+altairsim> LOAD "examples/basic4k/LDR4K31.HEX"
+loaded 20 bytes from examples/basic4k/LDR4K31.HEX (0000-0013)
 altairsim> RUN 0
 [console -- ^E returns to the monitor]
 

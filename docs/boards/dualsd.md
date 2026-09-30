@@ -1,7 +1,7 @@
 # Dual SD — S100Computers microSD card controller
 
 **Status:** done (2026-08-16). Boots **CP/M 3** (non-banked) to `A>` off a microSD card image,
-through the V2 Z80 CPU board's MASTER monitor. `altairsim dualsd`; see `examples/dualsd/`.
+through the V2 Z80 CPU board's MASTER monitor. `altairsim dualsd`.
 
 ## The real hardware
 
@@ -126,7 +126,7 @@ See `reference/dual-sd-card.md` for the complete command tables and firmware fra
   whole machine through the CLI — the MASTER monitor's `I` command loads the loader off the card,
   CP/M 3 signs on and runs its cold-boot PROFILE.SUB, and `DIR` reads the directory back (`PIP`).
   The card is mounted write-protected and shasummed before and after — the boot only reads.
-- **End to end**: the shipped `examples/dualsd/` boots read/write with the host bridge at B0, so
+- **End to end**: a card mounted read/write boots with the host bridge at B0, so
   `R`/`W`/`HDIR` move files between the guest and the host at the `A>` prompt.
 
 ## References

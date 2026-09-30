@@ -1,6 +1,6 @@
 # Altair 8K BASIC 3.2, booted over a SINGLE 88-UIO board.
 #
-#     cd examples/uio && altairsim uio.toml
+#     cd tests/media/uio && altairsim uio.toml
 #     -> MEMORY SIZE?
 #
 # THE POINT OF THIS EXAMPLE is that the 88-UIO is two cards in one. Where basic8k needs a
@@ -76,7 +76,7 @@ id   = "mem0"
 # only thing allowed to alter a byte (DESIGN.md 7.2). The line itself stays 8-bit clean.
 #
 # `upper = true` folds what you TYPE to uppercase. 8K BASIC 3.2, like BASIC 1.0
-# (examples/basic/basic1.toml) and the PS2 monitor, only understands upper case -- a Teletype
+# (tests/media/basic/basic1.toml) and the PS2 monitor, only understands upper case -- a Teletype
 # had no lower case to send. Without this you would type the whole session under Caps Lock
 # (or on Shift); with it you just type, and the fold happens on the way in. It touches only
 # your keystrokes, never BASIC's output.

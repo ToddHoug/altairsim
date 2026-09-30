@@ -5,7 +5,7 @@
 // The physical board is TWO interfaces in one: an 8255-based IDE/CompactFlash controller at
 // ports 30H-34H (CP/M drives A:/B:) and the byte-identical Dual-SD ESP32 engine at 80H-81H
 // (drives C:/D:). This board models ONLY the IDE/CF half; the SD half is `dualsd`, and the two
-// compose into the full combination card (examples/dualidesd). The medium is the SAME CardImage
+// compose into the full combination card (`dualidesd`). The medium is the SAME CardImage
 // `.img`/`.geo` card `dualsd` uses -- the CP/M 3 BIOS builds an identical LBA and byte order for
 // both halves (reference/dual-ide-card.md section 1), so a card is portable between them.
 //

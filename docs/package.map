@@ -61,14 +61,10 @@
 # ---------------------------------------------------------------------------
 
 DIR  examples/cpm        <=  examples/cpm
-DIR  examples/basic      <=  examples/basic
-DIR  examples/diskbasic  <=  examples/diskbasic
+DIR  examples/basic4k    <=  examples/basic4k
+DIR  examples/basic1     <=  examples/basic1
 DIR  examples/debugger   <=  examples/debugger
 DIR  examples/ai-mcp     <=  examples/ai-mcp
-DIR  examples/acr        <=  examples/acr
-DIR  examples/hdsk       <=  examples/hdsk
-DIR  examples/printing   <=  examples/printing
-DIR  examples/dazzler    <=  examples/dazzler
 
 # NOT AN EXAMPLE, and the one DIR here not under examples/. hostbridge/ is the SOURCE of the
 # file-transfer utilities the file-transfer chapter sends across the host bridge -- R/W/HDIR as
@@ -122,14 +118,6 @@ DIR  hostbridge          <=  cpm/hostbridge
 # folder would ship every skill added there. Name each shipped skill on its own line instead.
 DIR  skills/altairsim    <=  .claude/skills/altairsim
 
-# ALSO NOT AN EXAMPLE, and not a chapter either. docs/recipes/ is the set of typed-along
-# walkthroughs -- build a machine from an empty backplane, save it, load it back -- and each one
-# is its own document rather than a chapter of the manual, because the reader this is for will
-# not find a section inside a book. The folder ships as `recipes/`, HOLDING ONLY THE PDFs: the
-# .md sources and ORDER are stripped below, the same way every example's README.md is, since the
-# Markdown is written for someone standing in the tree and a file manager cannot render it.
-DIR  recipes             <=  docs/recipes
-
 # ---------------------------------------------------------------------------
 # FILES -- <package path>  <=  <path in this repo>
 #
@@ -160,10 +148,6 @@ FILE  LICENSE-MAME-HD63484 <=  LICENSE-MAME-HD63484
 # model in src/chips/hd63484.cpp took that file's structure (docs/sources.md records the
 # terms), and BSD-3 asks that the notice travel with any redistribution -- so it ships.
 
-# Disk BASIC WAS the TBD here, and it is now real (2026-07-19): an image, a machine file
-# and an acceptance test that reaches its OK prompt. The DIR line above is the two lines
-# this note said it would take.
-
 # ---------------------------------------------------------------------------
 # TOKENS -- a machine/media reference, no longer written into prose.
 #
@@ -183,30 +167,9 @@ FILE  LICENSE-MAME-HD63484 <=  LICENSE-MAME-HD63484
 MACHINE_CPM   = examples/cpm/cpm22-buffered.toml
 DISK_CPM      = examples/cpm/cpm22b23-56k.dsk
 
-# Cassette BASIC. WHICH ONE SHIPS IS TBD (4K or 8K); this points at 4K today because it is
-# the one with an acceptance test behind it.
-MACHINE_BASIC = examples/basic/basic4k.toml
-TAPE_BASIC    = examples/basic/4K BASIC Ver 3-1.tap
-LOADER_BASIC  = examples/basic/LDR4K31.HEX
+# Cassette BASIC: Altair 4K BASIC 3.1 off its .tap, booted by the MITS bootstrap. The tapes
+# chapter and the worked-examples chapter use it.
+MACHINE_BASIC = examples/basic4k/basic4k.toml
+TAPE_BASIC    = examples/basic4k/4K BASIC Ver 3-1.tap
+LOADER_BASIC  = examples/basic4k/LDR4K31.HEX
 NAME_BASIC    = Altair 4K BASIC 3.1
-
-# BASIC 1.0 -- the first Altair BASIC (1975), in the same examples/basic folder. A
-# self-contained machine file (no `base`), booted in two moves because its bootstrap
-# (LOAD10) neither stops nor jumps: RUN 1800, then ^E, then RUN 0. Reaches `MEMSIZ?`.
-MACHINE_BASIC1 = examples/basic/basic1.toml
-TAPE_BASIC1    = examples/basic/BASIC Ver 1-0.tap
-LOADER_BASIC1  = examples/basic/LOAD10.HEX
-NAME_BASIC1    = 8080 BASIC VER 1.0
-
-# The hard-disk machine. HDBL 2.00 boots CP/M 2.2 off the 88-HDSK platter to an `A0>` prompt --
-# naming it IS booting it (the machine file carries the boot in `startup`), and it is the
-# subject of the manual's hard-disk walkthrough.
-MACHINE_HDSK  = examples/hdsk/hdsk.toml
-NAME_HDSK     = CP/M 2.2
-
-# Disk BASIC. Reaches its OK prompt after a five-question startup dialogue, and the second
-# question (LINEPRINTER?) takes C, O or Q and re-asks in silence on anything else -- so any
-# prose using these tokens has to say so, or it is describing a machine that looks hung.
-MACHINE_DISKBASIC = examples/diskbasic/diskbasic.toml
-DISK_DISKBASIC    = examples/diskbasic/Disk BASIC 4.1.dsk
-NAME_DISKBASIC    = Altair Disk Extended BASIC 4.1

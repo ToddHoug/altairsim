@@ -29,9 +29,6 @@
 #     MOUNT dsk0:drive0 "examples/cpm/cpm22b23-56k.dsk"
 #     RUN 0000
 #     -> 56K CP/M 2.2b
-#
-# ...which is what `examples/turnkey/floppy.toml` writes down. `examples/turnkey/hdsk.toml`
-# is the same machine booting CP/M off an 88-HDSK hard disk instead.
 
 [machine]
 name    = "turnkey"
