@@ -297,7 +297,7 @@ void test_vdb8024() {
         auto* vf = dynamic_cast<VersaFloppyBoard*>(m.add("versafloppy", "vf0", err));
         CHECK(setProperty(*vf, "port", "60", err), "the VersaFloppy sits at the 60H block");
         CHECK(setProperty(*vf, "variant", "vfii", err), "an FD1791 (double-density) controller");
-        std::string dsk = std::string(ALTAIR_SOURCE_DIR) + "/examples/sdsys/SDOS-18B-SSDDV-256-32K.DSK";
+        std::string dsk = std::string(ALTAIR_SOURCE_DIR) + "/tests/media/sdsys/SDOS-18B-SSDDV-256-32K.DSK";
         CHECK(vf->loadSubUnit("drive", {{"unit", "0"}, {"mount", dsk}}, err),
               ("the SDOS video master mounts in drive A: " + err).c_str());
 

@@ -1,0 +1,54 @@
+# CP/M on the FDC+'s 1.5 MB floppy (drive type 5).
+#
+#     cd examples/cpm && altairsim cpm22-fdcplus-hdf.toml
+#     -> 48K CP/M 2.2b v2.3 ...
+#        A>
+#
+# CPM22-48K-HDF.dsk is Mike Douglas's CP/M 2.2 for the FDC+'s drive type 5: a 5.25" high-density
+# floppy (or an 8" DSDD drive) in a format of his own, one 10,240-byte sector per track on both
+# sides -- 1,525,760 bytes, five times an Altair floppy. MOVCPM, COPY, PCGET and PCPUT are on it.
+#
+# THIS FILE IS A DELTA. `base = "default"` brings the 56K Altair with the 2SIO console and the DBL
+# boot PROM at FF00. This file swaps its 88-DCDD for an FDC+ with its Drive Type switches at 5,
+# and puts the disk in drive 0.
+
+#> 48K CP/M 2.2b on the FDC+'s 1.5 MB floppy (drive type 5), booted by the stock DBL PROM.
+
+[machine]
+name = "cpm22-fdcplus-hdf"
+base = "default"
+
+# THE BOOT: EXAMINE FF00 / RUN, as on any disk Altair -- and it works although DBL CANNOT READ
+# THIS DISK. DBL looks for sector 0 of track 0 in 137-byte Altair sectors; this disk has none.
+# The FDC+ answers anyway. At every index hole where the 8080 has not asked for a 1.5 MB read,
+# the card's firmware hands over an Altair sector of its own, kept in its flash (HDFBL.ASM):
+# track 0, a load that ends at 0080, 128 bytes of loader, FF and a good checksum. DBL loads it,
+# jumps to 0000, and that loader reads the real track 0 of the 1.5 MB disk to 4000h and runs it.
+startup = ["RUN FF00"]
+
+# A modern Backspace key sends DEL; CP/M's line editor wants BS.
+[console]
+bsdel = "bs"
+
+# THE 88-DCDD GOES. It answers at 08-0A, the same ports as the FDC+, and a real Altair would not
+# have both controllers on the bus at once.
+[[board]]
+id     = "dsk0"
+remove = true
+
+# THE FDC+, WITH ITS DRIVE TYPE SWITCHES AT 5.
+#
+# THE CLOCK STAYS AT THE DEFAULT -- flat out, which to the guest is 2 MHz. The BIOS moves a
+# track with no handshake: it reads a byte every 17 us, just slower than the disk's 16 us, and
+# writes one every 14 us, just faster. Those are 2 MHz loops, so the 8080 must run at close to
+# 2 MHz (1.75 to 2.1 MHz). Running flat out is fine: the card times itself by the same 2 MHz
+# clock as the guest. A faster crystal is not. At `clock_hz = 4000000` the BIOS reads bytes that
+# have not come off the disk yet, as it would on a real 4 MHz Altair.
+[[board]]
+type      = "fdcplus"
+id        = "fdc0"
+drivetype = 5
+
+  [[board.drive]]
+  unit  = 0
+  mount = "CPM22-48K-HDF.dsk"

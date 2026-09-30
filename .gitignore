@@ -108,6 +108,13 @@ disks/**
 !disks/mits-88mds/cpm22/BOOT.ASM
 !disks/tarbell-sd/cpm22/buffered/BIOS (1).ASM
 
+# tests/media/ is the simulator's own test media -- every image in it is there because a test
+# reads it, so it is committed on purpose. examples/ is never a simulator fixture -- an example
+# is tested only to prove the example works -- so a test that needs a disk takes its own copy here.
+!tests/media/**/*.dsk
+!tests/media/**/*.DSK
+!tests/media/**/*.img
+
 # examples/ IS THE SHIPPED SET, and it is an allowlist for the same reason disks/ is.
 #
 # These are the examples the manual's quick start names, and they are the ONLY media that

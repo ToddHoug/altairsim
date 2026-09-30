@@ -140,8 +140,8 @@ Turnkey forwards it.
   live, independent 6850 on the serial side (a byte fed to it arrives on 0x11 while the
   cassette status does not move); the SW-1 modulation switch accepting and refusing MITS vs
   Kansas City WAV tapes in both directions; and a SNAPSHOT round-trip of the motor relay.
-- `examples/uio` boots 8K BASIC over the UIO's serial port end to end, under
-  `tests/acceptance/examples.cmake`
+- `tests/media/uio` boots 8K BASIC over the UIO's serial port end to end, under
+  `tests/acceptance/media.cmake`
   — the strongest proof that the serial half is a drop-in 2SIO Port A.
 - The cassette machinery itself is exhaustively pinned by `tests/test_88acr.cpp`, which the
   UIO inherits unchanged.

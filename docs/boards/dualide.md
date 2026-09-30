@@ -106,10 +106,9 @@ See `reference/dual-ide-card.md` for the complete tables and BIOS fragments.
   sockets and the drive-select port, an empty socket floating `0xFF`, write-protect, the port
   strap, snapshot round-trip, and — the point — a card written by `dualide` read byte-for-byte by
   `dualsd`.
-- **Acceptance** (`tests/acceptance/dualide.exp`, label `acceptance`): boots real CP/M 3 on a whole
-  machine through the CLI — the MASTER monitor's `P` command loads the loader off the CF card, CP/M
-  3 signs on, and `DIR` reads the directory back. `examples/dualidesd` also proves `DIR C:`/`DIR D:`
-  on the SD drives.
+- **Acceptance** (`tests/acceptance/dualidesd.exp`, label `acceptance`): boots real CP/M 3 on a
+  whole machine through the CLI — the MASTER monitor's `P` command loads the loader off the CF card,
+  CP/M 3 signs on, and `DIR` reads the directory back; `DIR C:`/`DIR D:` then read the SD drives.
 
 ## References
 

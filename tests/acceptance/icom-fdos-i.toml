@@ -3,8 +3,7 @@
 # needs. FDOS-I loads its resident executive into high memory, so the machine carries RAM over
 # C500-FFFF (above the controller's PROM at C000-C3FF and 6810 scratch at C400-C4FF) on top of
 # base `icom`'s 48K. FDOS-I's Executive takes single-letter directives (`L` = list directory),
-# not FDOS-III's word commands. Mounted READ-ONLY; icom-fdos-i.exp shasums the master. The
-# shipped example is examples/icom/fdos-i.toml.
+# not FDOS-III's word commands. Mounted READ-ONLY; icom-fdos-i.exp shasums the master.
 
 [machine]
 name    = "icom-fdos-i-acceptance"
@@ -17,7 +16,7 @@ rom = "builtin:icom-fd3712-fdos"
 
   [[board.drive]]
   unit         = 0
-  mount        = "../../examples/icom/FDOS-I (2SIO).DSK"
+  mount        = "../media/icom/FDOS-I (2SIO).DSK"
   writeprotect = true
 
 [[board]]

@@ -40,7 +40,7 @@ fail() {
 # from sh, so try a few and keep the first one the server says it is listening on.
 start_server() {   # $1 = --serve-root or --serve-root-rw
   cleanup; server=
-  cp "$src/examples/cpm/$image" "$work/srv/$image" || exit 1
+  cp "$src/tests/media/cpm/$image" "$work/srv/$image" || exit 1
   for try in 1 2 3 4 5; do
     port=$(( 20000 + ($$ * 7 + try * 1009) % 40000 ))
     de-tnfsd "$1" -p "$port" "$work/srv" >"$work/tnfsd.log" 2>&1 &
@@ -96,7 +96,7 @@ out=$(run '\000\rDIR\r\r\r\r')
 for want in '56K CP/M 2.2b v2.3' 'A>' 'A: L80      COM'; do
   expect "$out" "$want" "CP/M did not boot off tnfs://127.0.0.1:$port/$image"
 done
-cmp -s "$work/srv/$image" "$src/examples/cpm/$image" ||
+cmp -s "$work/srv/$image" "$src/tests/media/cpm/$image" ||
   fail "the read-only server's image changed"
 
 # ---- 2. WRITE BACK, READ/WRITE SERVER. -------------------------------------------------
@@ -107,7 +107,7 @@ start_server --serve-root-rw
 write_machine
 out=$(run '\000\rSAVE 1 TNFSHW.COM\r\r\r\r')
 expect "$out" 'A>SAVE 1 TNFSHW.COM' "the SAVE was never typed"
-cmp -s "$work/srv/$image" "$src/examples/cpm/$image" &&
+cmp -s "$work/srv/$image" "$src/tests/media/cpm/$image" &&
   fail "SAVE ran but the server's image did not change -- nothing was written back" "$out"
 out=$(run '\000\rDIR TNFSHW.COM\r\r\r\r')
 expect "$out" 'A: TNFSHW   COM' "the saved file is not on the server's copy of the disk"

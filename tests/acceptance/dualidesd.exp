@@ -33,8 +33,8 @@ set timeout 60
 log_user 0
 
 set exe [lindex $argv 0]
-set cf "examples/dualidesd/cpm3-cf.img"
-set sd "examples/dualidesd/cpm3-sd.img"
+set cf "tests/media/dualidesd/cpm3-cf.img"
+set sd "tests/media/dualidesd/cpm3-sd.img"
 
 # Leave no orphan behind: expect exiting does not reap the child holding the pty.
 proc bail {code msg} { if {$msg ne ""} { puts $msg }; catch {exec kill [exp_pid]}; exit $code }

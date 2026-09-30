@@ -463,8 +463,8 @@ while IFS='|' read -r dest src; do
   # PROGRAM rather than a disk -- the Intel HEX the machine loads. This is a presence check,
   # not a completeness one: it catches a directory that arrived carrying nothing, and it
   # cannot notice that one image of two went missing. What notices that is the acceptance
-  # suite, which boots every shipped example WITH its media (tests/acceptance/examples.cmake,
-  # plus trek80.exp and diskbasic.exp) and goes red the moment a file it mounts is absent.
+  # suite, which runs every shipped example WITH its media (tests/acceptance/examples.cmake)
+  # and goes red the moment a file it mounts is absent.
   #
   # ONLY FOR AN EXAMPLE. Not every DIR line is a machine: hostbridge/ is utility source and
   # skills/ is documentation, and neither has media to be missing. hostbridge/ passed this

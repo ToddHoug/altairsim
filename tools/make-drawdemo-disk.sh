@@ -5,14 +5,15 @@
 #     tools/make-drawdemo-disk.sh
 #
 # WHY A FLOPPY. drawdemo was developed on an 8 MB hard-disk image, which is far too big to
-# track. The CADzilla example ships on the same 330 KB 8" floppy as examples/cpm instead --
+# track. The CADzilla test disk is the same 330 KB 8" floppy as tests/media/cpm instead --
 # cpm22b23-56k.dsk, with R/W/HDIR already on it (tools/install-hostbridge-utils.sh). That disk
 # has 18K free and DRAWDEMO.COM is 18K, so room is made first: MBASIC.COM (24K) and the four
 # BASIC programs that need it (LUNAR, STARINS, STARTRK, TICTAK -- 36K) come off. 78K free.
 #
 # THE TRACKED IMAGE ALREADY IS THE RESULT. This script is how it was made, and the recipe that
-# makes the blob auditable rather than mysterious. It never writes to examples/cpm: it works on
-# a copy, and replaces examples/cadzilla/cpm22b23-56k-drawdemo.dsk only once every check passes.
+# makes the blob auditable rather than mysterious. It never writes to tests/media/cpm: it works
+# on a copy, and replaces tests/media/cadzilla/cpm22b23-56k-drawdemo.dsk only once every check
+# passes.
 #
 # THE PROGRAM ARRIVES AS ITS .HEX, and LOAD makes the .COM ON THE DISK, the way the program was
 # built in the first place (CP/M's own ASM and LOAD). R fetches DRAWDEMO.HEX off the host through
@@ -26,9 +27,9 @@
 set -eu
 
 root=$(cd "$(dirname "$0")/.." && pwd)
-ex=$root/examples/cadzilla             # the example: its HEX in, its disk out
+ex=$root/tests/media/cadzilla          # the fixture: its HEX in, its disk out
 sim=${ALTAIRSIM:-$root/build/altairsim}   # a caller with its own binary says so
-src=$root/examples/cpm/cpm22b23-56k.dsk
+src=$root/tests/media/cpm/cpm22b23-56k.dsk
 out=$ex/cpm22b23-56k-drawdemo.dsk
 
 # The SHA-256 of the DRAWDEMO.COM that LOAD makes from DRAWDEMO.HEX. If the program is rebuilt,

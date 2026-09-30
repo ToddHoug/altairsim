@@ -15,7 +15,7 @@ id   = "fdc0"
 
   [[board.drive]]
   unit         = 0
-  mount        = "../../examples/tarbell/TARBELLDD-CPM22-SSDD-48K-DMA.DSK"
+  mount        = "../media/tarbell/TARBELLDD-CPM22-SSDD-48K-DMA.DSK"
   writeprotect = true
 
 [console]

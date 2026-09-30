@@ -246,9 +246,10 @@ DBL's checksum.
   missing track, a write at 14 µs that lands, **a write at 18 µs that falls behind**, write
   protect, the step and settle times, the motor timer, the size check, `[[board.drive]]` and a
   snapshot. The timing tests were checked by breaking the byte timing.
-- `acceptance-examples` boots `examples/cpm/cpm22-fdcplus-hdf.toml` from a copy of the folder:
+- `acceptance-media` boots `tests/media/cpm/cpm22-fdcplus-hdf.toml` from a copy of the folder:
   DBL, the fake boot sector, HDFBL and the BIOS, to `48K CP/M 2.2b v1.2`, `For Altair 1.5Mb
-  Floppy`, `A>` and a directory line.
+  Floppy`, `A>` and a directory line. `acceptance-examples` does the same for the shipped
+  `examples/cpm/cpm22-fdcplus-hdf.toml`.
 - By hand, over `--mcp`, on a copy of `CPM22-48K-HDF.dsk`: `DIR`, `STAT` (`920k` free), `SAVE 4
   X.COM`, a warm boot, `DIR X.COM`, `ERA X.COM`. At `clock_hz = 2000000` it boots in 2.3 s; at
   `clock_hz = 4000000` it does not boot.

@@ -1,8 +1,7 @@
 # CP/M 2.2 boot acceptance fixture: the authentic single-board SBC-200 (onboard MSMONR21
 # + DDBIOS PROM over 64K RAM) + a VersaFloppy II with the SD Systems CP/M 2.2 master in
 # drive A, mounted READ-ONLY so the test can never dirty the tracked image (cpm.exp
-# shasums the disk to prove it). The shipped example (examples/sdsys/cpm.toml) mounts it
-# read/write instead -- this is the test's fixture, not the example.
+# shasums the disk to prove it). The image is the test's own copy in tests/media/sdsys.
 
 [machine]
 name    = "cpm-acceptance"
@@ -50,5 +49,5 @@ port    = 60
 
   [[board.drive]]
   unit         = 0
-  mount        = "../../examples/sdsys/SD-CPM22R4-SSDDR-256-64K.DSK"
+  mount        = "../media/sdsys/SD-CPM22R4-SSDDR-256-64K.DSK"
   writeprotect = true

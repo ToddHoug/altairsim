@@ -25,7 +25,7 @@ set timeout 60
 log_user 0
 
 set exe [lindex $argv 0]
-set dsk "examples/sdsys/SD-CPM22R4-SSDDR-256-64K.DSK"
+set dsk "tests/media/sdsys/SD-CPM22R4-SSDDR-256-64K.DSK"
 
 set before [exec shasum $dsk]
 

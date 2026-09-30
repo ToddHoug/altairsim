@@ -113,5 +113,5 @@ removable cartridge, which is the shipped image. The console is the base machine
 - `tests/test_hdsk.cpp` — the probe, the `(cyl,side,sector)→offset` mapping pinned three ways,
   the Seek→Read Sector→Read Buffer boot sequence, the Write Buffer→Write Sector→read-back round
   trip, the power-on `0xFF` status quirk, the error flags, and one-pass handshake termination.
-- `tests/acceptance/examples.cmake` — boots `examples/hdsk` to `A>` and reads a directory entry
-  off the platter, from the example's own directory and by path.
+- `tests/acceptance/media.cmake` — boots `tests/media/hdsk` to `A>` and reads a directory entry
+  off the platter, from the fixture's own directory and by path.

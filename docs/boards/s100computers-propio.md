@@ -131,7 +131,7 @@ the line is re-opened from `connect`.
   waiting; a byte goes both ways through `00`/`01`, and reading it clears keyboard ready;
   overriding the ports to `14`/`15` moves the decode and the data path.
 - `test_cli`: `SHOW BOARD propio` lists the board-level straps.
-- `acceptance-dualsd`, `acceptance-dualide`, `acceptance-dualidesd`: each boots the MASTER
+- `acceptance-dualsd`, `acceptance-dualidesd`: each boots the MASTER
   monitor and CP/M 3 on a `propio` console and types commands at it through the real CLI.
 
 ## References

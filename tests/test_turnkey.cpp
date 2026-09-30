@@ -1,7 +1,7 @@
 // The MITS 8800b Turnkey Module (docs/boards/mits-turnkey.md, reference/MITS Turn Key
 // Board.md).
 //
-// The acceptance tests boot CP/M on a Turnkey machine (tests/acceptance, examples/turnkey).
+// The acceptance tests boot CP/M on a Turnkey machine (tests/acceptance/media.cmake, tests/media/turnkey).
 // This file pins what a boot does NOT exercise on its own: the phantom PROM's one-shot
 // disable (an IN from FE/FF, input-only per Service Bulletin 007), the Auto-Start JMP jam,
 // the sense switches, and that the integrated 6850 answers at the right ports -- the things

@@ -123,7 +123,7 @@ are rebuilt on power.
   reads shadow RAM while writes reach it, and turning the EEPROM off shows the RAM; each page's
   unprogrammed tail reads `FF`; reset returns to the low page with the EEPROM on; `port` moves
   the latch.
-- `acceptance-dualsd`, `acceptance-dualide`, `acceptance-dualidesd`: each starts the MASTER
+- `acceptance-dualsd`, `acceptance-dualidesd`: each starts the MASTER
   monitor from this board with `RUN F000`, types its boot command (`I` for the Dual SD, which
   is in the **high** page), boots CP/M 3 and reads a directory. That exercises the EEPROM
   window, PHANTOM* and turning the EEPROM off on a whole machine through the real CLI, and

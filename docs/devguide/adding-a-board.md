@@ -8,7 +8,7 @@ line of code.
 
 The board is **eight lamps and a latch**. `OUT 0FFH` lights them. That is the whole thing.
 
-The finished source is in the tree at **`examples/boards/lamp/lamp.h`**, and
+The finished source is in the tree at **`tests/boards/lamp/lamp.h`**, and
 `tests/test_lamp.cpp` drives it on a real bus — so it compiles and it is tested, which is
 not something you can say about most tutorial code. Read along, or write it yourself.
 
@@ -49,7 +49,7 @@ easiest thing to get wrong, and getting it wrong here would break the SENSE swit
 
 ## 1. The board
 
-`examples/boards/lamp/lamp.h`. A board is a class that inherits `Board`
+`tests/boards/lamp/lamp.h`. A board is a class that inherits `Board`
 (`src/core/board.h`) and answers some questions.
 
 ### Its name
@@ -216,7 +216,7 @@ perfectly and lie to you, which is worse than a board that does not work.
 Two lines and an include, in `src/boards/registry.cpp`:
 
 ```cpp
-#include "../../examples/boards/lamp/lamp.h"
+#include "../../tests/boards/lamp/lamp.h"
 
 // ...in boardTypes():
 {"lamp", "Eight-LED output latch (the Developer Guide's example)",
