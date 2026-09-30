@@ -131,9 +131,20 @@ execute_process(
 expect_hdf("${out}" "`cd examples/cpm && altairsim cpm22-fdcplus-hdf.toml` did not boot CP/M")
 
 # cpm22-fdcplus.toml boots off an FDC+ Serial Drive Server -- a real serial port and a real
-# server on the far end, which no test machine has. So it is LOADED, not booted: over --mcp,
-# where the startup (the RUN that would wait on the server) is not run, and SHOW fdc0 proves
-# the file built the board it says -- the drive type, the rate and the port it will open.
+# server on the far end, which no test machine has. The file names ONE computer's port, and its
+# README's step 2 is "set `connect` on fdc0 to your serial port". So the test does that step on
+# the copy -- with `null`, the one endpoint every host has -- and the file is then LOADED, not
+# booted: over --mcp, where the startup (the RUN that would wait on the server) is not run, and
+# SHOW fdc0 proves the file built the board it says -- the drive type, the rate and the endpoint.
+# (Loading the file as shipped opens its port, which passes only on a machine that has it.)
+file(READ "${cpm}/cpm22-fdcplus.toml" fdcplus)
+string(REGEX REPLACE "\nconnect = \"serial:[^\"\n]*\"" "\nconnect = \"null\"" fdcplus_null "${fdcplus}")
+if(fdcplus_null STREQUAL fdcplus)
+  message(FATAL_ERROR "examples: cpm22-fdcplus.toml has no `connect = \"serial:...\"` line on fdc0 "
+                      "-- the line its README tells the reader to set.")
+endif()
+file(WRITE "${cpm}/cpm22-fdcplus.toml" "${fdcplus_null}")
+
 mcp_session("${dist}/fdcplus.jsonl"
   [=[{"name":"monitor","arguments":{"command":"SHOW fdc0"}}]=])
 execute_process(
@@ -145,9 +156,9 @@ execute_process(
   ERROR_VARIABLE    out
   TIMEOUT           30
 )
-expect_contains("${out}" "`altairsim cpm22-fdcplus.toml` did not load"
+expect_contains("${out}" "`altairsim cpm22-fdcplus.toml`, with its port set, did not load"
                 "fdc0  (fdcplus)" "drivetype        7" "baud             230400"
-                "connect          serial:")
+                "connect          null")
 if(NOT rc EQUAL 0)
   message(FATAL_ERROR "examples: cpm22-fdcplus.toml exited ${rc}.\n--- output ---\n${out}")
 endif()
