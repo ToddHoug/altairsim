@@ -35,12 +35,13 @@ static const std::vector<CommandDef> kCommands = {
      "Hex and ASCII. A bare address runs to the END OF ITS PAGE, and a bare DUMP\n"
      "continues from there -- so the rows and the columns both stay page-aligned\n"
      "however you first landed. WIDTH is a count, so it is decimal.\n"
-     "  D 100        0100-01FF, a whole page\n"
-     "  D 0001       0001-00FF: stops on the boundary, last line full\n"
-     "  D            the next page\n"
-     "  D FF00-FF0F  an explicit range means exactly what it says\n"
-     "  D 100/20     0100-011F (LEN is part of the address expression: hex)\n"
-     "  D 0 WIDTH=8  eight bytes per line"},
+     "\n"
+     "  D 100        ; 0100-01FF, a whole page\n"
+     "  D 0001       ; 0001-00FF: stops on the boundary, last line full\n"
+     "  D            ; the next page\n"
+     "  D FF00-FF0F  ; an explicit range means exactly what it says\n"
+     "  D 100/20     ; 0100-011F (LEN is part of the address expression: hex)\n"
+     "  D 0 WIDTH=8  ; eight bytes per line"},
     {"STEP", true, nullptr, "STEP [n]",
      "One instruction, with REAL bus cycles through the real decode. Prints one line\n"
      "per instruction; past 32 it runs quietly and reports. `n` is a count, so it is\n"
@@ -50,15 +51,17 @@ static const std::vector<CommandDef> kCommands = {
      "stand, and the instruction the PC has reached next. So `S 3` prints three lines,\n"
      "one per step, and the last line is where the monitor has left you: the next\n"
      "instruction, not yet run.\n"
-     "  S            one instruction\n"
-     "  S 10         ten of them\n"
      "\n"
-     "  altairsim> DEPOSIT 0 3E 05 06 0A 80 76        MVI A,5 / MVI B,0A / ADD B / HLT\n"
+     "  S     ; one instruction\n"
+     "  S 10  ; ten of them\n"
+     "\n"
+     "  altairsim> DEPOSIT 0 3E 05 06 0A 80 76  ; MVI A,5 / MVI B,0A / ADD B / HLT\n"
      "  altairsim> EX 0\n"
      "  altairsim> S 3\n"
      "  C0Z0M0E0I0 A=05 BC=0000 DE=0000 HL=0000 SP=0000 IE=0 PC=0002  MVI B,0A\n"
      "  C0Z0M0E0I0 A=05 BC=0A00 DE=0000 HL=0000 SP=0000 IE=0 PC=0004  ADD B\n"
      "  C0Z0M0E1I0 A=0F BC=0A00 DE=0000 HL=0000 SP=0000 IE=0 PC=0005  HLT\n"
+     "\n"
      "Three instructions ran, three lines. Each shows the result: A=05 lands on the\n"
      "line for the MVI that loaded it, and the last line is the HLT waiting, not yet\n"
      "run. The flags are the 8080's own five, in the Altair's lettering -- Carry,\n"
@@ -72,7 +75,8 @@ static const std::vector<CommandDef> kCommands = {
      "return address instead of stepping into it; anything else is a plain single\n"
      "step. It is a temporary breakpoint at the return plus a RUN, so the callee is\n"
      "LIVE -- it can use the console, and ^E (STOP) or ^C stops it.\n"
-     "  N            over the CALL/RST at PC (else single-step)"},
+     "\n"
+     "  N  ; over the CALL/RST at PC (else single-step)"},
     // RUN is the front panel's switch. It REPLACED GO (Patrick, 2026-07-12) -- there
     // was never a second thing for GO to be: a headless run is not a mode the operator
     // chooses, it is what happens when no unit holds the console, and the machine
@@ -105,8 +109,9 @@ static const std::vector<CommandDef> kCommands = {
      "With no console connected there is no keyboard to hand over, and nothing to\n"
      "pace against: it simply runs, ^C stops it. Either way it stops on a breakpoint\n"
      "or on a HLT nothing can wake, and it ALWAYS says which.\n"
-     "  RUN F800     boot the monitor PROM\n"
-     "  RUN          carry on from wherever the PC is"},
+     "\n"
+     "  RUN F800  ; boot the monitor PROM\n"
+     "  RUN       ; carry on from wherever the PC is"},
     {"HISTORY", true, nullptr, "HISTORY [BUS|CPU] [n]",
      "The last n INSTRUCTIONS the machine ran, oldest first -- a flight recorder that\n"
      "is always running while the machine runs, so it already holds the run-up to a\n"
@@ -130,10 +135,11 @@ static const std::vector<CommandDef> kCommands = {
      "Each recorder is a FIXED ring of its last 8192: it overwrites its own oldest and\n"
      "never grows, so it costs the same whether the machine ran for a second or a\n"
      "week. Ask for more than 8192 and you get the 8192 it holds.\n"
-     "  HISTORY          the last 16 instructions\n"
-     "  HISTORY 100      the last hundred instructions\n"
-     "  HISTORY BUS      the last 16 bus cycles\n"
-     "  HISTORY BUS 100  the last hundred cycles"},
+     "\n"
+     "  HISTORY          ; the last 16 instructions\n"
+     "  HISTORY 100      ; the last hundred instructions\n"
+     "  HISTORY BUS      ; the last 16 bus cycles\n"
+     "  HISTORY BUS 100  ; the last hundred cycles"},
     {"MOUNT", true, nullptr, "MOUNT <id>[:<u>] <file> [WP] [CREATE] [extract[=<base>]] [k=v...]",
      "Put a disk in a drive, a tape in a recorder, or an image in a ROM socket.\n"
      "WP write-protects it: the guest may read it and may not write it.\n"
@@ -157,13 +163,14 @@ static const std::vector<CommandDef> kCommands = {
      "trailing index when only one such board is in the machine, and the unit when the\n"
      "board has only one you could mount into. Anything genuinely plural you must say,\n"
      "and it will tell you so.\n"
+     "\n"
      "  MOUNT dsk0:drive0 disks/cpm.dsk\n"
      "  MOUNT dsk0:drive1 disks/master.dsk WP\n"
-     "  MOUNT dsk0:drive1 new.dsk CREATE    a blank disk to FORMAT from the guest\n"
+     "  MOUNT dsk0:drive1 new.dsk CREATE      ; a blank disk to FORMAT from the guest\n"
      "  MOUNT mem0:rom0 roms/monitor.bin\n"
-     "  MOUNT ACR tape.bin      the one cassette, its one tape: acr0:tape\n"
-     "  MOUNT ACR new.wav CREATE mode=record   a blank tape, in and recording\n"
-     "  MOUNT sol0:tape1 TRK80.WAV extract     mount a WAV and split it into .TAP files\n"
+     "  MOUNT ACR tape.bin                    ; the one cassette, its one tape: acr0:tape\n"
+     "  MOUNT ACR new.wav CREATE mode=record  ; a blank tape, in and recording\n"
+     "  MOUNT sol0:tape1 TRK80.WAV extract    ; mount a WAV and split it into .TAP files\n"
      "\n"
      "SHOW MOUNTS is the other half of this command: every socket in the machine,\n"
      "what is in it, and which are still empty. UNMOUNT takes it back out. A relative\n"
@@ -177,11 +184,12 @@ static const std::vector<CommandDef> kCommands = {
      "processor; TAPE STOP watches a DEVICE, halting when a cassette deck reaches its\n"
      "auto-stop mark -- the way to stop right after a load lands without knowing where\n"
      "the loader ends.\n"
-     "  BREAK FF13       stop when PC gets there\n"
-     "  BREAK 2C00-2CFF  ...anywhere in a range\n"
-     "  BREAK MEM W 100  stop when anything WRITES 0100\n"
-     "  BREAK IO R 10    stop on an IN from port 10\n"
-     "  BREAK TAPE STOP  stop when a cassette deck auto-stops after a load\n"
+     "\n"
+     "  BREAK FF13       ; stop when PC gets there\n"
+     "  BREAK 2C00-2CFF  ; ...anywhere in a range\n"
+     "  BREAK MEM W 100  ; stop when anything WRITES 0100\n"
+     "  BREAK IO R 10    ; stop on an IN from port 10\n"
+     "  BREAK TAPE STOP  ; stop when a cassette deck auto-stops after a load\n"
      "\n"
      "A breakpoint may carry a CONDITION and stop only when it holds. IF <expr> tests\n"
      "the registers. A bare word that names a register IS that register, so a literal\n"
@@ -202,12 +210,13 @@ static const std::vector<CommandDef> kCommands = {
      "and flag in it. On an 8080 that is A, BC/DE/HL, SP, PC and CY/Z/S/P/AC; a Z80\n"
      "adds IX, IY, the alternate bank and its own flags. A name the running CPU does\n"
      "not have is an error, so IF IX==0 waits for a Z80 to be the one in the socket.\n"
+     "\n"
      "  BREAK 100 IF A==0\n"
      "  BREAK 100 IF HL==8000 && Z==1\n"
      "  BREAK 100 IF (A&0F)==0\n"
-     "  BREAK IO R 10 IF B==5      stop on an IN from 10, but only while B==5\n"
-     "  BREAK IO R 10 LOADS A>7F   ...only when port 10 hands back a byte over 7F\n"
-     "  BREAK 100 IF IX==8000      Z80 -- IX is not an 8080 register\n"
+     "  BREAK IO R 10 IF B==5     ; stop on an IN from 10, but only while B==5\n"
+     "  BREAK IO R 10 LOADS A>7F  ; ...only when port 10 hands back a byte over 7F\n"
+     "  BREAK 100 IF IX==8000     ; Z80 -- IX is not an 8080 register\n"
      "\n"
      "TRACE ON|OFF makes it a TRACEPOINT: instead of stopping, it turns TRACE on or\n"
      "off and the machine RUNS ON. Two of them trace a REGION and nothing else --\n"
@@ -215,11 +224,13 @@ static const std::vector<CommandDef> kCommands = {
      "bury you. Like IF, it works on the MEM and IO kinds too. TRACE ON at an address\n"
      "traces the instruction AT it; TRACE OFF\n"
      "does not -- the region is [on, off).\n"
-     "  BREAK 2C00 TRACE ON        start tracing when PC gets to 2C00\n"
-     "  BREAK 2C40 TRACE OFF       ...and stop again at 2C40\n"
-     "  BREAK MEM W 2000 TRACE ON  start when anything writes 2000 (that write is\n"
-     "                             the first line -- a trace shows its own reason)\n"
-     "  BREAK 200 IF HL==8000 TRACE ON    conditional, and still does not stop\n"
+     "\n"
+     "  BREAK 2C00 TRACE ON             ; start tracing when PC gets to 2C00\n"
+     "  BREAK 2C40 TRACE OFF            ; ...and stop again at 2C40\n"
+     "  BREAK MEM W 2000 TRACE ON       ; start when anything writes 2000 (that write is\n"
+     "                                  ; the first line -- a trace shows its own reason)\n"
+     "  BREAK 200 IF HL==8000 TRACE ON  ; conditional, and still does not stop\n"
+     "\n"
      "Where the trace GOES is TRACE's business, not the tracepoint's: set it up with\n"
      "TRACE ON <file> MASK=..., then TRACE OFF to arm it without emitting. An\n"
      "unconfigured tracepoint traces to the console."},
@@ -238,10 +249,11 @@ static const std::vector<CommandDef> kCommands = {
      "signed offset from the next address), which report \"not implemented\" -- deposit\n"
      "those bytes directly, or use JP.\n"
      "Look at four bytes, patch two instructions in, and read them back:\n"
+     "\n"
      "  altairsim> EDIT 100\n"
-     "  0100 C3 IN 10       assembles DB 10, on to 0102\n"
-     "  0102 00 LXI H,FF13  assembles 21 13 FF, on to 0105\n"
-     "  0105 76 .           '.' returns to the monitor\n"
+     "  0100 C3 IN 10       ; assembles DB 10, on to 0102\n"
+     "  0102 00 LXI H,FF13  ; assembles 21 13 FF, on to 0105\n"
+     "  0105 76 .           ; '.' returns to the monitor\n"
      "  altairsim> DISASM 100 2\n"
      "  0100  DB 10     IN 10\n"
      "  0102  21 13 FF  LXI H,FF13\n"
@@ -273,8 +285,9 @@ static const std::vector<CommandDef> kCommands = {
      "that will not load -- a key that does not parse, a disk image that is not there\n"
      "-- leaves you exactly where you were. What you do not get back is the machine\n"
      "you REPLACED: there is no undo but the file you saved it to.\n"
+     "\n"
      "  CONFIG SAVE machines/mine.toml\n"
-     "  CONFIG LOAD machines/mine.toml      ...and this is how you get it back"},
+     "  CONFIG LOAD machines/mine.toml  ; ...and this is how you get it back"},
     {"DO", true, nullptr, "DO <file>",  // DO
      "Run a FILE of monitor commands, one per line, as if you had typed each here. A\n"
      "DO file is a machine's `startup` list living in a plain text file -- the config\n"
@@ -294,8 +307,9 @@ static const std::vector<CommandDef> kCommands = {
      "\n"
      "It is a LINE RUNNER, not SIMH's scripting language: no arguments, no IF or GOTO.\n"
      "For conditional or interactive automation, drive a live guest over --mcp.\n"
-     "  DO cpm.ini                   paths relative to cpm.ini's own directory\n"
-     "  DO examples/basic/b.ini      run it from anywhere"},
+     "\n"
+     "  DO cpm.ini               ; paths relative to cpm.ini's own directory\n"
+     "  DO examples/basic/b.ini  ; run it from anywhere"},
     {"MACHINE", true, nullptr, "MACHINE <name> | MACHINE none",  // MA (M is MOUNT, MO)
      "Load a BUILT-IN machine by name, replacing whatever is in the backplane. It is the\n"
      "runtime twin of naming one on the command line (`altairsim default`) and the command\n"
@@ -309,8 +323,9 @@ static const std::vector<CommandDef> kCommands = {
      "It powers the result (RAM filled, ROM images read, POC* pulsed) but does NOT run the\n"
      "built-in's startup: like `base =`, it gives you the HARDWARE, and the lines after it\n"
      "do the MOUNTing and RUNning. For a machine from a FILE, use CONFIG LOAD.\n"
-     "  MACHINE default                  the 56K CP/M Altair, DBL PROM at FF00\n"
-     "  MACHINE none ; BOARDS ADD 8080 cpu0 ; ... ; POWER ; RUN 0"},
+     "\n"
+     "  MACHINE default  ; the 56K CP/M Altair, DBL PROM at FF00\n"
+     "  MACHINE none     ; an empty backplane: BOARDS ADD 8080 cpu0, ..., POWER, RUN 0"},
 
     // ---- everything else, ranked by how often you type it ----
     {"SET", true, nullptr, "SET <id>[:<u>]|CONSOLE|DISPLAY|TERMINAL|MACHINE|REG|BUS <k>=<v>",  // SE (beats SEARCH)
@@ -326,39 +341,41 @@ static const std::vector<CommandDef> kCommands = {
      "and BUS is the backplane's own diagnostics rather than anything plugged into it.\n"
      "MACHINE is the machine itself: its name is what SHOW MACHINE prints, the video\n"
      "window's title, and what CONFIG SAVE writes.\n"
+     "\n"
      "  SET mem0 fill=zero\n"
      "  SET mem0 phantom=read\n"
-     "  SET acr0:tape mode=record   the tape in the recorder, not the recorder\n"
-     "  SET vdm0 width=1024      how wide the video window opens, in pixels (auto = ~half the screen)\n"
-     "  SET DISPLAY focus=on     the video window takes the keyboard, not the terminal\n"
-     "  SET DISPLAY crt=on       paint the window like the period tube: soft phosphor and 4:3\n"
-     "  SET MACHINE name=mybox   what CONFIG SAVE calls the machine\n"
-     "  SET REG A=3F             a register in the CPU that is in the socket\n"
-     "  SET BUS UNCLAIMED=WARN   warn on a cycle no board answered\n"
-     "                           (also CONTENTION=WARN|ERROR|SILENT, UNCLAIMED=WARN|HALT|SILENT)"},
+     "  SET acr0:tape mode=record  ; the tape in the recorder, not the recorder\n"
+     "  SET vdm0 width=1024        ; how wide the video window opens, in pixels (auto = ~half the screen)\n"
+     "  SET DISPLAY focus=on       ; the video window takes the keyboard, not the terminal\n"
+     "  SET DISPLAY crt=on         ; paint the window like the period tube: soft phosphor and 4:3\n"
+     "  SET MACHINE name=mybox     ; what CONFIG SAVE calls the machine\n"
+     "  SET REG A=3F               ; a register in the CPU that is in the socket\n"
+     "  SET BUS UNCLAIMED=WARN     ; warn on a cycle no board answered\n"
+     "                             ; (also CONTENTION=WARN|ERROR|SILENT, UNCLAIMED=WARN|HALT|SILENT)"},
     {"SHOW", true, nullptr,
      "SHOW <id>|BOARDS|BOARD <type> [UNITS]|MACHINES|MACHINE [<name>]|BUS [MAP|IO|IRQ|CONTENTION]|"
      "ROMS|MOUNTS|PATHS|CONSOLE|DISPLAY|SYMBOLS|CLOCK|VERSION",
-     "  SHOW mem0        regions and properties\n"
-     "  SHOW BOARDS      the board types you can add\n"
-     "  SHOW BOARD sol   one type's description and properties (add UNITS for just those)\n"
-     "  SHOW MACHINES    the built-in machines you can boot\n"
-     "  SHOW MACHINE     the current machine (add a name for a built-in's detail)\n"
-     "  SHOW BUS MAP     who decodes what, and what floats\n"
-     "  SHOW BUS IRQ     VI0-VI7: who is strapped where, who is pulling, who wins\n"
-     "  SHOW MOUNTS      every disk, tape and ROM in the machine, and what is in it\n"
-     "  SHOW PATHS       what a path resolves against -- and there is more than one answer\n"
-     "  SHOW CONSOLE     which unit holds the keyboard, and its transforms\n"
-     "  SHOW DISPLAY     the host video window: keyboard focus, and the CRT look\n"
-     "  SHOW TERMINAL    the built-in terminal's transforms (strip7out, cr, bsdel, ...)\n"
-     "  SHOW JOYSTICKS   the host game controllers a D+7A can read (SDL builds)\n"
-     "  SHOW SYMBOLS     the loaded symbols (SHOW SYMBOLS SIO* filters); load them with SYMBOLS\n"
-     "  SHOW CLOCK       emulated time: T-states since POWER, and what they are in seconds\n"
-     "  SHOW ROMS        the ROM images built into this binary, and where each came from\n"
-     "  SHOW VERSION     which build this is, and the commit it was built from"},
+     "  SHOW mem0       ; regions and properties\n"
+     "  SHOW BOARDS     ; the board types you can add\n"
+     "  SHOW BOARD sol  ; one type's description and properties (add UNITS for just those)\n"
+     "  SHOW MACHINES   ; the built-in machines you can boot\n"
+     "  SHOW MACHINE    ; the current machine (add a name for a built-in's detail)\n"
+     "  SHOW BUS MAP    ; who decodes what, and what floats\n"
+     "  SHOW BUS IRQ    ; VI0-VI7: who is strapped where, who is pulling, who wins\n"
+     "  SHOW MOUNTS     ; every disk, tape and ROM in the machine, and what is in it\n"
+     "  SHOW PATHS      ; what a path resolves against -- and there is more than one answer\n"
+     "  SHOW CONSOLE    ; which unit holds the keyboard, and its transforms\n"
+     "  SHOW DISPLAY    ; the host video window: keyboard focus, and the CRT look\n"
+     "  SHOW TERMINAL   ; the built-in terminal's transforms (strip7out, cr, bsdel, ...)\n"
+     "  SHOW JOYSTICKS  ; the host game controllers a D+7A can read (SDL builds)\n"
+     "  SHOW SYMBOLS    ; the loaded symbols (SHOW SYMBOLS SIO* filters); load them with SYMBOLS\n"
+     "  SHOW CLOCK      ; emulated time: T-states since POWER, and what they are in seconds\n"
+     "  SHOW ROMS       ; the ROM images built into this binary, and where each came from\n"
+     "  SHOW VERSION    ; which build this is, and the commit it was built from"},
     {"DEPOSIT", true, nullptr, "DEPOSIT <addr> <bytes...>",  // DE
      "The front-panel switch. Runs a REAL bus write, so if no board decodes the\n"
      "address the byte is simply gone -- and DEPOSIT says so rather than lying.\n"
+     "\n"
      "  DE 100 C3 00 F8"},
     // EXAMINE and DEPOSIT are the two switches on the front panel, and they belong
     // together -- DE and EX. EXAMINE is the quick look at ONE byte; bare EXAMINE
@@ -370,16 +387,20 @@ static const std::vector<CommandDef> kCommands = {
      "PC now points at -- what the next STEP will execute. Bare EXAMINE is the\n"
      "panel's EXAMINE NEXT -- it steps one byte, quietly. Its cursor is its own; a\n"
      "DUMP does not move it.\n"
-     "  EX 100       0100  C3  .  11000011\n"
-     "               A=00 ... PC=0100  JMP 0138\n"
-     "  EX           and the next byte, and the next"},
+     "\n"
+     "  altairsim> EX 100\n"
+     "  0100  C3  .  11000011\n"
+     "  A=00 ... PC=0100  JMP 0138\n"
+     "  altairsim> EX  ; and the next byte, and the next"},
     {"IN", true, nullptr, "IN <port>",  // I
      "Runs a REAL IN cycle, with real side effects: an IN from a UART's data port\n"
      "consumes the byte and the guest never sees it. To look without touching, use\n"
      "WHO IO <port>. Reports whether anybody actually answered.\n"
-     "  I 10         port 10 -> FF   (nobody answered -- the bus floated it)"},
+     "\n"
+     "  I 10  ; port 10 -> FF   (nobody answered -- the bus floated it)"},
     {"OUT", true, nullptr, "OUT <port> <byte>",  // O
      "Runs a REAL OUT cycle. Says so if no board decodes the port.\n"
+     "\n"
      "  O 10 41"},
     {"LOAD", true, nullptr, "LOAD <file> [AT <addr>] [FORMAT=BIN|HEX|SREC] [ROM]",
      "Put a file into memory. There are three kinds of file and they differ in ONE\n"
@@ -424,11 +445,12 @@ static const std::vector<CommandDef> kCommands = {
      "behind the bus, straight into whichever chip answers reads at that address:\n"
      "the operator pulling the chip and putting it in a programmer. It is why the\n"
      "operator can write a ROM and the guest cannot.\n"
-     "  LOAD dbl.hex                      where the file says, through the bus\n"
-     "  LOAD monitor.bin AT F000 ROM      a flat binary, burned into the ROM there\n"
-     "  LOAD prog.hex AT 100              relocate: first record goes to 0100\n"
-     "  LOAD odd.txt AT 0 FORMAT=HEX      it IS hex, whatever it is called\n"
-     "  LOAD mon.txt FORMAT=SREC          read it as Motorola S-records"},
+     "\n"
+     "  LOAD dbl.hex                  ; where the file says, through the bus\n"
+     "  LOAD monitor.bin AT F000 ROM  ; a flat binary, burned into the ROM there\n"
+     "  LOAD prog.hex AT 100          ; relocate: first record goes to 0100\n"
+     "  LOAD odd.txt AT 0 FORMAT=HEX  ; it IS hex, whatever it is called\n"
+     "  LOAD mon.txt FORMAT=SREC      ; read it as Motorola S-records"},
     {"SAVE", true, nullptr, "SAVE <file> <range> [FORMAT=BIN|HEX|OCTAL|PRN]",
      "Memory to a file, through the bus -- so what you get is what the CPU would\n"
      "read, ROM included. The range is what to save; a byte nobody drives reads FF.\n"
@@ -444,11 +466,12 @@ static const std::vector<CommandDef> kCommands = {
      "is the DISASM listing -- address, object bytes, mnemonic and any SYMBOLS labels\n"
      "-- written to a file for reading and marking up. Both follow the console base.\n"
      "LOAD does not read either back: BIN and HEX round-trip, OCTAL and PRN do not.\n"
-     "  SAVE out.hex 0-FFF                Intel HEX, by its name\n"
-     "  SAVE out.bin F800-FFFF            a flat binary, by its name\n"
-     "  SAVE out.oct 100-1FF              an octal listing, by its name\n"
-     "  SAVE out.prn 100-1FF              a disassembly listing, by its name\n"
-     "  SAVE out.dat 0-FFF FORMAT=HEX     hex, though it is not called .hex"},
+     "\n"
+     "  SAVE out.hex 0-FFF             ; Intel HEX, by its name\n"
+     "  SAVE out.bin F800-FFFF         ; a flat binary, by its name\n"
+     "  SAVE out.oct 100-1FF           ; an octal listing, by its name\n"
+     "  SAVE out.prn 100-1FF           ; a disassembly listing, by its name\n"
+     "  SAVE out.dat 0-FFF FORMAT=HEX  ; hex, though it is not called .hex"},
     {"FILL", true, nullptr, "FILL <range> <byte>",
      "  FILL 0-3FF 00"},
     {"SEARCH", true, nullptr, "SEARCH <range> <bytes...>|\"str\"",  // SEA
@@ -462,17 +485,20 @@ static const std::vector<CommandDef> kCommands = {
      "Byte for byte, a <range> against the SAME LENGTH starting at <addr> -- memory to\n"
      "memory, both in the machine's address space. Every mismatch prints both\n"
      "addresses and their bytes; then a total. It changes nothing and runs no cycle.\n"
-     "  COMPARE 0-FF 200        page 0 against page 2\n"
-     "  COMPARE FF00-FFFF E000  the boot PROM against a copy up at E000"},
+     "\n"
+     "  COMPARE 0-FF 200        ; page 0 against page 2\n"
+     "  COMPARE FF00-FFFF E000  ; the boot PROM against a copy up at E000"},
     {"MOVE", true, nullptr, "MOVE <range> <dest> [ROM]",  // MOV
      "Copy a range of memory to <dest>. It reads the WHOLE range before it writes, so\n"
      "source and dest may overlap either way without a block eating its own tail. The\n"
      "writes are real bus cycles; ROM burns instead, the way EDIT and DEPOSIT do.\n"
-     "  MOVE 100-1FF 200    page 1 up to page 2\n"
-     "  MOVE 0-FFF 1000     the first 4K, up by 4K"},
+     "\n"
+     "  MOVE 100-1FF 200  ; page 1 up to page 2\n"
+     "  MOVE 0-FFF 1000   ; the first 4K, up by 4K"},
     {"WHO", true, nullptr, "WHO <addr> | WHO IO <port>",
      "Who WOULD answer -- it looks without running a cycle, so nothing is consumed\n"
      "and no board is poked. Reports contention, and reports PHANTOM*.\n"
+     "\n"
      "  WHO FF00\n"
      "  WHO IO 10"},
     // The name is PLURAL, so both spellings work and neither is an alias: BOARD is
@@ -482,10 +508,11 @@ static const std::vector<CommandDef> kCommands = {
      "sockets. A bare BOARDS lists them. RAM and ROM are named separately, and a\n"
      "ROM range says which image is in it -- an empty socket decodes nothing, so it\n"
      "is not in the memory column at all; it is in UNITS, marked (empty).\n"
-     "  BOARDS                   the backplane\n"
-     "  BOARD                    the same thing: a prefix of BOARDS\n"
-     "  BOARDS ADD memory mem0   fit one -- SHOW BOARDS lists the types\n"
-     "  BOARDS REMOVE mem0       pull one out"},
+     "\n"
+     "  BOARDS                  ; the backplane\n"
+     "  BOARD                   ; the same thing: a prefix of BOARDS\n"
+     "  BOARDS ADD memory mem0  ; fit one -- SHOW BOARDS lists the types\n"
+     "  BOARDS REMOVE mem0      ; pull one out"},
     // REGS is the first RE- word in the table, so it takes RE outright -- and it is
     // the one you type between two STEPs, which is as often as anything here.
     {"REGS", true, nullptr, "REGS | SET REG <r>=<v>",  // RE (beats RECORD, REPLAY, RESET, REGION)
@@ -498,14 +525,16 @@ static const std::vector<CommandDef> kCommands = {
      "IM. The register halves, R and F are reachable by name though they are off the\n"
      "line. SET REG takes any name REGS knows -- and only those, so SET REG IX=0 needs\n"
      "a Z80. BREAK ... IF reads the very same names.\n"
+     "\n"
      "  REGS\n"
      "  SET REG A=3F\n"
      "  SET REG PC=FF00\n"
-     "  SET REG IX=8000   Z80 only"},
+     "  SET REG IX=8000  ; Z80 only"},
     {"REGION", true, nullptr, "REGION ADD <id> type=ram|rom at=<addr> [size=|mount=]",  // REGI
      "A region is a POPULATED part of a board. What is not covered by one is an\n"
      "empty socket: it decodes nothing and floats to FF. `at` is an address, so it\n"
      "is hex; `size` is a size, so it is decimal, and K/M work.\n"
+     "\n"
      "  REGI ADD mem0 type=ram at=0 size=48K\n"
      "  REGI ADD mem0 type=rom at=FF00 mount=builtin:dbl"},
     {"DISASM", true, nullptr, "DISASM [<addr>|<range>] [n] [CPU=8080]",  // DI
@@ -517,11 +546,12 @@ static const std::vector<CommandDef> kCommands = {
      "you leave it off. It only applies to a start address: give a RANGE and the range\n"
      "decides where to stop. CPU= is an instruction set, one of 8080 or z80, and is\n"
      "only for when the machine has no CPU to ask.\n"
-     "  DI FF00      sixteen instructions of the boot PROM\n"
-     "  DI FF00 40   forty of them instead\n"
-     "  DI           carry on from there\n"
-     "  DI 0-2F      exactly that range\n"
-     "  DI FF00 CPU=z80    decode as Z80 when nothing in the machine can say"},
+     "\n"
+     "  DI FF00          ; sixteen instructions of the boot PROM\n"
+     "  DI FF00 40       ; forty of them instead\n"
+     "  DI               ; carry on from there\n"
+     "  DI 0-2F          ; exactly that range\n"
+     "  DI FF00 CPU=z80  ; decode as Z80 when nothing in the machine can say"},
     // SYMBOLS is not LOAD. LOAD is memory all the way down (every format it takes
     // becomes bytes in the address space); a symbol table has no address space to land
     // in -- it is the debugger's NAMES for one, host-side like a breakpoint, surviving
@@ -542,6 +572,7 @@ static const std::vector<CommandDef> kCommands = {
      "LOAD merges (the newest of a clashing name wins, and it says how many); REPLACE\n"
      "clears first; CLEAR empties the table. A file named in a machine's startup is\n"
      "reloaded on CONFIG LOAD and round-trips through CONFIG SAVE.\n"
+     "\n"
      "  SYMBOLS LOAD prog.SYM\n"
      "  SYMBOLS LOAD roms/ALTMON/ALTMON.PRN\n"
      "  SYMBOLS CLEAR"},
@@ -555,14 +586,16 @@ static const std::vector<CommandDef> kCommands = {
      "The machine's boot list -- the commands a config replays on load, and what CONFIG\n"
      "SAVE writes out as startup = [...]. A bare STARTUP shows the list, numbered; the\n"
      "rest edit it in place, so you can compose a boot sequence at the prompt and save it:\n"
-     "  STARTUP                          show the list, numbered\n"
-     "  STARTUP ADD MOUNT dsk0:drive0 \"CP-M 2.2.dsk\"   append a line, verbatim\n"
-     "  STARTUP REMOVE 2                 drop line 2\n"
-     "  STARTUP CLEAR                    empty the list\n"
+     "\n"
+     "  STARTUP                                       ; show the list, numbered\n"
+     "  STARTUP ADD MOUNT dsk0:drive0 \"CP-M 2.2.dsk\"  ; append a line, verbatim\n"
+     "  STARTUP REMOVE 2                              ; drop line 2\n"
+     "  STARTUP CLEAR                                 ; empty the list\n"
      "\n"
      "ADD takes the REST OF THE LINE exactly as typed -- quotes, spaces and all -- because\n"
      "a startup entry is just a command line: anything valid at the prompt is valid in the\n"
      "list, so it is stored unchecked, the same as a line you write in the file by hand.\n"
+     "\n"
      "  STA ADD RUN FF00"},
     // UNMOUNT, not DISMOUNT (Patrick, 2026-07-11). It is the plain word, it takes U
     // -- which nothing else wanted -- and it gets out of DISASM's way, which drops
@@ -571,11 +604,13 @@ static const std::vector<CommandDef> kCommands = {
      "Takes the disk, tape or ROM out of the unit. A drive or a tape recorder is then\n"
      "empty. A ROM socket is then empty too: those pages float to FF, as on a board\n"
      "with no chip in the socket.\n"
+     "\n"
      "  U dsk0:drive0"},
     {"DISCONNECT", true, nullptr, "DISCONNECT <id>:<u>",  // DISC
      "The line then goes nowhere. NOT an error: an unconnected 6850 sits there with\n"
      "TDRE set forever, and a program that writes to it works fine and talks to\n"
      "nobody -- which is exactly what the card does with no cable in it.\n"
+     "\n"
      "  DISC sio0:b"},
     // CONSOLE CONFIGURES the console. It does not run the machine (Patrick,
     // 2026-07-12) -- RUN runs the machine, and a command that quietly started the
@@ -610,9 +645,11 @@ static const std::vector<CommandDef> kCommands = {
      "STOP is the key that takes the keyboard BACK from a running guest. The host\n"
      "intercepts it before the guest is ever offered the byte, so the guest cannot\n"
      "disable it -- and that is why it must not be a key the guest needs.\n"
-     "  CONSOLE            the settings, and which board unit is wired to the terminal\n"
-     "  CONSOLE stop=1D    make it ^]  (hex: it is a byte on the wire; attn= also works)\n"
-     "  CONSOLE upper=on strip7out=on   two at once, the classic MITS BASIC pair\n"
+     "\n"
+     "  CONSOLE                        ; the settings, and which board unit is wired to the terminal\n"
+     "  CONSOLE stop=1D                ; make it ^]  (hex: it is a byte on the wire; attn= also works)\n"
+     "  CONSOLE upper=on strip7out=on  ; two at once, the classic MITS BASIC pair\n"
+     "\n"
      "This command does NOT choose which board is the console -- CONNECT does that\n"
      "(CONNECT <id>:<unit> console); bare CONSOLE only reports the one now wired."},
     // `{endpoints}` is expanded by the HELP printer from endpointHelp(), which is the
@@ -679,20 +716,22 @@ static const std::vector<CommandDef> kCommands = {
      "\n"
      "Exactly ONE unit may hold the console; connecting a second STEALS it and says\n"
      "who from. Two boards reading one keyboard would each get half the characters.\n"
+     "\n"
      "  CONN sio0:a console\n"
      "  CONN sio0:b null\n"
      "  CONN sio0:b loopback\n"
-     "  CONN sio0:b socket:2323            `telnet localhost 2323` now reaches the guest\n"
-     "  CONN sio0:b telnet:2323            ...the same, but no double echo for a human\n"
-     "  CONN sio0:b socket:bbs.example:23  the guest dials OUT, to somebody else's port\n"
-     "  CONN sio0:b serial:/dev/tty.usbserial-AL009KFH    a real cable, real hardware\n"
-     "  CONN sio0:b serial:COM3                           ...the same, on Windows\n"
-     "  CONN lpt0:prn out:printout.txt                    capture a printer to a file\n"
-     "  CONN 4pio0:ja in:TAPE.TAP?cps=300                 a paper-tape reader (88-HSR)\n"
-     "  CONN 4pio0:jb out:TAPE.PUN                        a paper-tape punch\n"
-     "  CONN sio0:a terminal?emulation=adm3a              a windowed ADM-3A of its own\n"
-     "  CONN lpt0:prn printer:linewriter                  print to a real host queue\n"
-     "  CONN sio0:b socket:2323|bbs.hex?fmt=cols          telnet in, and TAP it to a log\n"
+     "  CONN sio0:b socket:2323                         ; `telnet localhost 2323` now reaches the guest\n"
+     "  CONN sio0:b telnet:2323                         ; ...the same, but no double echo for a human\n"
+     "  CONN sio0:b socket:bbs.example:23               ; the guest dials OUT, to somebody else's port\n"
+     "  CONN sio0:b serial:/dev/tty.usbserial-AL009KFH  ; a real cable, real hardware\n"
+     "  CONN sio0:b serial:COM3                         ; ...the same, on Windows\n"
+     "  CONN lpt0:prn out:printout.txt                  ; capture a printer to a file\n"
+     "  CONN 4pio0:ja in:TAPE.TAP?cps=300               ; a paper-tape reader (88-HSR)\n"
+     "  CONN 4pio0:jb out:TAPE.PUN                      ; a paper-tape punch\n"
+     "  CONN sio0:a terminal?emulation=adm3a            ; a windowed ADM-3A of its own\n"
+     "  CONN lpt0:prn printer:linewriter                ; print to a real host queue\n"
+     "  CONN sio0:b socket:2323|bbs.hex?fmt=cols        ; telnet in, and TAP it to a log\n"
+     "\n"
      "DISCONNECT takes the cable out again; SHOW CONSOLE says which unit holds it."},
     // RESET sits with POWER, which is the other command that throws state away, and
     // BELOW REGS -- which is what costs it `R` and `RE` and leaves it `RES`. It has to
@@ -715,9 +754,10 @@ static const std::vector<CommandDef> kCommands = {
      "MASK keeps only the cycles you name (no MASK keeps all): IN, OUT, IRQ, DMA,\n"
      "CONTENTION. A cycle is kept if it is any of them -- MASK=DMA is every cycle a\n"
      "master drove, whatever its type.\n"
-     "  TRACE ON                    every cycle, to the console\n"
-     "  TRACE ON run.log            ...to a file\n"
-     "  TRACE ON MASK=IN,OUT        just the port traffic\n"
+     "\n"
+     "  TRACE ON              ; every cycle, to the console\n"
+     "  TRACE ON run.log      ; ...to a file\n"
+     "  TRACE ON MASK=IN,OUT  ; just the port traffic\n"
      "  TRACE OFF\n"
      "\n"
      "TRACE OFF stops the tracing but REMEMBERS where it was going -- a later TRACE\n"
@@ -738,8 +778,9 @@ static const std::vector<CommandDef> kCommands = {
      "Put TYPE before the RUN that starts the guest and the guest reads it at its first\n"
      "prompt -- in a TOML the backslash doubles (\\\\r), because the config parser keeps\n"
      "one for the command:\n"
+     "\n"
      "  startup = [\"MOUNT sol0:tape1 \\\"TRK80.WAV\\\"\", \"TYPE \\\"XE TRK80\\\\r\\\"\", \"RUN C000\"]\n"
-     "  TYPE \"XE TRK80\\r\"        type it now, at a running guest\n"
+     "  TYPE \"XE TRK80\\r\"  ; type it now, at a running guest\n"
      "\n"
      "A program that clears its keyboard as it starts drops keystrokes sent before it\n"
      "is ready; TYPE cannot help there, no more than a fast typist could."},
@@ -747,24 +788,28 @@ static const std::vector<CommandDef> kCommands = {
      "Write the machine's STATE to a file: the CPU, the clock, and every board's\n"
      "registers, RAM and latches. NOT its configuration -- a snapshot is state, the\n"
      "way a machine file is configuration. RESTORE reads it back.\n"
+     "\n"
      "  SNAPSHOT before-boot.snap\n"},
     {"RESTORE", true, nullptr, "RESTORE <file>",                          // REST
      "Load a SNAPSHOT back into THIS machine. The machine must be the same shape the\n"
      "snapshot was taken from -- the same boards, same ids, same order (build it with\n"
      "the same machine file, or a CONFIG LOAD, first) -- and a file that does not match\n"
      "is refused with the reason, the running machine untouched.\n"
+     "\n"
      "  RESTORE before-boot.snap\n"},
     {"NOBREAK", true, nullptr, "NOBREAK [id]",
      "Bare NOBREAK clears them all. An id is not on the wire, so it is decimal.\n"
+     "\n"
      "  NOBREAK 2\n"
      "  NOBREAK"},
     {"HELP", true, nullptr, "HELP [<command>]",  // HE (HISTORY has H)
      "Bare HELP lists the commands and nothing else -- the whole set on a few\n"
      "lines, which is what you want when you are hunting for the name. HELP with a\n"
      "command gives the usage and the examples.\n"
-     "  HELP         the list\n"
-     "  HELP DUMP    the detail\n"
-     "  ?            the same as HELP"},
+     "\n"
+     "  HELP       ; the list\n"
+     "  HELP DUMP  ; the detail\n"
+     "  ?          ; the same as HELP"},
     // There is no EXIT. QUIT is the one word for leaving, because two words for one
     // action is two things to learn and nothing gained -- and EXIT was also the only
     // reason EXAMINE could not simply be `EX`.
@@ -772,6 +817,7 @@ static const std::vector<CommandDef> kCommands = {
      "Leave the monitor and end the program. It does NOT ask: the machine lives in\n"
      "memory, so anything you have not written out -- CONFIG SAVE, SAVE, SNAPSHOT --\n"
      "is gone with it. There is no EXIT; QUIT is the one word.\n"
+     "\n"
      "  QUIT"},
 };
 

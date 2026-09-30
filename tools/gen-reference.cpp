@@ -416,19 +416,30 @@ void detailBlock(std::ostream& o, const char* detail) {
     std::istringstream in(text);
     std::string line;
     bool fenced = false;
+    // The help text sets its example blocks off with blank lines (for the terminal); the
+    // fence supplies its own, so a blank is written only if the last line was not one.
+    bool blank = false;
     while (std::getline(in, line)) {
         bool example = line.size() > 2 && line[0] == ' ' && line[1] == ' ';
         if (example && !fenced) {
-            o << "\n```\n";
+            if (!blank) o << "\n";
+            o << "```\n";
             fenced = true;
         } else if (!example && fenced) {
             o << "```\n\n";
             fenced = false;
+            blank  = true;
         }
-        if (fenced)
+        if (fenced) {
             o << line.substr(2) << "\n";
-        else
+            blank = false;
+        } else if (line.empty()) {
+            if (!blank) o << "\n";
+            blank = true;
+        } else {
             o << line << "\n";
+            blank = false;
+        }
     }
     if (fenced) o << "```\n";
 }

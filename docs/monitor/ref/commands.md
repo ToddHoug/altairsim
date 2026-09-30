@@ -38,7 +38,7 @@ step. It is a temporary breakpoint at the return plus a RUN, so the callee is
 LIVE -- it can use the console, and ^E (STOP) or ^C stops it.
 
 ```
-N            over the CALL/RST at PC (else single-step)
+N  ; over the CALL/RST at PC (else single-step)
 ```
 
 
@@ -89,8 +89,8 @@ pace against: it simply runs, ^C stops it. Either way it stops on a breakpoint
 or on a HLT nothing can wake, and it ALWAYS says which.
 
 ```
-RUN F800     boot the monitor PROM
-RUN          carry on from wherever the PC is
+RUN F800  ; boot the monitor PROM
+RUN       ; carry on from wherever the PC is
 ```
 
 
@@ -109,14 +109,12 @@ one per step, and the last line is where the monitor has left you: the next
 instruction, not yet run.
 
 ```
-S            one instruction
-S 10         ten of them
+S     ; one instruction
+S 10  ; ten of them
 ```
 
-
-
 ```
-altairsim> DEPOSIT 0 3E 05 06 0A 80 76        MVI A,5 / MVI B,0A / ADD B / HLT
+altairsim> DEPOSIT 0 3E 05 06 0A 80 76  ; MVI A,5 / MVI B,0A / ADD B / HLT
 altairsim> EX 0
 altairsim> S 3
 C0Z0M0E0I0 A=05 BC=0000 DE=0000 HL=0000 SP=0000 IE=0 PC=0002  MVI B,0A
@@ -152,9 +150,8 @@ one for the command:
 
 ```
 startup = ["MOUNT sol0:tape1 \"TRK80.WAV\"", "TYPE \"XE TRK80\\r\"", "RUN C000"]
-TYPE "XE TRK80\r"        type it now, at a running guest
+TYPE "XE TRK80\r"  ; type it now, at a running guest
 ```
-
 
 A program that clears its keyboard as it starts drops keystrokes sent before it
 is ready; TYPE cannot help there, no more than a fast typist could.
@@ -171,8 +168,8 @@ memory, both in the machine's address space. Every mismatch prints both
 addresses and their bytes; then a total. It changes nothing and runs no cycle.
 
 ```
-COMPARE 0-FF 200        page 0 against page 2
-COMPARE FF00-FFFF E000  the boot PROM against a copy up at E000
+COMPARE 0-FF 200        ; page 0 against page 2
+COMPARE FF00-FFFF E000  ; the boot PROM against a copy up at E000
 ```
 
 
@@ -199,12 +196,12 @@ continues from there -- so the rows and the columns both stay page-aligned
 however you first landed. WIDTH is a count, so it is decimal.
 
 ```
-D 100        0100-01FF, a whole page
-D 0001       0001-00FF: stops on the boundary, last line full
-D            the next page
-D FF00-FF0F  an explicit range means exactly what it says
-D 100/20     0100-011F (LEN is part of the address expression: hex)
-D 0 WIDTH=8  eight bytes per line
+D 100        ; 0100-01FF, a whole page
+D 0001       ; 0001-00FF: stops on the boundary, last line full
+D            ; the next page
+D FF00-FF0F  ; an explicit range means exactly what it says
+D 100/20     ; 0100-011F (LEN is part of the address expression: hex)
+D 0 WIDTH=8  ; eight bytes per line
 ```
 
 
@@ -230,9 +227,9 @@ Look at four bytes, patch two instructions in, and read them back:
 
 ```
 altairsim> EDIT 100
-0100 C3 IN 10       assembles DB 10, on to 0102
-0102 00 LXI H,FF13  assembles 21 13 FF, on to 0105
-0105 76 .           '.' returns to the monitor
+0100 C3 IN 10       ; assembles DB 10, on to 0102
+0102 00 LXI H,FF13  ; assembles 21 13 FF, on to 0105
+0105 76 .           ; '.' returns to the monitor
 altairsim> DISASM 100 2
 0100  DB 10     IN 10
 0102  21 13 FF  LXI H,FF13
@@ -253,9 +250,10 @@ panel's EXAMINE NEXT -- it steps one byte, quietly. Its cursor is its own; a
 DUMP does not move it.
 
 ```
-EX 100       0100  C3  .  11000011
-             A=00 ... PC=0100  JMP 0138
-EX           and the next byte, and the next
+altairsim> EX 100
+0100  C3  .  11000011
+A=00 ... PC=0100  JMP 0138
+altairsim> EX  ; and the next byte, and the next
 ```
 
 
@@ -280,7 +278,7 @@ consumes the byte and the guest never sees it. To look without touching, use
 WHO IO <port>. Reports whether anybody actually answered.
 
 ```
-I 10         port 10 -> FF   (nobody answered -- the bus floated it)
+I 10  ; port 10 -> FF   (nobody answered -- the bus floated it)
 ```
 
 
@@ -291,7 +289,6 @@ LOAD <file> [AT <addr>] [FORMAT=BIN|HEX|SREC] [ROM]
 ```
 Put a file into memory. There are three kinds of file and they differ in ONE
 way -- whether the file knows where it goes.
-
 
 ```
 HEX  Intel HEX. ASCII text, and it CARRIES ITS OWN ADDRESSES, so it needs
@@ -308,8 +305,6 @@ HEX  Intel HEX. ASCII text, and it CARRIES ITS OWN ADDRESSES, so it needs
         10 = sixteen data bytes follow
 ```
 
-
-
 ```
 SREC Motorola S-records -- the Motorola-world counterpart to Intel HEX.
      ASCII text that CARRIES ITS OWN ADDRESSES too, so like HEX it needs no
@@ -319,14 +314,11 @@ SREC Motorola S-records -- the Motorola-world counterpart to Intel HEX.
        S9030000FC
 ```
 
-
-
 ```
 BIN  A flat binary: bytes, and nothing else. It carries NO addresses, so
      it cannot say where it goes and AT is REQUIRED. Without one, LOAD
      refuses rather than guess.
 ```
-
 
 WHICH ONE IS DECIDED BY THE FILE'S CONTENTS, not its name -- Intel HEX and
 S-records each announce themselves, and a .bin full of HEX text is still HEX.
@@ -345,11 +337,11 @@ the operator pulling the chip and putting it in a programmer. It is why the
 operator can write a ROM and the guest cannot.
 
 ```
-LOAD dbl.hex                      where the file says, through the bus
-LOAD monitor.bin AT F000 ROM      a flat binary, burned into the ROM there
-LOAD prog.hex AT 100              relocate: first record goes to 0100
-LOAD odd.txt AT 0 FORMAT=HEX      it IS hex, whatever it is called
-LOAD mon.txt FORMAT=SREC          read it as Motorola S-records
+LOAD dbl.hex                  ; where the file says, through the bus
+LOAD monitor.bin AT F000 ROM  ; a flat binary, burned into the ROM there
+LOAD prog.hex AT 100          ; relocate: first record goes to 0100
+LOAD odd.txt AT 0 FORMAT=HEX  ; it IS hex, whatever it is called
+LOAD mon.txt FORMAT=SREC      ; read it as Motorola S-records
 ```
 
 
@@ -363,8 +355,8 @@ source and dest may overlap either way without a block eating its own tail. The
 writes are real bus cycles; ROM burns instead, the way EDIT and DEPOSIT do.
 
 ```
-MOVE 100-1FF 200    page 1 up to page 2
-MOVE 0-FFF 1000     the first 4K, up by 4K
+MOVE 100-1FF 200  ; page 1 up to page 2
+MOVE 0-FFF 1000   ; the first 4K, up by 4K
 ```
 
 
@@ -399,7 +391,7 @@ a Z80. BREAK ... IF reads the very same names.
 REGS
 SET REG A=3F
 SET REG PC=FF00
-SET REG IX=8000   Z80 only
+SET REG IX=8000  ; Z80 only
 ```
 
 
@@ -424,11 +416,11 @@ is the DISASM listing -- address, object bytes, mnemonic and any SYMBOLS labels
 LOAD does not read either back: BIN and HEX round-trip, OCTAL and PRN do not.
 
 ```
-SAVE out.hex 0-FFF                Intel HEX, by its name
-SAVE out.bin F800-FFFF            a flat binary, by its name
-SAVE out.oct 100-1FF              an octal listing, by its name
-SAVE out.prn 100-1FF              a disassembly listing, by its name
-SAVE out.dat 0-FFF FORMAT=HEX     hex, though it is not called .hex
+SAVE out.hex 0-FFF             ; Intel HEX, by its name
+SAVE out.bin F800-FFFF         ; a flat binary, by its name
+SAVE out.oct 100-1FF           ; an octal listing, by its name
+SAVE out.prn 100-1FF           ; a disassembly listing, by its name
+SAVE out.dat 0-FFF FORMAT=HEX  ; hex, though it is not called .hex
 ```
 
 
@@ -457,13 +449,12 @@ auto-stop mark -- the way to stop right after a load lands without knowing where
 the loader ends.
 
 ```
-BREAK FF13       stop when PC gets there
-BREAK 2C00-2CFF  ...anywhere in a range
-BREAK MEM W 100  stop when anything WRITES 0100
-BREAK IO R 10    stop on an IN from port 10
-BREAK TAPE STOP  stop when a cassette deck auto-stops after a load
+BREAK FF13       ; stop when PC gets there
+BREAK 2C00-2CFF  ; ...anywhere in a range
+BREAK MEM W 100  ; stop when anything WRITES 0100
+BREAK IO R 10    ; stop on an IN from port 10
+BREAK TAPE STOP  ; stop when a cassette deck auto-stops after a load
 ```
-
 
 A breakpoint may carry a CONDITION and stop only when it holds. IF <expr> tests
 the registers. A bare word that names a register IS that register, so a literal
@@ -489,11 +480,10 @@ not have is an error, so IF IX==0 waits for a Z80 to be the one in the socket.
 BREAK 100 IF A==0
 BREAK 100 IF HL==8000 && Z==1
 BREAK 100 IF (A&0F)==0
-BREAK IO R 10 IF B==5      stop on an IN from 10, but only while B==5
-BREAK IO R 10 LOADS A>7F   ...only when port 10 hands back a byte over 7F
-BREAK 100 IF IX==8000      Z80 -- IX is not an 8080 register
+BREAK IO R 10 IF B==5     ; stop on an IN from 10, but only while B==5
+BREAK IO R 10 LOADS A>7F  ; ...only when port 10 hands back a byte over 7F
+BREAK 100 IF IX==8000     ; Z80 -- IX is not an 8080 register
 ```
-
 
 TRACE ON|OFF makes it a TRACEPOINT: instead of stopping, it turns TRACE on or
 off and the machine RUNS ON. Two of them trace a REGION and nothing else --
@@ -503,11 +493,11 @@ traces the instruction AT it; TRACE OFF
 does not -- the region is [on, off).
 
 ```
-BREAK 2C00 TRACE ON        start tracing when PC gets to 2C00
-BREAK 2C40 TRACE OFF       ...and stop again at 2C40
-BREAK MEM W 2000 TRACE ON  start when anything writes 2000 (that write is
-                           the first line -- a trace shows its own reason)
-BREAK 200 IF HL==8000 TRACE ON    conditional, and still does not stop
+BREAK 2C00 TRACE ON             ; start tracing when PC gets to 2C00
+BREAK 2C40 TRACE OFF            ; ...and stop again at 2C40
+BREAK MEM W 2000 TRACE ON       ; start when anything writes 2000 (that write is
+                                ; the first line -- a trace shows its own reason)
+BREAK 200 IF HL==8000 TRACE ON  ; conditional, and still does not stop
 ```
 
 Where the trace GOES is TRACE's business, not the tracepoint's: set it up with
@@ -530,11 +520,11 @@ decides where to stop. CPU= is an instruction set, one of 8080 or z80, and is
 only for when the machine has no CPU to ask.
 
 ```
-DI FF00      sixteen instructions of the boot PROM
-DI FF00 40   forty of them instead
-DI           carry on from there
-DI 0-2F      exactly that range
-DI FF00 CPU=z80    decode as Z80 when nothing in the machine can say
+DI FF00          ; sixteen instructions of the boot PROM
+DI FF00 40       ; forty of them instead
+DI               ; carry on from there
+DI 0-2F          ; exactly that range
+DI FF00 CPU=z80  ; decode as Z80 when nothing in the machine can say
 ```
 
 
@@ -567,10 +557,10 @@ never grows, so it costs the same whether the machine ran for a second or a
 week. Ask for more than 8192 and you get the 8192 it holds.
 
 ```
-HISTORY          the last 16 instructions
-HISTORY 100      the last hundred instructions
-HISTORY BUS      the last 16 bus cycles
-HISTORY BUS 100  the last hundred cycles
+HISTORY          ; the last 16 instructions
+HISTORY 100      ; the last hundred instructions
+HISTORY BUS      ; the last 16 bus cycles
+HISTORY BUS 100  ; the last hundred cycles
 ```
 
 
@@ -595,14 +585,12 @@ SYMBOLS LOAD <file> [REPLACE] | SYMBOLS CLEAR
 Load an assembler's symbols so you can BREAK, DUMP and EXAMINE by NAME instead of
 by hex, and SHOW SYMBOLS to read the table. Two file kinds, and one absolute rule:
 
-
 ```
 .PRN / .LST   an assembler LISTING -- CP/M ASM, Microsoft M80, DR MAC. It marks
               an EQU, so a constant is told apart from a program label.
 .SYM          the CP/M symbol file DR MAC/RMAC write and SID reads. A flat list
               of name=value, no label/constant distinction. (L80 writes no .SYM.)
 ```
-
 
 ADDRESSES MUST BE ABSOLUTE. A relocatable M80 listing is refused, by the line --
 link it and load the .SYM, or assemble to an absolute origin.
@@ -634,12 +622,11 @@ CONTENTION. A cycle is kept if it is any of them -- MASK=DMA is every cycle a
 master drove, whatever its type.
 
 ```
-TRACE ON                    every cycle, to the console
-TRACE ON run.log            ...to a file
-TRACE ON MASK=IN,OUT        just the port traffic
+TRACE ON              ; every cycle, to the console
+TRACE ON run.log      ; ...to a file
+TRACE ON MASK=IN,OUT  ; just the port traffic
 TRACE OFF
 ```
-
 
 TRACE OFF stops the tracing but REMEMBERS where it was going -- a later TRACE
 ON, or a tracepoint, resumes to the same file and mask. That is what lets you
@@ -673,10 +660,10 @@ ROM range says which image is in it -- an empty socket decodes nothing, so it
 is not in the memory column at all; it is in UNITS, marked (empty).
 
 ```
-BOARDS                   the backplane
-BOARD                    the same thing: a prefix of BOARDS
-BOARDS ADD memory mem0   fit one -- SHOW BOARDS lists the types
-BOARDS REMOVE mem0       pull one out
+BOARDS                  ; the backplane
+BOARD                   ; the same thing: a prefix of BOARDS
+BOARDS ADD memory mem0  ; fit one -- SHOW BOARDS lists the types
+BOARDS REMOVE mem0      ; pull one out
 ```
 
 
@@ -718,7 +705,7 @@ you REPLACED: there is no undo but the file you saved it to.
 
 ```
 CONFIG SAVE machines/mine.toml
-CONFIG LOAD machines/mine.toml      ...and this is how you get it back
+CONFIG LOAD machines/mine.toml  ; ...and this is how you get it back
 ```
 
 
@@ -738,7 +725,6 @@ Endpoints: console | null | loopback | scripted | socket:PORT[?banner] | socket:
 telnet:PORT[?banner=off] | telnet:HOST:PORT | serial:DEVICE | in:PATH |
 out:PATH | terminal[?emulation=vt100&size=80x24] | printer:QUEUE |
 <endpoint>|FILE | <endpoint>|socket:PORT
-
 
 ```
 console     the host's terminal -- the keyboard and screen you are typing at
@@ -781,7 +767,6 @@ printer:    QUEUE -- a real print queue on this host (only where the build found
             watcher never paces the guest; a slow one loses scrollback, not a byte.
 ```
 
-
 Exactly ONE unit may hold the console; connecting a second STEALS it and says
 who from. Two boards reading one keyboard would each get half the characters.
 
@@ -789,17 +774,17 @@ who from. Two boards reading one keyboard would each get half the characters.
 CONN sio0:a console
 CONN sio0:b null
 CONN sio0:b loopback
-CONN sio0:b socket:2323            `telnet localhost 2323` now reaches the guest
-CONN sio0:b telnet:2323            ...the same, but no double echo for a human
-CONN sio0:b socket:bbs.example:23  the guest dials OUT, to somebody else's port
-CONN sio0:b serial:/dev/tty.usbserial-AL009KFH    a real cable, real hardware
-CONN sio0:b serial:COM3                           ...the same, on Windows
-CONN lpt0:prn out:printout.txt                    capture a printer to a file
-CONN 4pio0:ja in:TAPE.TAP?cps=300                 a paper-tape reader (88-HSR)
-CONN 4pio0:jb out:TAPE.PUN                        a paper-tape punch
-CONN sio0:a terminal?emulation=adm3a              a windowed ADM-3A of its own
-CONN lpt0:prn printer:linewriter                  print to a real host queue
-CONN sio0:b socket:2323|bbs.hex?fmt=cols          telnet in, and TAP it to a log
+CONN sio0:b socket:2323                         ; `telnet localhost 2323` now reaches the guest
+CONN sio0:b telnet:2323                         ; ...the same, but no double echo for a human
+CONN sio0:b socket:bbs.example:23               ; the guest dials OUT, to somebody else's port
+CONN sio0:b serial:/dev/tty.usbserial-AL009KFH  ; a real cable, real hardware
+CONN sio0:b serial:COM3                         ; ...the same, on Windows
+CONN lpt0:prn out:printout.txt                  ; capture a printer to a file
+CONN 4pio0:ja in:TAPE.TAP?cps=300               ; a paper-tape reader (88-HSR)
+CONN 4pio0:jb out:TAPE.PUN                      ; a paper-tape punch
+CONN sio0:a terminal?emulation=adm3a            ; a windowed ADM-3A of its own
+CONN lpt0:prn printer:linewriter                ; print to a real host queue
+CONN sio0:b socket:2323|bbs.hex?fmt=cols        ; telnet in, and TAP it to a log
 ```
 
 DISCONNECT takes the cable out again; SHOW CONSOLE says which unit holds it.
@@ -845,9 +830,9 @@ intercepts it before the guest is ever offered the byte, so the guest cannot
 disable it -- and that is why it must not be a key the guest needs.
 
 ```
-CONSOLE            the settings, and which board unit is wired to the terminal
-CONSOLE stop=1D    make it ^]  (hex: it is a byte on the wire; attn= also works)
-CONSOLE upper=on strip7out=on   two at once, the classic MITS BASIC pair
+CONSOLE                        ; the settings, and which board unit is wired to the terminal
+CONSOLE stop=1D                ; make it ^]  (hex: it is a byte on the wire; attn= also works)
+CONSOLE upper=on strip7out=on  ; two at once, the classic MITS BASIC pair
 ```
 
 This command does NOT choose which board is the console -- CONNECT does that
@@ -893,8 +878,8 @@ It is a LINE RUNNER, not SIMH's scripting language: no arguments, no IF or GOTO.
 For conditional or interactive automation, drive a live guest over --mcp.
 
 ```
-DO cpm.ini                   paths relative to cpm.ini's own directory
-DO examples/basic/b.ini      run it from anywhere
+DO cpm.ini               ; paths relative to cpm.ini's own directory
+DO examples/basic/b.ini  ; run it from anywhere
 ```
 
 
@@ -917,8 +902,8 @@ built-in's startup: like `base =`, it gives you the HARDWARE, and the lines afte
 do the MOUNTing and RUNning. For a machine from a FILE, use CONFIG LOAD.
 
 ```
-MACHINE default                  the 56K CP/M Altair, DBL PROM at FF00
-MACHINE none ; BOARDS ADD 8080 cpu0 ; ... ; POWER ; RUN 0
+MACHINE default  ; the 56K CP/M Altair, DBL PROM at FF00
+MACHINE none     ; an empty backplane: BOARDS ADD 8080 cpu0, ..., POWER, RUN 0
 ```
 
 
@@ -953,13 +938,12 @@ and it will tell you so.
 ```
 MOUNT dsk0:drive0 disks/cpm.dsk
 MOUNT dsk0:drive1 disks/master.dsk WP
-MOUNT dsk0:drive1 new.dsk CREATE    a blank disk to FORMAT from the guest
+MOUNT dsk0:drive1 new.dsk CREATE      ; a blank disk to FORMAT from the guest
 MOUNT mem0:rom0 roms/monitor.bin
-MOUNT ACR tape.bin      the one cassette, its one tape: acr0:tape
-MOUNT ACR new.wav CREATE mode=record   a blank tape, in and recording
-MOUNT sol0:tape1 TRK80.WAV extract     mount a WAV and split it into .TAP files
+MOUNT ACR tape.bin                    ; the one cassette, its one tape: acr0:tape
+MOUNT ACR new.wav CREATE mode=record  ; a blank tape, in and recording
+MOUNT sol0:tape1 TRK80.WAV extract    ; mount a WAV and split it into .TAP files
 ```
-
 
 SHOW MOUNTS is the other half of this command: every socket in the machine,
 what is in it, and which are still empty. UNMOUNT takes it back out. A relative
@@ -1018,14 +1002,14 @@ window's title, and what CONFIG SAVE writes.
 ```
 SET mem0 fill=zero
 SET mem0 phantom=read
-SET acr0:tape mode=record   the tape in the recorder, not the recorder
-SET vdm0 width=1024      how wide the video window opens, in pixels (auto = ~half the screen)
-SET DISPLAY focus=on     the video window takes the keyboard, not the terminal
-SET DISPLAY crt=on       paint the window like the period tube: soft phosphor and 4:3
-SET MACHINE name=mybox   what CONFIG SAVE calls the machine
-SET REG A=3F             a register in the CPU that is in the socket
-SET BUS UNCLAIMED=WARN   warn on a cycle no board answered
-                         (also CONTENTION=WARN|ERROR|SILENT, UNCLAIMED=WARN|HALT|SILENT)
+SET acr0:tape mode=record  ; the tape in the recorder, not the recorder
+SET vdm0 width=1024        ; how wide the video window opens, in pixels (auto = ~half the screen)
+SET DISPLAY focus=on       ; the video window takes the keyboard, not the terminal
+SET DISPLAY crt=on         ; paint the window like the period tube: soft phosphor and 4:3
+SET MACHINE name=mybox     ; what CONFIG SAVE calls the machine
+SET REG A=3F               ; a register in the CPU that is in the socket
+SET BUS UNCLAIMED=WARN     ; warn on a cycle no board answered
+                           ; (also CONTENTION=WARN|ERROR|SILENT, UNCLAIMED=WARN|HALT|SILENT)
 ```
 
 
@@ -1036,23 +1020,23 @@ SHOW <id>|BOARDS|BOARD <type> [UNITS]|MACHINES|MACHINE [<name>]|BUS [MAP|IO|IRQ|
 ```
 
 ```
-SHOW mem0        regions and properties
-SHOW BOARDS      the board types you can add
-SHOW BOARD sol   one type's description and properties (add UNITS for just those)
-SHOW MACHINES    the built-in machines you can boot
-SHOW MACHINE     the current machine (add a name for a built-in's detail)
-SHOW BUS MAP     who decodes what, and what floats
-SHOW BUS IRQ     VI0-VI7: who is strapped where, who is pulling, who wins
-SHOW MOUNTS      every disk, tape and ROM in the machine, and what is in it
-SHOW PATHS       what a path resolves against -- and there is more than one answer
-SHOW CONSOLE     which unit holds the keyboard, and its transforms
-SHOW DISPLAY     the host video window: keyboard focus, and the CRT look
-SHOW TERMINAL    the built-in terminal's transforms (strip7out, cr, bsdel, ...)
-SHOW JOYSTICKS   the host game controllers a D+7A can read (SDL builds)
-SHOW SYMBOLS     the loaded symbols (SHOW SYMBOLS SIO* filters); load them with SYMBOLS
-SHOW CLOCK       emulated time: T-states since POWER, and what they are in seconds
-SHOW ROMS        the ROM images built into this binary, and where each came from
-SHOW VERSION     which build this is, and the commit it was built from
+SHOW mem0       ; regions and properties
+SHOW BOARDS     ; the board types you can add
+SHOW BOARD sol  ; one type's description and properties (add UNITS for just those)
+SHOW MACHINES   ; the built-in machines you can boot
+SHOW MACHINE    ; the current machine (add a name for a built-in's detail)
+SHOW BUS MAP    ; who decodes what, and what floats
+SHOW BUS IRQ    ; VI0-VI7: who is strapped where, who is pulling, who wins
+SHOW MOUNTS     ; every disk, tape and ROM in the machine, and what is in it
+SHOW PATHS      ; what a path resolves against -- and there is more than one answer
+SHOW CONSOLE    ; which unit holds the keyboard, and its transforms
+SHOW DISPLAY    ; the host video window: keyboard focus, and the CRT look
+SHOW TERMINAL   ; the built-in terminal's transforms (strip7out, cr, bsdel, ...)
+SHOW JOYSTICKS  ; the host game controllers a D+7A can read (SDL builds)
+SHOW SYMBOLS    ; the loaded symbols (SHOW SYMBOLS SIO* filters); load them with SYMBOLS
+SHOW CLOCK      ; emulated time: T-states since POWER, and what they are in seconds
+SHOW ROMS       ; the ROM images built into this binary, and where each came from
+SHOW VERSION    ; which build this is, and the commit it was built from
 ```
 
 
@@ -1080,12 +1064,11 @@ SAVE writes out as startup = [...]. A bare STARTUP shows the list, numbered; the
 rest edit it in place, so you can compose a boot sequence at the prompt and save it:
 
 ```
-STARTUP                          show the list, numbered
-STARTUP ADD MOUNT dsk0:drive0 "CP-M 2.2.dsk"   append a line, verbatim
-STARTUP REMOVE 2                 drop line 2
-STARTUP CLEAR                    empty the list
+STARTUP                                       ; show the list, numbered
+STARTUP ADD MOUNT dsk0:drive0 "CP-M 2.2.dsk"  ; append a line, verbatim
+STARTUP REMOVE 2                              ; drop line 2
+STARTUP CLEAR                                 ; empty the list
 ```
-
 
 ADD takes the REST OF THE LINE exactly as typed -- quotes, spaces and all -- because
 a startup entry is just a command line: anything valid at the prompt is valid in the
@@ -1121,9 +1104,9 @@ lines, which is what you want when you are hunting for the name. HELP with a
 command gives the usage and the examples.
 
 ```
-HELP         the list
-HELP DUMP    the detail
-?            the same as HELP
+HELP       ; the list
+HELP DUMP  ; the detail
+?          ; the same as HELP
 ```
 
 
