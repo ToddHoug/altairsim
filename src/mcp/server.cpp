@@ -201,13 +201,41 @@ Json toolList() {
                        "`interrupted`. Bus and board messages from the run (a SET BUS "
                        "UNCLAIMED=WARN line, say) come back in `warnings`. This is the expect "
                        "loop: type a command with `input`, read the reply, call again. Never "
-                       "blocks.",
+                       "blocks. Refused while the guest is free-running (`start`) -- `stop` it "
+                       "first.",
                        p, {}));
     }
     {
         Json p = Json::obj();
+        p["from"]  = intSchema("Optional start address: set PC here first (like RUN <addr>). "
+                               "Omit to resume from the current PC.");
+        p["input"] = strSchema("Optional keystrokes to type at the console first, as for `run`.");
+        list.push(tool("start",
+                       "Start the guest and LEAVE IT RUNNING; returns at once. The guest keeps "
+                       "running between tool calls, as it does after RUN at the altairsim> "
+                       "prompt -- so a server on the guest answers its clients, two machines run "
+                       "side by side, and a person typing at the --mirror is answered. Every "
+                       "other tool still works: each is served between two slices of the guest, "
+                       "with the guest paused while it runs. Console output collects until "
+                       "`recv` takes it. `SET cpu0 clock_hz=N` paces the guest to that crystal; "
+                       "at a prompt the server naps, as RUN does. Ends on `stop`, a HLT, a "
+                       "breakpoint, SET BUS UNCLAIMED=HALT, a BREAK TAPE STOP or a SIGINT -- "
+                       "never on a timeout and never because the guest is idle. `status` says "
+                       "whether it is still running and, if not, why it stopped. `run` and "
+                       "`step` are refused while it runs.",
+                       p, {}));
+    }
+    list.push(tool("stop",
+                   "Stop a guest that `start` left running, and report the whole free run: "
+                   "`stopped` (why it ended), `pc`, `steps`, `t_states`. Console output is NOT "
+                   "taken -- it stays for `recv`. If the guest already stopped by itself (a HLT, "
+                   "a breakpoint), this reports that stop and `was_running` is false.",
+                   Json::obj(), {}));
+    {
+        Json p = Json::obj();
         p["text"] = strSchema("Keystrokes to type at the console (raw bytes). Does NOT run the "
-                              "guest -- follow with `run` (or use run's own `input`). Control "
+                              "guest -- follow with `run` (or use run's own `input`), unless "
+                              "`start` left it running, when it reads them itself. Control "
                               "bytes go through untouched -- write one as the JSON escape it is: "
                               "\\u0003 is ^C, \\u001a is ^Z, \\u001b is ESC. \\x03 is NOT JSON "
                               "and arrives as the characters x03.");
@@ -215,7 +243,9 @@ Json toolList() {
     }
     list.push(tool("recv",
                    "Drain and return everything the guest has printed to the console since the "
-                   "last read, without running it.",
+                   "last read, without running it. While the guest free-runs (`start`) the "
+                   "server holds at most the newest 1 MiB; `dropped` counts any older bytes "
+                   "that were let go because nobody read them.",
                    Json::obj(), {}));
     list.push(tool("regs",
                    "The CPU registers right now: every register the active core declares, plus "
@@ -372,7 +402,9 @@ Json toolList() {
                    "A guaranteed-non-blocking check (#490): board id, whether the worker is "
                    "currently dispatched on ANY request -- not just `run`; a long `monitor`/"
                    "`mem_load`/`snapshot` counts too -- plus the step count and PC as of the "
-                   "last `run`. "
+                   "last `run`, or of the free run `start` began. `running` is true while "
+                   "that free run goes on; once it ends, `stop_reason` says why (`requested`, "
+                   "`halt`, `breakpoint`, `interrupted`, `unclaimed`, `tape-stop`, `no-cpu`). "
                    "Unlike every other tool, this one is answered directly by the reader thread "
                    "rather than the worker, so it still answers while the server is wedged or "
                    "mid-flight on anything -- the exact case where `recv`, `regs`, even a fresh "
@@ -694,6 +726,44 @@ struct RunSnapshot {
     uint64_t    steps    = 0;
     uint32_t    pc       = 0;
     std::string boardId;
+    bool        running  = false;  // #602: a free run (`start`) is going on
+    std::string stopReason;        // why the last free run ended; empty before the first
+};
+
+// #602: THE GUEST RUNNING ON ITS OWN, between requests -- `start` to `stop`. It runs on the
+// WORKER thread, the same one that serves every request: runMcp's loop runs a slice of the
+// guest whenever no request is waiting, and serves a request between two slices, with the
+// guest paused. So no second thread ever steps the Machine (the line #489 was declined on),
+// and no tool needs a lock it did not already have. Worker-thread only -- the reader never
+// reads this; `status` reads the RunSnapshot each slice publishes.
+struct FreeRun {
+    using clk = std::chrono::steady_clock;
+    bool        running = false;
+    std::string stopped;             // why the last free run ended; empty before the first
+    uint64_t    steps   = 0;         // this free run's totals, for `stop` and `status`
+    uint64_t    tStates = 0;
+    RunResult   last;                // the slice that ended it -- unclaimed's port
+    uint64_t    dropped = 0;         // console bytes let go since the last `recv`
+
+    // Pacing: the wall time the crystal is counted from, the T-states this free run has
+    // spent since then, and the crystal it was counted at. Counted from the free run's OWN
+    // T-states, not the machine clock, so a `restore` or CONFIG LOAD between two slices,
+    // which moves that clock, cannot throw the pacing off. `nextSlice` is the earliest wall
+    // time the next slice may start -- how long the worker WAITS for a request before it
+    // runs the guest again. A wait, not a sleep, so a request that arrives during a pacing
+    // gap or an idle nap is served at once.
+    clk::time_point baseW{};
+    uint64_t        sinceBase = 0;
+    long long       baseHz    = 0;
+    clk::time_point nextSlice{};
+    clk::time_point idleSince{};     // when this unbroken quiet began; unset = busy
+    bool            servedSinceSlice = false;  // fairness: see runMcp
+
+    void rebase(clk::time_point wallNow, long long hz) {
+        baseW     = wallNow;
+        sinceBase = 0;
+        baseHz    = hz;
+    }
 };
 
 struct McpSession {
@@ -710,6 +780,8 @@ struct McpSession {
     // each other: a poller must never see this slice's steps against last slice's pc).
     std::mutex  statusMu;
     RunSnapshot status;
+
+    FreeRun free;  // #602 -- worker thread only
 };
 
 // The board id for whichever board carries a CpuCard, or empty if there is none. Same walk
@@ -744,14 +816,20 @@ Json statusResult(McpSession& sess, std::mutex& queueMu, const bool& haveCurrent
     d["steps"]      = Json((long long)snap.steps);
     d["pc"]         = Json((long long)snap.pc);
     d["generation"] = Json((long long)snap.seq);
+    d["running"]    = Json(snap.running);
+    d["stop_reason"] = Json(snap.stopReason);
 
     char pcHex[16];  // RunSnapshot::pc is uint32_t; "%04X" of a full 32-bit value needs 9
                      // bytes, not the 8-bit CPU's usual 4 -- oversized on purpose.
     std::snprintf(pcHex, sizeof pcHex, "%04X", (unsigned)snap.pc);
     std::string text = snap.boardId.empty() ? "(no board)" : snap.boardId;
     text += inFlight ? " busy" : " idle";
+    text += snap.running ? ", guest running" : "";
     text += ", steps=" + std::to_string(snap.steps) + " pc=" + pcHex;
-    if (inFlight) text += " (pc/steps are the last run's published slice boundary, not a live read)";
+    if (!snap.running && !snap.stopReason.empty())
+        text += " (free run stopped: " + snap.stopReason + ")";
+    if (inFlight || snap.running)
+        text += " (pc/steps are the last published slice boundary, not a live read)";
     return dataResult(d, text);
 }
 
@@ -819,6 +897,162 @@ ScriptedStream* console(Machine& m, McpSession& s, std::string& err) {
     err = "no console line: CONNECT a serial unit to 'scripted' (one wired to 'console' "
           "is adopted automatically).";
     return nullptr;
+}
+
+// One slice of the guest, in instructions -- for `run` and for the free run alike.
+constexpr uint64_t kSliceSteps = 2000;
+
+// THE StopReasons THAT END A RUN, for `run` and the free run both. One list, so a new
+// StopReason cannot be honoured by one loop and run straight past by the other -- the way
+// SET BUS UNCLAIMED=HALT and BREAK TAPE STOP were once run past under MCP (#580). The name
+// is stopReasonName()'s.
+bool sliceStops(StopReason w) {
+    switch (w) {
+    case StopReason::Halted:
+    case StopReason::Breakpoint:
+    case StopReason::NoCpu:
+    case StopReason::StopRequested:
+    case StopReason::Unclaimed:
+    case StopReason::TapeStop:
+        return true;
+    default:
+        return false;
+    }
+}
+
+// The monitor's stop line for SET BUS UNCLAIMED=HALT, so the text says WHICH port.
+std::string unclaimedLine(const RunResult& r) {
+    char b[96];
+    std::snprintf(b, sizeof b, "stopped: %s port 0x%02X, which no board decodes",
+                  r.write ? "OUT to" : "IN from", r.port);
+    return b;
+}
+
+// #602: the free run's state, for `status` -- the same whole-struct publish `run` makes.
+void publishFree(Machine& m, McpSession& sess) {
+    CpuCore*    cpu = m.cpu();
+    std::string id  = cpuBoardId(m);
+    std::lock_guard<std::mutex> lk(sess.statusMu);
+    sess.status.boardId    = id;
+    sess.status.steps      = sess.free.steps;
+    sess.status.pc         = cpu ? cpu->pc() : 0;
+    sess.status.running    = sess.free.running;
+    sess.status.stopReason = sess.free.stopped;
+    ++sess.status.seq;
+}
+
+void endFreeRun(Machine& m, McpSession& sess, const std::string& why) {
+    sess.free.running = false;
+    sess.free.stopped = why;
+    publishFree(m, sess);
+}
+
+// Console output the free run holds for `recv`. A guest nobody reads -- a server logging
+// every request for hours -- would otherwise grow it without end.
+constexpr size_t kMaxHeldOutput = 1 << 20;
+
+// #602: ONE SLICE OF THE FREE RUN, run by runMcp's worker when no request is waiting. The
+// stop rules are `run`'s (sliceStops); the pacing and the idle nap are the monitor RUN's
+// (runMachine), because a free run IS a RUN -- it has no `until` and no timeout, and it does
+// not stop at a prompt, it naps there. Everything is looked up again each slice: a request
+// served between two slices may have replaced the machine (CONFIG LOAD) or its console.
+//
+// Ends by setting `nextSlice`: the wall time the worker waits for before the next slice.
+void freeRunSlice(Machine& m, McpSession& sess) {
+    using clk = std::chrono::steady_clock;
+    FreeRun& f = sess.free;
+    f.servedSinceSlice = false;
+
+    if (!m.cpu()) {
+        endFreeRun(m, sess, stopReasonName(StopReason::NoCpu));
+        return;
+    }
+    // A ^C that landed since the last slice -- consumed, because answering it is what
+    // "handled" means (see the same check in `run`).
+    if (Debugger::stopRequested()) {
+        Debugger::clearStopRequest();
+        endFreeRun(m, sess, stopReasonName(StopReason::StopRequested));
+        return;
+    }
+
+    std::string     err;
+    ScriptedStream* con          = console(m, sess, err);  // null on a machine with none
+    const uint64_t  rxBefore     = m.rxBytes();
+    const size_t    outBefore    = con ? con->out().size() : 0;
+    const uint64_t  hungryBefore = con ? con->hungry() : 0;
+
+    RunResult r = m.debug.run(kSliceSteps, false);  // keep a pending stop -- see `run`
+    m.pump();
+    f.steps += r.steps;
+    f.tStates += r.tStates;
+    f.sinceBase += r.tStates;
+
+    // What this slice did, taken BEFORE the held output is trimmed below.
+    const SliceWork work{r.steps, con ? con->out().size() - outBefore : 0,
+                         m.rxBytes() - rxBefore, con ? con->hungry() - hungryBefore : 0};
+    if (con) f.dropped += con->trimOut(kMaxHeldOutput);
+
+    if (sliceStops(r.why)) {
+        if (r.why == StopReason::StopRequested) Debugger::clearStopRequest();
+        f.last = r;
+        endFreeRun(m, sess, stopReasonName(r.why));
+        return;
+    }
+    publishFree(m, sess);
+
+    const auto now = clk::now();
+
+    // THE IDLE NAP -- runMachine's rule (monitor.cpp): a guest that said nothing, received
+    // nothing and kept finding the console empty is at a prompt. Once that has lasted
+    // kIdleWarmup, wait kIdleNap before the next slice, so a free-running guest at A> does
+    // not hold a whole core. The wait ends early for a request, and a typed key is read
+    // within one nap.
+    //
+    // FLAT OUT ONLY, which is where this differs from runMachine. With a crystal set, the
+    // pacing wait below already leaves the host idle. A nap in place of it, as runMachine
+    // takes, leaves the slice before it unpaced: measured at clock_hz=2000000, the guest at a
+    // prompt ran 1.5x its crystal, and a guest timing a reply while it polls the console
+    // would time it short (#606 is the same fault in the monitor's RUN).
+    static constexpr uint64_t kIdleRatio  = 32;
+    static constexpr auto     kIdleWarmup = std::chrono::milliseconds(20);
+    static constexpr auto     kIdleNap    = std::chrono::milliseconds(4);
+    const bool idling = m.clock.free() && m.clock.idle() && con && con->drained() &&
+                        guestIsWaiting(work, kIdleRatio);
+    if (!idling) {
+        f.idleSince = clk::time_point{};
+    } else if (f.idleSince == clk::time_point{}) {
+        f.idleSince = now;
+    } else if (now - f.idleSince >= kIdleWarmup) {
+        f.nextSlice = now + kIdleNap;
+        return;
+    }
+
+    // PACE TO THE CRYSTAL when one is asked for, as `run` and RUN do: the next slice waits
+    // until wall time has caught up with the emulated time this free run has spent.
+    f.nextSlice = now;
+    const long long hz = m.clock.free() ? 0 : m.clock.hz();
+    // A NEW CRYSTAL (or none) starts a new count: the T-states spent at the old one say
+    // nothing about the new one, and counting them at a lowered clock_hz would freeze the
+    // guest for as long as it takes the new crystal to "earn" them.
+    if (hz != f.baseHz) {
+        f.rebase(now, hz);
+        return;
+    }
+    if (hz <= 0) {
+        f.rebase(now, hz);  // flat out: nothing to pace
+        return;
+    }
+    const double want = (double)f.sinceBase / (double)hz;
+    const double got  = std::chrono::duration<double>(now - f.baseW).count();
+    // BEHIND -- wall time passed that the guest did not run: a long request served between
+    // two slices, the thread descheduled. It is not owed, so re-base rather than sprint to
+    // catch up.
+    if (want < got) {
+        f.rebase(now, hz);
+        return;
+    }
+    f.nextSlice = f.baseW + std::chrono::duration_cast<clk::duration>(
+                                std::chrono::duration<double>(want));
 }
 
 Json callTool(Machine& m, McpSession& sess, const std::string& name, const Json& args) {
@@ -1135,7 +1369,79 @@ Json callTool(Machine& m, McpSession& sess, const std::string& name, const Json&
         con->clearOut();
         Json d = Json::obj();
         d["output"] = Json(out);
-        return dataResult(d, out.empty() ? "(nothing)" : out);
+        std::string text = out.empty() ? "(nothing)" : out;
+        if (sess.free.dropped) {
+            d["dropped"] = Json((long long)sess.free.dropped);
+            text = "[" + std::to_string(sess.free.dropped) +
+                   " older bytes dropped: nobody read them]\n" + text;
+            sess.free.dropped = 0;
+        }
+        return dataResult(d, text);
+    }
+
+    // #602: the two tools that move the guest themselves. The free run owns it until `stop`.
+    if ((name == "run" || name == "step") && sess.free.running)
+        return textResult("the guest is running (`start`) -- `stop` it first", true);
+
+    if (name == "start") {
+        if (sess.free.running) return textResult("the guest is already running", true);
+        CpuCore* cpu = m.cpu();
+        if (!cpu) return textResult("no CPU in this machine", true);
+        // Adopt the console now, as `run` does, so the guest never reads the JSON-RPC
+        // stdin. A machine with no console line can still free-run -- a server on a socket
+        // needs none -- but then it cannot be typed at.
+        std::string     err;
+        ScriptedStream* con = console(m, sess, err);
+        if (args.has("input") && !con) return textResult(err, true);
+
+        if (args.has("from")) cpu->setPc((uint16_t)args.at("from").integer());
+        if (args.has("input")) con->feed(args.at("input").str());
+        m.bus.resetUnclaimedWarnings();  // as `run` and RUN do (#580)
+
+        FreeRun& f = sess.free;
+        const auto now = FreeRun::clk::now();
+        f.running   = true;
+        f.stopped.clear();
+        f.steps     = 0;
+        f.tStates   = 0;
+        f.last      = RunResult{};
+        f.idleSince = FreeRun::clk::time_point{};
+        f.nextSlice = now;
+        f.rebase(now, m.clock.free() ? 0 : m.clock.hz());
+        publishFree(m, sess);
+
+        Json d = Json::obj();
+        d["running"] = Json(true);
+        d["pc"]      = Json((long long)cpu->pc());
+        std::snprintf(buf, sizeof buf,
+                      "running from %04X -- the guest keeps running until `stop`; `recv` "
+                      "reads what it prints, `status` says whether it still runs.",
+                      (unsigned)cpu->pc());
+        return dataResult(d, buf);
+    }
+
+    if (name == "stop") {
+        FreeRun&   f   = sess.free;
+        const bool was = f.running;
+        if (was) endFreeRun(m, sess, "requested");
+
+        Json d = Json::obj();
+        d["was_running"] = Json(was);
+        d["stopped"]     = Json(f.stopped);
+        d["pc"]          = Json(m.cpu() ? (long long)m.cpu()->pc() : 0LL);
+        d["steps"]       = Json((long long)f.steps);
+        d["t_states"]    = Json((long long)f.tStates);
+        std::string text;
+        if (f.stopped.empty()) {
+            text = "not running -- nothing was started";
+        } else {
+            if (f.stopped == "unclaimed") text = unclaimedLine(f.last) + "\n";
+            text += (was ? "stopped" : "not running; the free run had already stopped") +
+                    std::string(": ") + f.stopped + ", " + std::to_string(f.steps) + " insn, " +
+                    std::to_string(f.tStates) + " T";
+        }
+        d["warnings"] = drainWarnings(m, text);
+        return dataResult(d, text);
     }
 
     if (name == "regs") {
@@ -1278,7 +1584,7 @@ Json callTool(Machine& m, McpSession& sess, const std::string& name, const Json&
             // would go on to its full budget: on Windows, 9 cancels in 5000 were lost that way.
             // This request's stale flag was already cleared once, at dispatch (runMcp), so
             // keeping it here cannot resurrect an old one.
-            RunResult r = m.debug.run(2000, false);
+            RunResult r = m.debug.run(kSliceSteps, false);
             m.pump();
             steps += r.steps;
             tStates += r.tStates;
@@ -1299,14 +1605,11 @@ Json callTool(Machine& m, McpSession& sess, const std::string& name, const Json&
             const bool received = m.rxBytes() != rxBefore;
             const uint64_t hungry = con->hungry() - hungryBefore;
 
-            if (r.why == StopReason::Halted)      { stopped = "halt";        break; }
-            if (r.why == StopReason::Breakpoint)  { stopped = "breakpoint";  break; }
-            if (r.why == StopReason::NoCpu)       { stopped = "no-cpu";      break; }
-            if (r.why == StopReason::StopRequested) { Debugger::clearStopRequest();
-                                                    stopped = "interrupted"; break; }
-            // SET BUS UNCLAIMED=HALT and BREAK TAPE STOP stop the monitor's RUN; they stop
-            // this one too (#580). `last` keeps the port for the stop line below.
-            if (r.why == StopReason::Unclaimed || r.why == StopReason::TapeStop) {
+            // A HLT, a breakpoint, a stop request -- and SET BUS UNCLAIMED=HALT and BREAK TAPE
+            // STOP, which stop the monitor's RUN and so stop this one too (#580). One list,
+            // shared with the free run. `last` keeps the port for the stop line below.
+            if (sliceStops(r.why)) {
+                if (r.why == StopReason::StopRequested) Debugger::clearStopRequest();
                 last    = r;
                 stopped = stopReasonName(r.why);
                 break;
@@ -1356,10 +1659,8 @@ Json callTool(Machine& m, McpSession& sess, const std::string& name, const Json&
         if (stopped == "unclaimed") {
             // The monitor's stop line, so the text says WHICH port; the warning with the PC
             // follows it, from the bus log.
-            std::snprintf(buf, sizeof buf, "stopped: %s port 0x%02X, which no board decodes",
-                          last.write ? "OUT to" : "IN from", last.port);
             if (!text.empty() && text.back() != '\n') text += '\n';
-            text += buf;
+            text += unclaimedLine(last);
         }
         d["warnings"] = drainWarnings(m, text);
         if (!text.empty() && text.back() != '\n') text += '\n';
@@ -1946,7 +2247,24 @@ int runMcp(Machine& m, std::istream& in, std::ostream& out, const std::string& m
         QueuedMsg qm;
         {
             std::unique_lock<std::mutex> lk(mu);
-            cv.wait(lk, [&] { return !pending.empty() || eof; });
+            auto ready = [&] { return !pending.empty() || eof; };
+            if (sess.free.running) {
+                // #602: THE GUEST RUNS HERE, between requests, on this thread. Wait for a
+                // request only until the next slice is due -- the pacing gap or an idle nap
+                // (freeRunSlice) -- and run the slice if none came. A request that arrives
+                // during the wait wakes us at once. FAIRNESS: a request served since the last
+                // slice lets a DUE slice go first, so a client polling `recv` in a tight loop
+                // cannot starve the guest it is polling.
+                const bool due = FreeRun::clk::now() >= sess.free.nextSlice;
+                if ((due && sess.free.servedSinceSlice) ||
+                    !cv.wait_until(lk, sess.free.nextSlice, ready)) {
+                    lk.unlock();
+                    freeRunSlice(m, sess);
+                    continue;
+                }
+            } else {
+                cv.wait(lk, ready);
+            }
             if (pending.empty() && eof) break;
             qm = std::move(pending.front());
             pending.pop_front();
@@ -1960,6 +2278,7 @@ int runMcp(Machine& m, std::istream& in, std::ostream& out, const std::string& m
         const Json& req    = qm.req;
         std::string method = req.at("method").str();
         Json        id     = req.at("id");
+        bool        freeRunInterrupted = false;  // #602: a ^C that ends the free run
 
         {
             // A stale stop request -- a ^C that landed after the previous call already
@@ -1970,11 +2289,16 @@ int runMcp(Machine& m, std::istream& in, std::ostream& out, const std::string& m
             // the reader could match a cancel, call requestStop(), and have the handler
             // wipe it on the way past. Clearing before the id is visible closes it -- a
             // cancel that arrives from this point on is for THIS request and survives.
+            //
+            // #602: while the guest free-runs, a ^C is not stale -- it is for the free run.
+            // Read it under the same lock, before the clear, and end the free run with it.
             std::lock_guard<std::mutex> lk(mu);
+            freeRunInterrupted = sess.free.running && Debugger::stopRequested();
             Debugger::clearStopRequest();
             currentId     = id;
             haveCurrentId = true;
         }
+        if (freeRunInterrupted) endFreeRun(m, sess, stopReasonName(StopReason::StopRequested));
 
         if (method == "initialize") {
             Json r = Json::obj();
@@ -2010,6 +2334,7 @@ int runMcp(Machine& m, std::istream& in, std::ostream& out, const std::string& m
             std::lock_guard<std::mutex> lk(mu);
             haveCurrentId = false;  // done -- a cancel for this id from here on matches nothing
         }
+        if (sess.free.running) sess.free.servedSinceSlice = true;  // #602: fairness
     }
     reader.join();
     return 0;

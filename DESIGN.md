@@ -1658,8 +1658,8 @@ machine, was specified here and is **not built**; there is no such flag.) Tools 
 monitor but are **structured** — every result is JSON, no screen-scraping.
 
 The high-value tools are borrowed from the Python prototype's agent API, which is the right
-shape. **The list below is the DESIGN, and nearly all of it is built.** The thirty-one tools that
-exist today are `run`, `send`, `recv`, `regs`, `monitor`, `reset`, `roms`, `mem_dump`,
+shape. **The list below is the DESIGN, and nearly all of it is built.** The tools that
+exist today are `run`, `start`, `stop`, `status`, `send`, `recv`, `regs`, `monitor`, `reset`, `roms`, `mem_dump`,
 `mem_deposit`, `mem_load`, `mem_save`, `mem_search`, `mem_fill`, `disasm`, `step`, `breakpoints`,
 `snapshot`, `restore`, `bus_trace`, `mount`, `connect`, `board_types`, `board_list`, `board_get`,
 `board_add`, `board_set`, `who`, `bus_map`, `bus_io`, `bus_contention` and `bus_irq`. The two
@@ -1696,6 +1696,16 @@ still unbuilt are marked:
 - `bus_map()`, `bus_io()`, `bus_contention()`, `who(addr)`, `bus_irq()` — structured, not the
   ASCII table. `bus_irq()` is the interrupt bus: pin 73 and who pulls it, the eight VI wires, and
   which level an 88-VI would acknowledge.
+
+**Free run (`start`/`stop`, issue #602) — still one thread on the `Machine`.** A `run` is bounded,
+so between calls the guest stands still. `start` leaves it running: runMcp's worker thread — the one
+that serves every request — runs a 2,000-instruction slice whenever no request is waiting, and
+serves a request between two slices, with the guest paused. No second thread ever steps the
+`Machine`, which is the line #489 was declined on, and no tool needs a lock it did not have. The
+wait between slices is the pacing gap (`clock_hz`) or, flat out, the monitor RUN's idle nap, and it
+is a wait on the request queue, never a sleep — a request is served at once. `run` and `step` are
+refused while it runs; a free run ends on `stop`, the StopReasons `run` stops on, or a `^C`, never
+on idle or a timeout.
 
 **MCP is a first-class interface, not a wrapper.** The monitor and MCP both sit on one `Machine` API and one `properties()` reflection layer, so they cannot drift. Any board added later is fully drivable from both without touching either.
 

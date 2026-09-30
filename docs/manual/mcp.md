@@ -102,9 +102,11 @@ $ altairsim examples/cpm/cpm22-buffered.toml --mcp --mirror 'socket:2323?ro'
 Without the quotes, the shell tries to find a file called `socket:2323?ro`, and fails before
 `altairsim` sees it. (zsh reports `no matches found`.) One watcher can connect at a time.
 
-The guest runs **only while the assistant runs it**. A character that you type between the
-assistant's commands waits on the line, and the guest reads it when the assistant next runs the
-machine. While the machine runs, you and the assistant share the console live.
+After a `run`, the guest stops until the assistant runs it again. A character that you type
+while the guest is stopped waits on the line. To take over the console, ask the assistant to
+**`start`** the guest. After `start`, the guest runs all the time, as it does after `RUN` at the
+monitor, and it answers what you type at once. The assistant can still use its other tools. The
+guest runs until the assistant uses `stop`.
 
 ## Start a project of your own
 
@@ -177,6 +179,8 @@ The tools let an assistant operate the whole machine:
 - Mount a disk or a tape, and connect a serial line to an endpoint.
 - Examine, deposit, fill, search, save and disassemble memory.
 - Run the machine, type at its console and read what it prints.
+- Start the machine and let it run between tool calls, for example to run a server on the guest,
+  or two machines that talk to each other. Then stop it.
 - Step it, set breakpoints, and read the bus history and the interrupt lines.
 - Save the state of the whole machine in a snapshot, and restore it.
 
@@ -200,6 +204,9 @@ are the most important:
   client boots it with `run`.
 - A `run` **never blocks**. It stops when `until` matches, when the guest waits at a prompt, or
   at `timeout_ms`. `timeout_ms` is a limit, not a wait.
+- `start` returns at once and **leaves the guest running** until `stop`, a `HLT` or a
+  breakpoint. All other tools work while it runs. `status` tells you if it still runs, and if
+  not, why it stopped.
 - JSON has no hex form, so `from` is a decimal number: `65280` is `FF00`. If you send a string
   such as `"0xFF00"`, the server refuses the call and tells you the number to send.
 - A control byte is a JSON `\uXXXX` escape: `\u0003` is `Ctrl-C`. `\x03` is not JSON.
