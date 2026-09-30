@@ -2821,12 +2821,12 @@ void test_achieved_hz() {
         // The 2SIO's first channel spans two ports and answers both directions: the row
         // shows the RANGE, not just the low port, and both columns are lit.
         CHECK(io.find("10-11") != std::string::npos, "a two-port entry shows its range");
-        CHECK(io.find("10-11     sio0     IN  OUT    6850") != std::string::npos,
+        CHECK(io.find("10-11      sio0     IN  OUT    6850") != std::string::npos,
               "the 2SIO answers both IN and OUT across 10-11");
 
         // The front panel is read-only: IN is named, OUT is a dash. This is the whole
         // reason the columns are split -- a merged 'read/write' column could not say it.
-        CHECK(io.find("FF        fp0      IN  --") != std::string::npos,
+        CHECK(io.find("FF         fp0      IN  --") != std::string::npos,
               "the front panel reads FF (sense switches) but decodes no OUT there");
 
         // The C700 data port is the mirror case: write-only, so OUT is named and IN is
@@ -2916,6 +2916,73 @@ void test_achieved_hz() {
             }
         }
         CHECK(topics > 30, "the HELP example check looked at the command table");
+    }
+
+    // The columns of SHOW BUS / ROMS / JOYSTICKS. A table is only readable if each
+    // column starts in the same place on every row, so these compare where a column
+    // BEGINS on the header (or the row above) with where it begins on each row.
+    SECTION("SHOW BUS / SHOW ROMS -- columns line up, in hex and in octal");
+    {
+        auto lines = [](const std::string& t) {
+            std::vector<std::string> v;
+            std::istringstream       in(t);
+            for (std::string l; std::getline(in, l);) v.push_back(l);
+            return v;
+        };
+        auto lineWith = [&](const std::vector<std::string>& v, const char* word) {
+            for (const auto& l : v)
+                if (l.find(word) != std::string::npos) return l;
+            return std::string();
+        };
+
+        for (const char* base : {"hex", "octal"}) {
+            Machine mb;
+            Monitor mon(mb);
+            std::ostringstream s;
+            std::string berr;
+            auto* mb0 = dynamic_cast<MemoryBoard*>(mb.add("memory", "mem0", berr));
+            Region rg;
+            rg.kind = RegionKind::Ram;
+            rg.at   = 0;
+            rg.size = 0x8000;
+            mb0->addRegion(rg, berr);
+            mb.add("8080", "cpu0", berr);
+            mb.add("2sio", "sio0", berr);
+            mon.exec(std::string("SET CONSOLE base=") + base, s);
+            std::ostringstream o;
+            mon.exec("SHOW BUS", o);
+            auto v = lines(o.str());
+
+            // The board id starts in one column for a MEMORY row and an I/O row.
+            std::string mem = lineWith(v, "mem0");
+            std::string io  = lineWith(v, "sio0");
+            CHECK(!mem.empty() && !io.empty(), "SHOW BUS names mem0 and sio0");
+            CHECK(mem.find("mem0") == io.find("sio0"),
+                  "SHOW BUS: MEMORY and I/O board ids share a column");
+
+            // No processor: the INTERRUPTS notes start where the ones above them do.
+            std::string inte = lineWith(v, "pINT");
+            std::string vi   = lineWith(v, "88-VI");
+            CHECK(inte.find("pin 73") == vi.find("nothing watches"),
+                  "SHOW BUS: the (none) 88-VI note starts in the pINT note's column");
+            CHECK(mem.empty() || mem.back() != ' ', "SHOW BUS: no trailing blanks on a row");
+
+            std::ostringstream r;
+            mon.exec("SHOW ROMS", r);
+            auto rv = lines(r.str());
+            CHECK(rv.size() > 3, "SHOW ROMS lists the ROMs");
+            // Every ROM row starts CRC32, decodes and description where the header does.
+            size_t crc = rv[0].find("CRC32"), dec = rv[0].find("decodes"),
+                   des = rv[0].find("description");
+            for (size_t i = 1; i < rv.size() && !rv[i].empty(); ++i) {
+                const std::string& l = rv[i];
+                // The CRC is 8 hex digits, then two blanks, then the span.
+                CHECK(l.size() > des && l[crc - 1] == ' ' && l[crc + 8] == ' ' &&
+                          l[dec - 1] == ' ' && l[des - 1] == ' ' && l[des] != ' ',
+                      "SHOW ROMS: every row's columns start where the header's do");
+            }
+            mon.exec("SET CONSOLE base=hex", s);  // the base is process-wide; leave it as found
+        }
     }
 
     // -----------------------------------------------------------------------

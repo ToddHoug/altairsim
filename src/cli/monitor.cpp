@@ -2122,7 +2122,7 @@ void Monitor::showJoysticks(std::ostream& out) {
         out << "\n  index  name\n";
         for (int i = 0; i < n; ++i) {
             std::string nm = g_joystick->name(i);
-            std::snprintf(buf, sizeof buf, "    %-5d  %s", i, nm.empty() ? "(unnamed)" : nm.c_str());
+            std::snprintf(buf, sizeof buf, "  %-5d  %s", i, nm.empty() ? "(unnamed)" : nm.c_str());
             out << buf << "\n";
         }
     }
@@ -2310,7 +2310,7 @@ void Monitor::showBusIrq(std::ostream& out, bool table) {
                     : "  CPU     INTE off         interrupts are DISABLED; nothing will be "
                       "acknowledged\n");
     else
-        out << "  CPU     (none)          this backplane has no processor\n";
+        out << "  CPU     (none)           this backplane has no processor\n";
 
     if (pin73.empty()) {
         out << "  pINT    idle             pin 73\n";
@@ -2335,8 +2335,8 @@ void Monitor::showBusIrq(std::ostream& out, bool table) {
         out << "\n";
     }
     if (watchers.empty())
-        out << "  88-VI   (none)          nothing watches VI0-VI7; an acknowledged interrupt\n"
-               "                          floats to FF, which the 8080 executes as RST 7\n";
+        out << "  88-VI   (none)           nothing watches VI0-VI7; an acknowledged interrupt\n"
+               "                           floats to FF, which the 8080 executes as RST 7\n";
 
     // ---- the eight wires ----
     uint8_t lines = m_.bus.viLines();
@@ -2410,6 +2410,10 @@ void Monitor::showBus(const std::vector<std::string>& a, std::ostream& out) {
     char buf[200];
     std::string what = a.size() > 2 ? upper(a[2]) : "";
 
+    // One address column for MEMORY and I/O both, so the board ids line up under each
+    // other. It is as wide as a full memory range in the current base (octal is wider).
+    const int aw = (int)(2 * fmtWord(0).size() + 1);
+
     if (what == "MAP" || what.empty()) {
         out << "MEMORY\n";
         struct Row {
@@ -2425,10 +2429,12 @@ void Monitor::showBus(const std::vector<std::string>& a, std::ostream& out) {
         });
         if (rows.empty()) out << "  (nothing -- every address floats to FF)\n";
         for (const auto& r : rows) {
-            std::snprintf(buf, sizeof buf, "  %s-%s  %-8s %-4s %s", fmtWord((uint16_t)r.lo).c_str(),
-                          fmtWord((uint16_t)r.hi).c_str(), r.id.c_str(), r.what.c_str(),
-                          r.note.c_str());
-            out << buf << "\n";
+            std::string span = fmtWord((uint16_t)r.lo) + "-" + fmtWord((uint16_t)r.hi);
+            std::snprintf(buf, sizeof buf, "  %-*s  %-8s %-4s %s", aw, span.c_str(),
+                          r.id.c_str(), r.what.c_str(), r.note.c_str());
+            std::string line = buf;
+            while (!line.empty() && line.back() == ' ') line.pop_back();
+            out << line << "\n";
         }
         // A hole is not an error. It is an empty socket, and it reads FF.
         std::vector<char> covered(256, 0);
@@ -2470,7 +2476,7 @@ void Monitor::showBus(const std::vector<std::string>& a, std::ostream& out) {
                 };
                 std::string ports = fmtByte((uint8_t)e.lo);
                 if (e.hi != e.lo) ports += "-" + fmtByte((uint8_t)e.hi);
-                std::snprintf(buf, sizeof buf, "  %-8s  %-8s %-3s %-3s    %s", ports.c_str(),
+                std::snprintf(buf, sizeof buf, "  %-*s  %-8s %-3s %-3s    %s", aw, ports.c_str(),
                               b->id.c_str(), answers(Cycle::IoRead) ? "IN" : "--",
                               answers(Cycle::IoWrite) ? "OUT" : "--", e.note.c_str());
                 out << buf << "\n";
@@ -2537,29 +2543,48 @@ void Monitor::showBus(const std::vector<std::string>& a, std::ostream& out) {
 }
 
 void Monitor::showRoms(std::ostream& out) {
-    char buf[200];
-    // Build the header with the SAME field widths as the rows below, so it can never
-    // drift a space out of alignment when a column changes.
-    std::snprintf(buf, sizeof buf, "%-9s %-12s %5s  %-8s  %-11s  %s",
-                  "name", "file", "size", "CRC32", "decodes", "description");
-    out << buf << "\n";
+    char buf[512];
+    struct Row {
+        std::string name, file, size, crc, span, desc;
+    };
+    std::vector<Row> rows;
     for (const auto& r : builtinRoms()) {
         Image img;
         std::string err;
-        std::string span = "(failed to decode)";
-        std::string crc = "--------";
+        Row row{r.name, r.file, "", "--------", "(failed to decode)",
+                (r.desc && *r.desc) ? r.desc : ""};
         if (decodeRom(r, 0, img, err) && !img.empty()) {
             auto flat = img.flat();
             std::snprintf(buf, sizeof buf, "%s-%s", fmtWord(img.lo()).c_str(), fmtWord(img.hi()).c_str());
-            span = buf;
+            row.span = buf;
             std::snprintf(buf, sizeof buf, "%08X", crc32(flat));
-            crc = buf;
+            row.crc = buf;
         }
-        // Description last, so a long one never disturbs the columns before it.
-        std::snprintf(buf, sizeof buf, "%-9s %-12s %5zu  %s  %-11s  %s", r.name, r.file, img.size(),
-                      crc.c_str(), span.c_str(), (r.desc && *r.desc) ? r.desc : "");
-        out << buf << "\n";
+        row.size = std::to_string(img.size());
+        rows.push_back(std::move(row));
     }
+    // Each column is as wide as its longest entry (never narrower than its header), so a
+    // long name, a big size or an octal address span cannot push the columns after it.
+    Row head{"name", "file", "size", "CRC32", "decodes", "description"};
+    size_t wn = head.name.size(), wf = head.file.size(), ws = head.size.size(),
+           wc = head.crc.size(), wd = head.span.size();
+    for (const auto& r : rows) {
+        wn = std::max(wn, r.name.size());
+        wf = std::max(wf, r.file.size());
+        ws = std::max(ws, r.size.size());
+        wc = std::max(wc, r.crc.size());
+        wd = std::max(wd, r.span.size());
+    }
+    // Header and rows share this, so the header can never drift from them. The description
+    // is last, so a long one never disturbs the columns before it.
+    auto line = [&](const Row& r) {
+        std::snprintf(buf, sizeof buf, "%-*s %-*s %*s  %-*s  %-*s  %s", (int)wn, r.name.c_str(),
+                      (int)wf, r.file.c_str(), (int)ws, r.size.c_str(), (int)wc, r.crc.c_str(),
+                      (int)wd, r.span.c_str(), r.desc.c_str());
+        out << buf << "\n";
+    };
+    line(head);
+    for (const auto& r : rows) line(r);
     if (builtinRoms().empty()) out << "(none compiled in)\n";
     // WHERE IT CAME FROM is the DESCRIPTION column, which names the author, and the CRC32,
     // which identifies the image exactly. The line used to send the reader to docs/roms.md
