@@ -8,6 +8,17 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+### The manual shows the machine-file form of `CONNECT` and `MOUNT`
+
+The serial and disks chapters of the User Manual showed monitor commands only. They now show the
+same setting in a machine file, below the command, under the words "In a machine file:". The
+serial chapter has a new section, "The same in a machine file", with a complete file that puts
+the console of the `default` machine on a `telnet:` port. The disks chapter has a table that
+gives the key for each part of a `MOUNT` command.
+
+The samples in the configuring chapter that change a board of the base now leave the `type` out.
+A `[[board]]` with a `type` replaces the board, and it loses the settings of the base.
+
 ### Paste a file into the guest
 
 A new monitor command, `PASTE <file>`, sends a host file to the keyboard of the guest, as if you

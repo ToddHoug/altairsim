@@ -8,11 +8,12 @@ A disk on an Altair is three things:
 
 The controller is a board, and it goes in the machine file. The drives are units of the
 controller. The disk image goes in a drive, from the machine file or with `MOUNT` at the
-monitor.
+monitor. "Put a disk in the machine file", below, shows the two forms together.
 
 This chapter is about the image, the drive and `MOUNT`. `MOUNT` works in the same way for every
-controller. The examples use the MITS hard-sector controllers, `dcdd` and `mds`, because the
-machines in the package boot from them. The Boards chapter describes every controller.
+controller. The examples use the `dcdd`, the MITS 8″ hard-sector controller, because the CP/M
+machine in the package boots from it. The `mds` is its 5¼″ relative, and it works in the same
+way. The Boards chapter describes every controller.
 
 ## The controllers in this chapter
 
@@ -62,19 +63,47 @@ than one.
 ## Put a disk in the machine file
 
 `MOUNT` at the monitor is for the disk that you use *now*. A disk that belongs to a machine goes
-in the machine file. The examples in the package do this:
+in the machine file. The examples in the package do this. This is a complete machine file:
 
 ```toml
+[machine]
+name    = "mine"
+base    = "default"
+startup = ["RUN FF00"]
+
 [[board]]
 id = "dsk0"                    # no type: the controller is already in the machine
 
   [[board.drive]]
   unit  = 0
   mount = "cpm22b23-56k.dsk"   # relative to this file
-  # readonly = true            # write-protect the disk
-  # create   = true            # make a blank file if it is not there
-  # media    = "8in"           # the format of a blank disk
+
+  [[board.drive]]
+  unit     = 1
+  mount    = "games.dsk"
+  readonly = true
 ```
+
+**Each `[[board.drive]]` is one `MOUNT` command.** The second one is
+`MOUNT dsk0:drive1 games.dsk WP`:
+
+| At the monitor | In the machine file |
+|---|---|
+| `dsk0` | `id = "dsk0"` on the `[[board]]` |
+| `drive1` | `unit = 1` in a `[[board.drive]]` |
+| `games.dsk` | `mount = "games.dsk"` |
+| `WP` | `readonly = true` |
+| `CREATE` | `create = true` |
+
+All the drives of one controller go below one `[[board]]`. Start a new `[[board.drive]]` for
+each drive.
+
+**Do not write a `type` on that `[[board]]`.** The `default` machine already has the controller
+`dsk0`. With a `type`, the file replaces the controller, and the settings that the base made on
+it are lost. The configuring chapter gives the rule.
+
+A drive can also have a `media` key, which `MOUNT` does not have. See "How the program finds the
+format", below.
 
 The file and the monitor do the same thing, at different times. The file puts the disk in the
 drive when the machine starts. `MOUNT` changes it later.
@@ -125,6 +154,18 @@ computer.
 ```
 altairsim> MOUNT dsk0:drive2 golden-master.dsk WP
 dsk0:drive2: mounted golden-master.dsk (write-protected)
+```
+
+In a machine file:
+
+```toml
+[[board]]
+id = "dsk0"
+
+  [[board.drive]]
+  unit     = 2
+  mount    = "golden-master.dsk"
+  readonly = true
 ```
 
 `RO` is also accepted, and it means the same. `RO` is the word for a ROM socket. For a disk, the
@@ -192,6 +233,21 @@ CP/M will fail every write to that disk, and you think that it is writable.
 
 3. Type `DIR B:`. CP/M answers `No file`, and `B:` is ready for `PIP` and `SAVE`.
 
+In a machine file, `create = true` does step 1:
+
+```toml
+[[board]]
+id = "dsk0"
+
+  [[board.drive]]
+  unit   = 1
+  mount  = "my-scratch.dsk"
+  create = true
+```
+
+The program makes the file only when the file is not there. For this reason, the same machine
+file loads the first time and every time after it, and the disk keeps its contents.
+
 **`CREATE` works only on a controller that can grow its disk.** The 88-HDSK "Datakeeper" hard
 disk has a fixed size, so it cannot start from an empty file. It refuses `CREATE`, and removes
 the empty file:
@@ -242,8 +298,7 @@ a format program that formats every track that the drive can reach:
 disk, leave `media` out.** A wrong `media` gives disk errors in the guest, and the
 troubleshooting chapter tells you why.
 
-The package has 8″ floppy images and one Datakeeper hard-disk image. You supply any `minidisk`
-or `fdc8mb` image.
+The package has an 8″ floppy image, the CP/M disk. You supply any `minidisk` or `fdc8mb` image.
 
 ## How an 8 MB disk works
 
@@ -261,6 +316,21 @@ drives of different sizes. The period 8 MB CP/M BIOSes expect an 8 MB disk on A:
 altairsim> MOUNT dsk0:drive0 big.dsk
 altairsim> MOUNT dsk0:drive2 floppy.dsk
 altairsim> SHOW dsk0
+```
+
+In a machine file:
+
+```toml
+[[board]]
+id = "dsk0"
+
+  [[board.drive]]
+  unit  = 0
+  mount = "big.dsk"
+
+  [[board.drive]]
+  unit  = 2
+  mount = "floppy.dsk"
 ```
 
 ## ImageDisk files: `.imd`
@@ -294,9 +364,25 @@ altairsim> MOUNT dsk0:drive0 tnfs://fileserver/cpm/games.dsk
 altairsim> MOUNT dsk0:drive1 tnfs://fileserver:16384/scratch.dsk WP
 ```
 
-The form is `tnfs://<host>[:<port>]/<path>`. The default port is **16384**. A machine file can
-name one in the same way, with `mount = "tnfs://fileserver/cpm/games.dsk"`. A `tnfs://` name
-does not start from the machine's folder, because it names its server.
+The form is `tnfs://<host>[:<port>]/<path>`. The default port is **16384**.
+
+In a machine file:
+
+```toml
+[[board]]
+id = "dsk0"
+
+  [[board.drive]]
+  unit  = 0
+  mount = "tnfs://fileserver/cpm/games.dsk"
+
+  [[board.drive]]
+  unit     = 1
+  mount    = "tnfs://fileserver:16384/scratch.dsk"
+  readonly = true
+```
+
+A `tnfs://` name does not start from the machine's folder, because it names its server.
 
 The program gets the whole image **one time, when you mount it**. After that, the disk works
 like a local disk. The program writes your changes back to the server when the guest flushes,
