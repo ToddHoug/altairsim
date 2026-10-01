@@ -553,7 +553,7 @@ void test_debug() {
     {
         const std::string path =
             (std::filesystem::temp_directory_path() / "altair_debug_trace.txt").string();
-        std::filesystem::remove(path);
+        { std::error_code gone; std::filesystem::remove(path, gone); }
         auto slurp = [&] {
             std::ifstream     f(path);
             std::stringstream ss;
@@ -607,7 +607,8 @@ void test_debug() {
         tf.m.debug.traceOff();
         CHECK(os.str().find("MW   2000") != std::string::npos, "the stream gets the trace");
         CHECK(slurp() == twice, "and the file did not change");
-        CHECK(std::filesystem::remove(path), "the file is closed, so it can be removed");
+        std::error_code ec;
+        CHECK(std::filesystem::remove(path, ec), "the file is closed, so it can be removed");
     }
 
     SECTION("TRACEPOINTS -- a breakpoint whose ACTION is TRACE, and does not stop");

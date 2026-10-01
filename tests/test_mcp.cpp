@@ -754,7 +754,7 @@ void test_mcp() {
         if (!loadAltmon(m)) return;
 
         const std::string trace = tmpPath("altair_mcp_trace.txt");
-        std::filesystem::remove(trace);
+        { std::error_code gone; std::filesystem::remove(trace, gone); }
 
         std::ostringstream s;
         int id = 0;
@@ -793,7 +793,10 @@ void test_mcp() {
         CHECK(got.str().find("MW   2000 = 5A") != std::string::npos,
               "and the store, so the cycles of a LATER call reached the file");
         f.close();
-        std::filesystem::remove(trace);
+        // TRACE OFF keeps the file open, and Windows will not delete an open file.
+        m.debug.traceTo(nullptr, 0);
+        std::error_code ec;
+        CHECK(std::filesystem::remove(trace, ec), "the trace file is closed and removed");
     }
 
     SECTION("MCP: a trace to the console is refused -- there is no console to borrow (#613)");
@@ -805,7 +808,7 @@ void test_mcp() {
         if (!loadAltmon(m)) return;
 
         const std::string trace = tmpPath("altair_mcp_tracepoint.txt");
-        std::filesystem::remove(trace);
+        { std::error_code gone; std::filesystem::remove(trace, gone); }
 
         std::ostringstream s;
         int id = 0;
@@ -848,7 +851,8 @@ void test_mcp() {
         CHECK(!isError(10) && text(10).find("breakpoint") != std::string::npos,
               ("with a file named first, the tracepoint is accepted: " + text(10)).c_str());
         m.debug.traceTo(nullptr, 0);  // close the file so it can be removed (Windows)
-        std::filesystem::remove(trace);
+        std::error_code ec;
+        CHECK(std::filesystem::remove(trace, ec), "the trace file is closed and removed");
     }
 
     SECTION("MCP: tools/list advertises the structured wrappers");
