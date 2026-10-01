@@ -1,6 +1,6 @@
 # CP/M on the FDC+'s 1.5 MB floppy (drive type 5).
 #
-#     cd examples/cpm && altairsim cpm22-fdcplus-hdf.toml
+#     cd tests/media/cpm && altairsim cpm22-fdcplus-hdf.toml
 #     -> 48K CP/M 2.2b v2.3 ...
 #        A>
 #

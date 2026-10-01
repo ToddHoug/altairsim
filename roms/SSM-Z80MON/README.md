@@ -5,8 +5,7 @@ programmed by **C. E. Ohme** (1977), with later work by P. Dennis, M. T. Wright,
 and D. M. Fischler (1980). It shares the 8080 monitor's external jump table, so it
 serves the same role as the SSM PB1 EPROM programmer manual's `MONIT`: warm
 re-entry at `F021h`, console-out at `F009h`. See
-[`../SSM-8080MON`](../SSM-8080MON), [`../../docs/boards/ssm-pb1.md`](../../docs/boards/ssm-pb1.md),
-and [`examples/pb1`](../../examples/pb1).
+[`../SSM-8080MON`](../SSM-8080MON) and [`../../docs/boards/ssm-pb1.md`](../../docs/boards/ssm-pb1.md).
 
 - **Version 1.10** — C. E. Ohme et al., SSM Microcomputer Products, ©1980.
 - **Origin of this file:** OCR'd from the printed listing by B. Beech, April 2014.

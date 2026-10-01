@@ -1,6 +1,6 @@
 # SD Systems SBC-200 + VersaFloppy II + ExpandoRAM II -- boots BANKED CP/M 3.
 #
-#     cd examples/sdsys
+#     cd tests/media/sdsys
 #     altairsim cpm3-b.toml
 #     (press Enter)   ->   .        <- MSMONR21 auto-bauds off the CR
 #     C               ->   SD Systems CP/M Plus Ver 3.0 ...   A>

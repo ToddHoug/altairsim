@@ -7,8 +7,8 @@
 # SD-only half, `dualsd`. See reference/dual-ide-card.md and reference/dual-sd-card.md.
 #
 #     altairsim dualidesd
-#     MOUNT ide0:drive0 examples/dualidesd/cpm3-cf.img  # IDE/CF drive 0 = A: (the boot card)
-#     MOUNT sd0:drive0  examples/dualidesd/cpm3-sd.img  # SD card 1     = C:
+#     MOUNT ide0:drive0 cpm3-cf.img                     # IDE/CF drive 0 = A: (the boot card)
+#     MOUNT sd0:drive0  cpm3-sd.img                     # SD card 1     = C:
 #     RUN F000                                          # the MASTER monitor's `->` prompt
 #     P                                                 # "boot CP/M 3 from the IDE/CF hard disk"
 #     -> CP/M 3
@@ -24,8 +24,8 @@
 #
 # THE FOUR DRIVES read the SAME card image format -- a raw `.img` with a sibling `.geo` geometry
 # descriptor -- because the combination BIOS builds an identical DPB, LBA and byte order for CF and
-# SD alike, so a card is portable between the two halves (that is why examples/dualidesd ships the
-# same system image on A: and C:). None are mounted here: put a card image on each drive
+# SD alike, so a card is portable between the two halves (that is why one
+# system image can go on A: and on C:). None are mounted here: put a card image on each drive
 # (`MOUNT ide0:drive0 <name>.img`, `MOUNT sd0:drive0 <name>.img`) to boot.
 
 [machine]

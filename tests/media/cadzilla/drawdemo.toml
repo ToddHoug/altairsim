@@ -1,6 +1,6 @@
 # CADzilla's drawing demo under CP/M 2.2, at full speed.
 #
-#     cd examples/cadzilla && altairsim drawdemo.toml
+#     cd tests/media/cadzilla && altairsim drawdemo.toml
 #
 # It boots straight to A> off the 8" floppy beside this file. Type DRAWDEMO: a window opens
 # and the program steps through every drawing command of the board's HD63484 ACRTC, one
@@ -17,7 +17,7 @@
 # 56K of RAM) plus exactly what makes it boot CP/M. THE PATHS ARE RELATIVE TO THIS FILE, so
 # the folder boots wherever it is copied to.
 #
-# THE DISK is cpm22b23-56k.dsk from examples/cpm, with MBASIC and the BASIC programs taken
+# THE DISK is cpm22b23-56k.dsk from tests/media/cpm, with MBASIC and the BASIC programs taken
 # off to make room for DRAWDEMO.COM (tools/make-drawdemo-disk.sh is the recipe). ASM, LOAD,
 # DDT, M80/L80 and the host-bridge R/W/HDIR are all still on it. Drive 0 is read/write: there
 # is no undo, so copy the image first if you are about to test writes.

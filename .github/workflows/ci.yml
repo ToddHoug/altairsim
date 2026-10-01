@@ -173,7 +173,7 @@ jobs:
 
           # What the reader of the archive gets. A change to any of these is a change to the
           # product, whether or not a line of C++ moved.
-          facing=$(printf '%s\n' "$changed" | grep -E '^(docs/manual/|docs/recipes/|docs/monitor/|docs/debugger/|examples/|docs/package.map$|docs/QUICK-START\.md$|docs/migrating\.md$)' || true)
+          facing=$(printf '%s\n' "$changed" | grep -E '^(docs/manual/|docs/monitor/|docs/debugger/|examples/|docs/package.map$|docs/QUICK-START\.md$|docs/migrating\.md$)' || true)
 
           # A PDF is a build artifact that CI itself commits -- it is not an authored change and
           # cannot need a changelog entry of its own.

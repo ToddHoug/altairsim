@@ -1,6 +1,6 @@
 # CP/M 2.2 on an 8800bt -- an Altair with a Turnkey Module and an 88-DCDD floppy.
 #
-#     cd examples/turnkey && altairsim floppy.toml
+#     cd tests/media/turnkey && altairsim floppy.toml
 #     -> 56K CP/M 2.2b, booted by the turnkey board's own DBL PROM
 #        A>
 #
@@ -16,7 +16,7 @@
 # -- the only difference is that it all lives on one card.
 #
 # THE PATH IS RELATIVE TO THIS FILE (core/paths.h). The image lives in the sibling
-# examples/cpm directory (it is the flagship CP/M floppy), so this file borrows it rather
+# tests/media/cpm directory (it is the flagship CP/M floppy), so this file borrows it rather
 # than shipping a second copy. See machines/turnkey.toml for the machine.
 
 [machine]

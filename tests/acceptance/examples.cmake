@@ -104,65 +104,6 @@ execute_process(
 )
 expect_cpm("${out}" "`altairsim -s examples/cpm/cpm22-buffered.ini` from the dist root did not boot CP/M")
 
-# cpm22-fdcplus-hdf.toml -- the FDC+'s 1.5 MB floppy, a disk the boot PROM cannot read. It puts CPM22-48K-HDF.dsk in an FDC+ at drive type 5 and boots it with
-# the stock DBL, which knows nothing of 10,240-byte tracks. The card's firmware hands DBL a
-# fake Altair sector of its own, whose loader reads the real track 0 -- so the banner alone
-# proves the fake sector, the loader's no-handshake track read at 2 MHz, and the BIOS after
-# it; `A: ASM      COM` is the directory read off the image. (media.cmake proves the same boot
-# on the simulator's own copy; this proves the file we ship.)
-function(expect_hdf out why)
-  foreach(want "48K CP/M 2.2b v1.2" "For Altair 1.5Mb Floppy" "A>" "A: ASM      COM")
-    string(FIND "${out}" "${want}" hit)
-    if(hit LESS 0)
-      message(FATAL_ERROR "examples: ${why}\n"
-                          "  '${want}' never reached the terminal.\n--- output ---\n${out}")
-    endif()
-  endforeach()
-endfunction()
-
-execute_process(
-  COMMAND           "${SIM}" cpm22-fdcplus-hdf.toml
-  WORKING_DIRECTORY "${cpm}"
-  INPUT_FILE        "${SRC}/tests/acceptance/cpm-dir.keys"
-  OUTPUT_VARIABLE   out
-  ERROR_VARIABLE    out
-  TIMEOUT           60
-)
-expect_hdf("${out}" "`cd examples/cpm && altairsim cpm22-fdcplus-hdf.toml` did not boot CP/M")
-
-# cpm22-fdcplus.toml boots off an FDC+ Serial Drive Server -- a real serial port and a real
-# server on the far end, which no test machine has. The file names ONE computer's port, and its
-# README's step 2 is "set `connect` on fdc0 to your serial port". So the test does that step on
-# the copy -- with `null`, the one endpoint every host has -- and the file is then LOADED, not
-# booted: over --mcp, where the startup (the RUN that would wait on the server) is not run, and
-# SHOW fdc0 proves the file built the board it says -- the drive type, the rate and the endpoint.
-# (Loading the file as shipped opens its port, which passes only on a machine that has it.)
-file(READ "${cpm}/cpm22-fdcplus.toml" fdcplus)
-string(REGEX REPLACE "\nconnect = \"serial:[^\"\n]*\"" "\nconnect = \"null\"" fdcplus_null "${fdcplus}")
-if(fdcplus_null STREQUAL fdcplus)
-  message(FATAL_ERROR "examples: cpm22-fdcplus.toml has no `connect = \"serial:...\"` line on fdc0 "
-                      "-- the line its README tells the reader to set.")
-endif()
-file(WRITE "${cpm}/cpm22-fdcplus.toml" "${fdcplus_null}")
-
-mcp_session("${dist}/fdcplus.jsonl"
-  [=[{"name":"monitor","arguments":{"command":"SHOW fdc0"}}]=])
-execute_process(
-  COMMAND           "${SIM}" cpm22-fdcplus.toml --mcp
-  WORKING_DIRECTORY "${cpm}"
-  INPUT_FILE        "${dist}/fdcplus.jsonl"
-  RESULT_VARIABLE   rc
-  OUTPUT_VARIABLE   out
-  ERROR_VARIABLE    out
-  TIMEOUT           30
-)
-expect_contains("${out}" "`altairsim cpm22-fdcplus.toml`, with its port set, did not load"
-                "fdc0  (fdcplus)" "drivetype        7" "baud             230400"
-                "connect          null")
-if(NOT rc EQUAL 0)
-  message(FATAL_ERROR "examples: cpm22-fdcplus.toml exited ${rc}.\n--- output ---\n${out}")
-endif()
-
 # cpm22-terminal.toml puts the console in the built-in windowed VT100. A build with SDL loads it
 # -- under SDL's dummy video driver, so no window opens on a test machine -- and the console
 # line must hold the terminal. A headless build (no SDL) must REFUSE it, with the one message
@@ -294,6 +235,173 @@ execute_process(
   TIMEOUT           60
 )
 expect_cpm("${out}" "`altairsim -s examples/ai-mcp/cpm-ai.ini` from the dist root did not boot CP/M")
+
+# ---- 4. examples/basic4k -- Altair 4K BASIC off its cassette. ------------------------------
+#
+# The worked-examples and tapes chapters of the manual boot this one. From its own folder, by
+# path from the dist root, and its .ini twin by -s: the tape and the bootstrap are found beside
+# the file that names them every time. `TAPE OK` is the output of a program typed into a BASIC
+# that read itself off the .tap, which a machine that merely started cannot print.
+file(COPY "${SRC}/examples/basic4k" DESTINATION "${dist}/examples")
+set(basic "${dist}/examples/basic4k")
+
+function(expect_basic out why)
+  expect_contains("${out}" "${why}" "ALTAIR BASIC VERSION 3.1" "OK" "42" "TAPE OK")
+endfunction()
+
+execute_process(
+  COMMAND           "${SIM}" basic4k.toml
+  WORKING_DIRECTORY "${basic}"
+  INPUT_FILE        "${SRC}/tests/acceptance/basic4k.keys"
+  OUTPUT_VARIABLE   out
+  ERROR_VARIABLE    out
+  TIMEOUT           60
+)
+expect_basic("${out}" "`cd examples/basic4k && altairsim basic4k.toml` did not boot BASIC")
+
+execute_process(
+  COMMAND           "${SIM}" examples/basic4k/basic4k.toml
+  WORKING_DIRECTORY "${dist}"
+  INPUT_FILE        "${SRC}/tests/acceptance/basic4k.keys"
+  OUTPUT_VARIABLE   out
+  ERROR_VARIABLE    out
+  TIMEOUT           60
+)
+expect_basic("${out}" "`altairsim examples/basic4k/basic4k.toml` from the dist root did not boot BASIC")
+
+execute_process(
+  COMMAND           "${SIM}" -s examples/basic4k/basic4k.ini
+  WORKING_DIRECTORY "${dist}"
+  INPUT_FILE        "${SRC}/tests/acceptance/basic4k.keys"
+  OUTPUT_VARIABLE   out
+  ERROR_VARIABLE    out
+  TIMEOUT           60
+)
+expect_basic("${out}" "`altairsim -s examples/basic4k/basic4k.ini` from the dist root did not boot BASIC")
+
+# The same tape as 88-ACR audio: the tapes chapter mounts it, and basic4k-wav.toml boots it. The
+# program typed into it proves the WAV decoded to the same bytes as the .tap.
+execute_process(
+  COMMAND           "${SIM}" basic4k-wav.toml
+  WORKING_DIRECTORY "${basic}"
+  INPUT_FILE        "${SRC}/tests/acceptance/basic4k.keys"
+  OUTPUT_VARIABLE   out
+  ERROR_VARIABLE    out
+  TIMEOUT           60
+)
+expect_basic("${out}" "`cd examples/basic4k && altairsim basic4k-wav.toml` did not boot BASIC")
+
+execute_process(
+  COMMAND           "${SIM}" -s examples/basic4k/basic4k-wav.ini
+  WORKING_DIRECTORY "${dist}"
+  INPUT_FILE        "${SRC}/tests/acceptance/basic4k.keys"
+  OUTPUT_VARIABLE   out
+  ERROR_VARIABLE    out
+  TIMEOUT           60
+)
+expect_basic("${out}" "`altairsim -s examples/basic4k/basic4k-wav.ini` from the dist root did not boot BASIC")
+
+# The tapes chapter's two MOUNT transcripts, on the shipped files: the FSK tape decodes clean, and
+# the Kansas City tape is refused, because a real 88-ACR cannot hear it.
+execute_process(
+  COMMAND           "${SIM}" basic4k
+                    -x "MOUNT acr0:tape \"4K BASIC Ver 3-1.wav\""
+                    -x "MOUNT acr0:tape \"4K BASIC (Kansas City).wav\""
+                    -x QUIT
+  WORKING_DIRECTORY "${basic}"
+  OUTPUT_VARIABLE   out
+  ERROR_VARIABLE    out
+  TIMEOUT           60
+)
+expect_contains("${out}" "the tapes chapter's WAV mounts did not print what the chapter shows"
+  "4K BASIC Ver 3-1.wav: fsk300, 4439 bytes, 0 framing errors (100.0% of frames intact)"
+  "4K BASIC (Kansas City).wav: this board's modem cannot hear that tape -- it carries 2400 Hz / 1200 Hz, and this board reads fsk300")
+
+# ---- 5. examples/basic1 -- Altair BASIC 1.0, the two-step boot. ----------------------------
+#
+# LOAD10 copies the tape into 0000 and loops forever, so the boot is RUN 1800, ^E, RUN 0. A pipe
+# cannot give that ^E at the right moment (it fires the instant the run loop reads stdin, before
+# the tape is in), so the boot is driven over --mcp, where RUN 1800 only sets the PC and `run`
+# stops at `timeout_ms`. The whole tape is in memory after 50 ms flat out; 3 s is the margin.
+# `TAPE OK` after `RUN` is a program typed into a BASIC that read itself off the tape. (A stored
+# line gets no READY in BASIC 1.0, so that `run` stops when BASIC waits for the next key.)
+file(COPY "${SRC}/examples/basic1" DESTINATION "${dist}/examples")
+set(basic1 "${dist}/examples/basic1")
+
+set(basic1_boot
+  [=[{"name":"run","arguments":{"timeout_ms":3000}}]=]
+  [=[{"name":"run","arguments":{"from":0,"until":"MEMSIZ?","timeout_ms":30000}}]=]
+  [=[{"name":"run","arguments":{"input":"\r","until":"SIN-COS-ATN?","timeout_ms":30000}}]=]
+  [=[{"name":"run","arguments":{"input":"\r","until":"READY","timeout_ms":30000}}]=]
+  [=[{"name":"run","arguments":{"input":"10 PRINT \"TAPE OK\"\r","timeout_ms":30000}}]=]
+  [=[{"name":"run","arguments":{"input":"RUN\r","until":"TAPE OK","timeout_ms":30000}}]=])
+
+function(expect_basic1 out why)
+  expect_contains("${out}" "${why}" "2000 BYTES FREE" "8080 BASIC VER 1.0" "RUN\\r\\nTAPE OK")
+endfunction()
+
+# The machine files, from their own folder. MCP does not run `startup`, so the session types its
+# MOUNT and LOAD (typed paths resolve beside the machine file) and puts the PC at the loader.
+foreach(tape "BASIC Ver 1-0.tap" "BASIC Ver 1-0.wav")
+  if(tape MATCHES "wav$")
+    set(toml basic1-wav.toml)
+  else()
+    set(toml basic1.toml)
+  endif()
+  mcp_session("${dist}/basic1.jsonl"
+    "{\"name\":\"monitor\",\"arguments\":{\"command\":\"MOUNT acr0:tape \\\"${tape}\\\"\"}}"
+    [=[{"name":"monitor","arguments":{"command":"LOAD \"LOAD10.HEX\""}}]=]
+    [=[{"name":"monitor","arguments":{"command":"RUN 1800"}}]=]
+    ${basic1_boot})
+  execute_process(
+    COMMAND           "${SIM}" ${toml} --mcp
+    WORKING_DIRECTORY "${basic1}"
+    INPUT_FILE        "${dist}/basic1.jsonl"
+    OUTPUT_VARIABLE   out
+    ERROR_VARIABLE    out
+    TIMEOUT           60
+  )
+  expect_basic1("${out}" "`cd examples/basic1 && altairsim ${toml}` did not boot BASIC 1.0")
+endforeach()
+
+# ...and their startup lines, by path from the dist root: the tape and the bootstrap are found
+# beside the file, and RUN 1800 enters the loader. The ^E that stops it is the only key.
+string(ASCII 5 ctrl_e)
+file(WRITE "${dist}/ctrl-e.keys" "${ctrl_e}")
+foreach(toml basic1.toml basic1-wav.toml)
+  execute_process(
+    COMMAND           "${SIM}" examples/basic1/${toml}
+    WORKING_DIRECTORY "${dist}"
+    INPUT_FILE        "${dist}/ctrl-e.keys"
+    OUTPUT_VARIABLE   out
+    ERROR_VARIABLE    out
+    TIMEOUT           60
+  )
+  # The two paths below are joined by the program, which uses the host's separator: on Windows
+  # it prints a backslash. Match one form.
+  string(REPLACE "\\" "/" out "${out}")
+  expect_contains("${out}" "`altairsim examples/basic1/${toml}` from the dist root did not start its loader"
+    "acr0:tape: mounted examples/basic1/BASIC Ver 1-0."
+    "loaded 20 bytes (1 page) from examples/basic1/LOAD10.HEX (1800-1813)"
+    "^E returns to the monitor")
+endforeach()
+
+# The .ini twins, by DO from the dist root over --mcp: the script builds the machine, its paths
+# resolve beside the script (#575), and its RUN 1800 leaves the PC at the loader.
+foreach(ini basic1.ini basic1-wav.ini)
+  mcp_session("${dist}/basic1.jsonl"
+    "{\"name\":\"monitor\",\"arguments\":{\"command\":\"DO examples/basic1/${ini}\"}}"
+    ${basic1_boot})
+  execute_process(
+    COMMAND           "${SIM}" --mcp
+    WORKING_DIRECTORY "${dist}"
+    INPUT_FILE        "${dist}/basic1.jsonl"
+    OUTPUT_VARIABLE   out
+    ERROR_VARIABLE    out
+    TIMEOUT           60
+  )
+  expect_basic1("${out}" "`DO examples/basic1/${ini}` from the dist root did not boot BASIC 1.0")
+endforeach()
 
 file(REMOVE_RECURSE "${dist}")
 message(STATUS "examples: every machine file in the shipped examples works from its own folder.")

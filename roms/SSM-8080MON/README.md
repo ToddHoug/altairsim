@@ -4,8 +4,7 @@ The 8080 system monitor from **SSM Microcomputer Products** (formerly Solid Stat
 Music), written by **C. E. Ohme**. This is the monitor the SSM PB1 EPROM
 programmer manual calls `MONIT`: its EPROM-burner routines end with `JMP F021h`
 (the monitor's warm re-entry) and its verify routines print through `CALL F009h`
-(the monitor's console-out). See [`../../docs/boards/ssm-pb1.md`](../../docs/boards/ssm-pb1.md)
-and [`examples/pb1`](../../examples/pb1).
+(the monitor's console-out). See [`../../docs/boards/ssm-pb1.md`](../../docs/boards/ssm-pb1.md).
 
 - **Version 1.0** — C. E. Ohme, SSM Microcomputer Products.
 - **Origin of these files:** OCR'd from the printed listing by B. Beech, April 2014.

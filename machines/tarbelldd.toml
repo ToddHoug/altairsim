@@ -1,12 +1,10 @@
 # Tarbell #2022 double-density floppy machine -- boots CP/M 2.2 the moment a disk is in it.
 #
 #     altairsim tarbelldd
-#     MOUNT fdc0:drive0 "examples/tarbell/TARBELLDD-CPM22-SSDD-48K.DSK"
+#     MOUNT fdc0:drive0 "TARBELLDD-CPM22-SSDD-48K.DSK"
 #     RUN 0
 #     -> 48K CP/M 2.2
 #        A>
-#
-# ...or, with the disk already in the drive, `cd examples/tarbell && altairsim tarbelldd.toml`.
 #
 # THE DOUBLE-DENSITY #2022 is the single-density #1011's twin: the same automatic 32-byte
 # boot PROM at 0000 and the same F8 port block, but a WD FD1791 that can read double-density

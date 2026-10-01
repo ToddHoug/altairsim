@@ -1,6 +1,6 @@
 # Altair 4K BASIC 3.1, with the tape in the recorder and the bootstrap toggled in.
 #
-#     cd tests/media/basic && altairsim basic4k.toml
+#     cd examples/basic4k && altairsim basic4k.toml
 #     -> MEMORY SIZE?
 #
 # THE PATHS BELOW ARE RELATIVE TO THIS FILE, not to wherever you happen to be standing
@@ -8,7 +8,7 @@
 # so this file names them and nothing else -- which is what lets the directory be COPIED
 # somewhere and still boot. You get the binary and this folder; you do not get the repo.
 #
-# `altairsim tests/media/basic/basic4k.toml` from the repo root works too, and means the
+# `altairsim examples/basic4k/basic4k.toml` from the repo root works too, and means the
 # same machine. It has to: a file that changed meaning depending on where you launched it
 # from would be exactly the trap the rest of the CLI is arranged to refuse.
 #
@@ -46,8 +46,8 @@ startup = [
   "RUN 0",
 ]
 
-# `upper = true` folds what you TYPE to uppercase. 4K BASIC 3.1, like BASIC 1.0
-# (basic1.toml) and the PS2 monitor, only understands upper case -- a Teletype had no lower
+# `upper = true` folds what you TYPE to uppercase. 4K BASIC 3.1, like the other early MITS
+# software, only understands upper case -- a Teletype had no lower
 # case to send. Without this you would type the whole session under Caps Lock; with it you
 # just type, and the fold happens on the way in. It touches only your keystrokes, never
 # BASIC's output. The base machine's console keeps strip7out; this delta only adds the fold.

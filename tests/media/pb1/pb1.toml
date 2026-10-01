@@ -1,6 +1,6 @@
 # An Altair with an SSM PB1 EPROM programmer board in it.
 #
-#     cd examples/pb1 && altairsim pb1.toml
+#     cd tests/media/pb1 && altairsim pb1.toml
 #
 # The PB1 is a board, not a machine -- this is just a stock Altair (8080, RAM, a
 # 2SIO console, the front panel) with the PB1 added. The manual's own burner

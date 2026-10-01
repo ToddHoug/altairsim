@@ -32,7 +32,7 @@ Then boot two machines and see them reach their prompt. Drive them with `altairs
 | machine | reaches |
 |---|---|
 | `examples/cpm/cpm22-buffered.toml` | `A>` |
-| `examples/diskbasic/diskbasic.toml` | `MEMORY SIZE?` |
+| `examples/basic4k/basic4k.toml` | `MEMORY SIZE?` |
 
 ## Is SDL3 inside the binary?
 

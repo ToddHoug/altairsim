@@ -133,12 +133,12 @@ right); every lit bit takes the format-nibble color.
   poll-based dirty economy (an unchanged framebuffer is not repainted); off blanks the
   screen; and `port` strap validation. It reads the rendered pixels straight back out
   of the `NullDisplay` surface.
-- End-to-end: `altairsim examples/dazzler/kscope.toml` comes up drawing — Li-Chen Wang's
-  Kaleidoscope paints a four-way-mirrored pattern into a 2 KB 64×64 color picture, which
+- End-to-end: the `dazzler` machine running Li-Chen Wang's Kaleidoscope comes up drawing — the
+  program paints a four-way-mirrored pattern into a 2 KB 64×64 color picture, which
   appears in a window on an SDL3 build (ATTN / Ctrl-E breaks back to the monitor).
 
 ## References
 
 - `reference/Cromemco Dazzler.md` — the distilled manual.
 - `src/boards/cromemco-dazzler.{h,cpp}`, `src/host/display.h`,
-  `src/host/display_sdl.{h,cpp}`, `machines/dazzler.toml`, `examples/dazzler/`.
+  `src/host/display_sdl.{h,cpp}`, `machines/dazzler.toml`.

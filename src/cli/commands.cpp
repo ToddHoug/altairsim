@@ -296,8 +296,9 @@ static const std::vector<CommandDef> kCommands = {
      "ATTACH lines are monitor commands too.\n"
      "\n"
      "PATHS INSIDE IT ARE RELATIVE TO THE FILE, not to where you are standing -- so\n"
-     "`DO examples/cpm/cpm.ini` mounts the disk beside that file from anywhere. Blank\n"
-     "lines and `;` or `#` comments are skipped, so a DO file reads like a script.\n"
+     "`DO examples/cpm/cpm22-buffered.ini` mounts the disk beside that file from\n"
+     "anywhere. Blank lines and `;` or `#` comments are skipped, so a DO file reads like\n"
+     "a script.\n"
      "\n"
      "It runs against whatever machine is loaded, so a DO file usually opens with MACHINE\n"
      "to pick its own base -- `MACHINE default` then MOUNT/RUN, or `MACHINE none` then\n"
@@ -308,8 +309,8 @@ static const std::vector<CommandDef> kCommands = {
      "It is a LINE RUNNER, not SIMH's scripting language: no arguments, no IF or GOTO.\n"
      "For conditional or interactive automation, drive a live guest over --mcp.\n"
      "\n"
-     "  DO cpm.ini               ; paths relative to cpm.ini's own directory\n"
-     "  DO examples/basic/b.ini  ; run it from anywhere"},
+     "  DO cpm22-buffered.ini                  ; paths relative to the file's own directory\n"
+     "  DO examples/basic4k/basic4k.ini       ; run it from anywhere"},
     {"MACHINE", true, nullptr, "MACHINE <name> | MACHINE none",  // MA (M is MOUNT, MO)
      "Load a BUILT-IN machine by name, replacing whatever is in the backplane. It is the\n"
      "runtime twin of naming one on the command line (`altairsim default`) and the command\n"

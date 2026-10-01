@@ -15,7 +15,6 @@ LICENSE                  the MIT license of altairsim.
 LICENSE-SDL3             the license of SDL3, which is built into the program.
 LICENSE-MAME-HD63484     the notice for the source of the HD63484 model's structure (MAME).
 examples/                machines that boot, with their media.
-recipes/                 build a machine yourself, one typed line at a time.
 hostbridge/              the file-transfer utilities: source, HEX and COM.
 skills/                  the AI briefing again, packaged for a client that reads skills.
 ```
@@ -32,17 +31,6 @@ over from **AltairZ80 (SIMH)** or **z80pack**, what has a different name here, a
 cannot do here.
 
 `altairsim-changelog.pdf` is the release history. It tells you what each version added.
-
-**Read `recipes/` if you learn best from an example.** Each recipe is a short document. Each one
-follows the same steps:
-
-1. Start with an empty machine.
-2. Add the boards one at a time, and see the machine answer each command.
-3. Save the machine to a file.
-4. Quit, and load the file again.
-
-One recipe builds a CP/M Altair. One builds a Cromemco Dazzler machine with a Z80. One starts
-from a machine that works and changes it. Open the recipe for the task that you want to do.
 
 `altairsim-monitor.pdf` and `altairsim-debugger.pdf` are two more documents that ship beside
 this manual. This manual describes the simulated hardware. *The Monitor* describes the
@@ -126,9 +114,8 @@ $ altairsim examples/cpm/cpm22-buffered.toml
 **You can move an example folder anywhere.** It still boots after you copy it, rename it or send
 it to another person. The machines chapter tells you how the paths in a machine file work.
 
-The examples chapter describes some of the examples in detail. Some examples include period
-documentation, such as the printed manual of a game. That documentation is in the folder too,
-and the README tells you.
+The examples chapter describes some of the examples in detail. More examples, with their
+documentation, are at https://altairsim.com.
 
 ## The file-transfer utilities
 
@@ -159,7 +146,8 @@ You supply the media, and you `MOUNT` it. The disks chapter and the tapes chapte
 When those chapters name an image that is not in `examples/`, the name shows the form of the
 command. It is not a file that you have.
 
-Most disk and tape images are not ours to give away, so they are not in the package.
+Most disk and tape images are not ours to give away, so they are not in the package. More
+examples, with their media and their documentation, are at https://altairsim.com.
 
 ## What is *not* in the package: the source
 

@@ -3,7 +3,7 @@
 # CF only, through the 8255 IDE/CF controller.
 #
 #     altairsim dualide
-#     MOUNT ide0:drive0 examples/dualide/cpm3-cf.img # IDE/CF drive 0 = A: (the boot card)
+#     MOUNT ide0:drive0 cpm3-cf.img                  # IDE/CF drive 0 = A: (the boot card)
 #     RUN F000                                       # the MASTER monitor's `->` prompt
 #     P                                              # "boot CP/M 3 from the IDE/CF hard disk"
 #     -> CP/M 3
