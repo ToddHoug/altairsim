@@ -200,6 +200,9 @@ that talks to the server directly, read `DRIVING-WITH-AI.md`. It describes the p
 are the most important:
 
 - The server uses line-delimited **JSON-RPC 2.0**. Send `initialize`, and then `tools/call`.
+- A tool result has text in `content`. A tool that reports values also gives them as JSON fields
+  in `structuredContent`, such as `running` and `stop_reason` from `status`. A program reads
+  `structuredContent` and does not parse the text.
 - A machine named on the command line is loaded, but **its `startup` list does not run**. The
   client boots it with `run`.
 - A `run` **never blocks**. It stops when `until` matches, when the guest waits at a prompt, or
