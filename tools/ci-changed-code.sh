@@ -10,7 +10,8 @@
 # a file rather than inline YAML so the exact rule CI applies can be run against any commit
 # locally.
 #
-# Documentation = anything under docs/, reference/ or .claude/, a top-level *.md, or LICENSE.
+# Documentation = anything under docs/, reference/ or .claude/, a top-level *.md, a README.md
+# at any depth, or LICENSE.
 # Everything else is code -- src, tests, cmake, the data dirs the tests read (roms, tapes,
 # machines, disks, cpm, examples), tools, and the workflows themselves. An unrecognized path is
 # code, so a new directory is never silently skipped.
@@ -23,6 +24,13 @@
 # */*.md rule below and builds three operating systems to prove a Markdown file did not change
 # the binary.
 #
+# A README.md IS DOCUMENTATION WHEREVER IT IS. It is prose for someone standing in that
+# directory: no glob embeds it (machines/ takes *.toml, roms/ takes folders), no test reads one,
+# and the Linux leg still runs the whole suite. The examples' READMEs do become README.pdf, and
+# docs.yml builds those on its own path trigger. ONLY THAT FILE NAME moves -- any other nested
+# .md (a PROVENANCE.md, a note under tests/media/) is still code. PR #610 added a README to nine
+# directories and built three operating systems to prove nine Markdown files compile to nothing.
+#
 # Needs the base present: check out with fetch-depth: 0.
 set -euo pipefail
 
@@ -32,7 +40,8 @@ while IFS= read -r f; do
     [ -z "$f" ] && continue
     case "$f" in
         docs/*|reference/*|.claude/*|LICENSE) continue ;;  # documentation
-        */*.md) ;;                        # a .md deeper in the tree (e.g. tests/) is code
+        */README.md) continue ;;          # a directory's README, at any depth, is documentation
+        */*.md) ;;                        # any other .md deeper in the tree (e.g. tests/) is code
         *.md) continue ;;                 # a top-level .md (README, DESIGN) is documentation
         *) ;;                             # anything else is code
     esac
