@@ -64,7 +64,7 @@ cd tapes/MitsPS2 && altairsim ps2int.toml     # the way you will actually run it
 altairsim tapes/MitsPS2/ps2int.toml           # ...and from anywhere else
 ```
 
-That matters because **`tapes/` and `disks/` are what we ship.** A user gets the binary and those trees — not this repository. A machine file that only resolved from the repository root would be a machine file that only worked for us, and every example in this tree used to be exactly that.
+That matters because **a machine file ships with its media beside it.** A user gets the binary and the `examples/` tree, each example a folder holding a machine file and the disk or tape it mounts — not this repository. A machine file that only resolved from the repository root would be a machine file that only worked for us, and every example in this tree used to be exactly that.
 
 The same base covers what you type. When you type
 
