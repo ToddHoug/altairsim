@@ -24,6 +24,7 @@
 #include <array>
 #include <csignal>
 #include <cstdint>
+#include <fstream>
 #include <memory>
 #include <ostream>
 #include <string>
@@ -202,14 +203,41 @@ public:
     // means the sink outlives the off state. So TRACE OFF keeps the file open and
     // the mask set, ready to be turned back on -- by TRACE ON, or by a tracepoint.
     //
-    // The monitor owns the stream (a file, or the console); we only write to it.
+    // WHO OWNS THE STREAM depends on what it is. A FILE is ours (traceToFile): it has to
+    // live as long as the machine, and a Monitor does not -- `--mcp` makes a new one for
+    // every `monitor` call, and a sink that died with it is a write through a dangling
+    // pointer on the next cycle (issue #613). The CONSOLE is the monitor's, and core must
+    // not know it, so traceTo() only borrows the stream: whoever passes one keeps it alive
+    // for as long as the machine can run.
     void traceTo(std::ostream* sink, unsigned mask) {   // configure AND start: TRACE ON
+        // Away from the file: it is no longer the sink, so close it rather than leave a
+        // half-written trace open on a stream nobody writes.
+        if (traceFile_.is_open()) traceFile_.close();
         traceSink_ = sink;
         traceMask_ = mask;
         traceActive_ = true;
     }
+    // TRACE ON <file>: open it (truncating), and configure AND start. False when the file
+    // cannot be opened, and then nothing has changed -- the earlier sink still stands.
+    bool traceToFile(const std::string& path, unsigned mask) {
+        // The new file may BE the old one. Flush first, so that closing the old stream
+        // below has nothing left to write into the file we just truncated.
+        if (traceFile_.is_open()) traceFile_.flush();
+        std::ofstream f(path, std::ios::out | std::ios::trunc);
+        if (!f) return false;
+        traceFile_ = std::move(f);
+        traceSink_ = &traceFile_;
+        traceMask_ = mask;
+        traceActive_ = true;
+        return true;
+    }
     void traceOn() { traceActive_ = true; }    // start with whatever is configured
-    void traceOff() { traceActive_ = false; }  // stop, but KEEP the sink and the mask
+    // Stop, but KEEP the sink and the mask. FLUSH a file: it has to be complete on disk
+    // for someone reading it now, even though we will write to it again.
+    void traceOff() {
+        traceActive_ = false;
+        if (traceFile_.is_open()) traceFile_.flush();
+    }
     bool tracing() const { return traceActive_ && traceSink_; }
     bool traceConfigured() const { return traceSink_ != nullptr; }
 
@@ -361,6 +389,7 @@ private:
     // TRACE's configuration (where, and what it keeps) and, separately, whether it is
     // currently emitting -- see traceTo/traceOn/traceOff.
     std::ostream* traceSink_ = nullptr;
+    std::ofstream traceFile_;  // the sink, when TRACE ON named a file -- see traceToFile()
     unsigned traceMask_ = 0;
     bool traceActive_ = false;
 

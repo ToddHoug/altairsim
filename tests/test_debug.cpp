@@ -6,7 +6,10 @@
 #include "core/machine.h"
 #include "cpu/cpu.h"
 
+#include <filesystem>
+#include <fstream>
 #include <sstream>
+#include <string>
 
 using namespace altair;
 
@@ -545,6 +548,67 @@ void test_debug() {
     CHECK(masked.str().find("IN") != std::string::npos, "MASK=IN keeps the IN");
     CHECK(masked.str().find("MR") == std::string::npos, "and drops the fetches");
     CHECK(masked.str().find("MW") == std::string::npos, "and drops the store");
+
+    SECTION("TRACE to a file -- the debugger owns it, so it outlives whoever asked (#613)");
+    {
+        const std::string path =
+            (std::filesystem::temp_directory_path() / "altair_debug_trace.txt").string();
+        std::filesystem::remove(path);
+        auto slurp = [&] {
+            std::ifstream     f(path);
+            std::stringstream ss;
+            ss << f.rdbuf();
+            return ss.str();
+        };
+
+        Rig tf;
+        tf.load({0xDB, 0x10, 0x32, 0x00, 0x20, 0x76});
+        // Each run ends at the HLT, so each one starts from a reset.
+        auto fromTheTop = [&] {
+            tf.cpu->reset(Reset::Bus);
+            tf.cpu->setPc(0);
+        };
+        fromTheTop();
+        CHECK(tf.m.debug.traceToFile(path, 0), "the file opens");
+        CHECK(tf.m.debug.tracing(), "and tracing is on");
+        tf.m.debug.run(0);
+        tf.m.debug.traceOff();
+        // Read it while the debugger still holds it open: TRACE OFF flushed it.
+        CHECK(slurp().find("MW   2000") != std::string::npos,
+              "after traceOff the file is complete on disk");
+
+        // The same file again: it starts empty, and nothing of the old trace comes back
+        // when the old stream is closed.
+        fromTheTop();
+        CHECK(tf.m.debug.traceToFile(path, Debugger::InCycle), "the same file reopens");
+        tf.m.debug.run(0);
+        tf.m.debug.traceOff();
+        CHECK(slurp().find("IN") != std::string::npos, "the new trace is there");
+        CHECK(slurp().find("MW") == std::string::npos, "and the old one is gone");
+
+        // A file that cannot be opened changes nothing: the earlier sink still stands.
+        const std::string bad =
+            (std::filesystem::temp_directory_path() / "no-such-dir" / "t.txt").string();
+        CHECK(!tf.m.debug.traceToFile(bad, 0), "a bad path is refused");
+        CHECK(tf.m.debug.traceConfigured() && !tf.m.debug.tracing(),
+              "and the configuration is as it was");
+        tf.m.debug.traceOn();
+        fromTheTop();
+        tf.m.debug.run(0);
+        tf.m.debug.traceOff();
+        const std::string twice = slurp();
+        CHECK(twice.find("IN") != twice.rfind("IN"), "the earlier file took the next run too");
+
+        // A borrowed sink takes over: the file is closed, and gets nothing more.
+        std::ostringstream os;
+        tf.m.debug.traceTo(&os, 0);
+        fromTheTop();
+        tf.m.debug.run(0);
+        tf.m.debug.traceOff();
+        CHECK(os.str().find("MW   2000") != std::string::npos, "the stream gets the trace");
+        CHECK(slurp() == twice, "and the file did not change");
+        CHECK(std::filesystem::remove(path), "the file is closed, so it can be removed");
+    }
 
     SECTION("TRACEPOINTS -- a breakpoint whose ACTION is TRACE, and does not stop");
 

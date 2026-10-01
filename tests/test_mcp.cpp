@@ -742,6 +742,115 @@ void test_mcp() {
               "the server answered a later call -- RUN returned, it did not wedge");
     }
 
+    SECTION("MCP: TRACE ON <file> via the monitor tool outlives the call that set it (#613)");
+    {
+        // The `monitor` tool makes a new Monitor for every call. The trace file used to
+        // be a member of it, with the debugger holding a bare pointer -- so the file was
+        // closed and destroyed as the TRACE ON call returned, and the next cycle wrote
+        // through a dangling pointer: a segfault, or a trace file with nothing in it.
+        // The debugger owns the file now. WITHOUT the fix this section crashes, or reads
+        // an empty file.
+        Machine m;
+        if (!loadAltmon(m)) return;
+
+        const std::string trace = tmpPath("altair_mcp_trace.txt");
+        std::filesystem::remove(trace);
+
+        std::ostringstream s;
+        int id = 0;
+        auto tool = [&](const char* name, const std::string& args) {
+            s << R"({"jsonrpc":"2.0","id":)" << ++id
+              << R"(,"method":"tools/call","params":{"name":")" << name
+              << R"(","arguments":)" << args << "}}\n";
+        };
+        auto monitor = [&](const std::string& command) {
+            tool("monitor", R"({"command":)" + Json(command).dump() + "}");
+        };
+        // MVI A,5A / STA 2000 / HLT
+        tool("mem_deposit", R"({"addr":0,"bytes":"3E 5A 32 00 20 76"})");  // 1
+        monitor("RUN 0");                                                  // 2: parks the PC
+        monitor("TRACE ON " + trace);                                      // 3
+        tool("step", R"({"count":2})");                                    // 4
+        monitor("TRACE OFF");                                              // 5
+        auto rep = runScript(m, s.str());
+
+        auto text = [&](int i) {
+            return rep[i].at("result").at("content").items().at(0).at("text").str();
+        };
+        auto isError = [&](int i) {
+            const Json& r = rep[i].at("result");
+            return r.has("isError") && r.at("isError").boolean();
+        };
+        CHECK(rep.count(3) && !isError(3) && text(3).find("trace on") != std::string::npos,
+              "TRACE ON <file> is accepted");
+        CHECK(rep.count(5), "the server lived through the traced step");
+
+        std::ifstream     f(trace);
+        std::stringstream got;
+        got << f.rdbuf();
+        CHECK(got.str().find("0000 = 3E") != std::string::npos,
+              ("the first fetch is in the file: " + got.str()).c_str());
+        CHECK(got.str().find("MW   2000 = 5A") != std::string::npos,
+              "and the store, so the cycles of a LATER call reached the file");
+        f.close();
+        std::filesystem::remove(trace);
+    }
+
+    SECTION("MCP: a trace to the console is refused -- there is no console to borrow (#613)");
+    {
+        // With no file, TRACE ON traces to the monitor's `out`. Under MCP that is the text
+        // of one reply, gone when the call returns -- the same dangling pointer. So it is
+        // refused, and so is a tracepoint that would default the sink the same way.
+        Machine m;
+        if (!loadAltmon(m)) return;
+
+        const std::string trace = tmpPath("altair_mcp_tracepoint.txt");
+        std::filesystem::remove(trace);
+
+        std::ostringstream s;
+        int id = 0;
+        auto tool = [&](const char* name, const std::string& args) {
+            s << R"({"jsonrpc":"2.0","id":)" << ++id
+              << R"(,"method":"tools/call","params":{"name":")" << name
+              << R"(","arguments":)" << args << "}}\n";
+        };
+        auto monitor = [&](const std::string& command) {
+            tool("monitor", R"({"command":)" + Json(command).dump() + "}");
+        };
+        tool("mem_deposit", R"({"addr":0,"bytes":"3E 5A 32 00 20 76"})");  // 1
+        monitor("RUN 0");                                                  // 2
+        monitor("TRACE ON");                                               // 3: refused
+        monitor("TRACE ON MASK=IN");                                       // 4: refused
+        monitor("BREAK 0002 TRACE ON");                                    // 5: refused
+        tool("breakpoints", R"({"action":"list"})");                       // 6: none was added
+        tool("step", R"({"count":2})");                                    // 7: and nothing dangles
+        monitor("TRACE ON " + trace);                                      // 8: name the file...
+        monitor("TRACE OFF");                                              // 9
+        monitor("BREAK 0002 TRACE ON");                                    // 10: ...and now it arms
+        auto rep = runScript(m, s.str());
+
+        auto text = [&](int i) {
+            return rep[i].at("result").at("content").items().at(0).at("text").str();
+        };
+        auto isError = [&](int i) {
+            const Json& r = rep[i].at("result");
+            return r.has("isError") && r.at("isError").boolean();
+        };
+        CHECK(isError(3) && text(3).find("bus_trace") != std::string::npos,
+              ("TRACE ON with no file is refused, and names bus_trace: " + text(3)).c_str());
+        CHECK(isError(4), "a mask alone is still no file");
+        CHECK(isError(5) && text(5).find("TRACE ON <file>") != std::string::npos,
+              ("a tracepoint with no sink is refused, and says how: " + text(5)).c_str());
+        CHECK(text(6).find("no breakpoints") != std::string::npos,
+              "the refused tracepoint added no breakpoint");
+        CHECK(rep.count(7) && rep[7].at("result").has("structuredContent"),
+              "a step after the refusals runs");
+        CHECK(!isError(10) && text(10).find("breakpoint") != std::string::npos,
+              ("with a file named first, the tracepoint is accepted: " + text(10)).c_str());
+        m.debug.traceTo(nullptr, 0);  // close the file so it can be removed (Windows)
+        std::filesystem::remove(trace);
+    }
+
     SECTION("MCP: tools/list advertises the structured wrappers");
     {
         Machine m;

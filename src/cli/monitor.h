@@ -298,11 +298,6 @@ private:
     // CPU because it ran no cycle. Reading behind the bus is gone (§10.2: a ROM answers
     // reads like anything else), and the second cursor went with it.
 
-    // TRACE ON <file> writes here; the Debugger holds a bare ostream* into it, so the
-    // stream has to outlive the run. It is closed by TRACE OFF (and, being a member,
-    // when the monitor goes). TRACE ON with no file traces to the console instead.
-    std::ofstream traceFile_;
-
     // THE MONITOR'S OWN INPUT, while a REPL is running -- so an interactive command
     // (EDIT) can read the follow-up lines it prompts for. Null on every non-interactive
     // path: a `startup` list, an MCP `command` call, before repl() and after it. A
