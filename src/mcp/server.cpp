@@ -1673,6 +1673,8 @@ Json callTool(Machine& m, McpSession& sess, const std::string& name, const Json&
         Monitor mon(m);
         mon.setMcpMode(true);  // RUN parks instead of blocking -- a bare RUN (or the RUN a
                                // CONFIG LOAD startup ends in) would otherwise wedge the server.
+                               // It also stops TRACE from borrowing `os`, which dies with
+                               // this call while the debugger would go on writing to it (#613).
         mon.exec(args.at("command").str(), os);
 
         // A monitor command can swap the console out from under us: CONFIG LOAD replaces

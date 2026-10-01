@@ -21,6 +21,13 @@ A key that you press during a paste goes to the guest before the remainder of th
 The Sol-20 keyboard now gives the guest the next key when the guest looks for it. Before, it gave
 one key in each time slice of the host, and text pasted into a Sol-20 arrived very slowly.
 
+### A trace started by an assistant is written to its file
+
+`TRACE ON <file>`, sent through the MCP `monitor` tool, now writes the trace to the file. Before,
+the file stayed empty or the simulator stopped with an error on the next `run`. Through MCP,
+`TRACE ON` with no file is refused, because an assistant has no console for the trace: give a
+file, or use the `bus_trace` tool.
+
 ### The guest can run between MCP calls
 
 Two new MCP tools, `start` and `stop`. `start` starts the guest and returns at once. The guest

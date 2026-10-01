@@ -5388,6 +5388,26 @@ bool Monitor::exec(const std::string& line, std::ostream& out) {
             end -= 2;
         }
 
+        // A tracepoint may be the FIRST mention of tracing in a session, and the
+        // debugger cannot default a sink for itself -- it is core, and the console is
+        // the monitor's. So point it here, but leave it OFF: the tracepoint turns it
+        // on when it fires, which is the whole point of arming one.
+        //
+        // Under --mcp there is no "here": `out` is the text of ONE tool reply and is
+        // gone before the tracepoint can fire (issue #613). Refuse, and say what works.
+        auto tracepointSink = [&]() {
+            if (action != BreakAction::TraceOn || m_.debug.traceConfigured()) return true;
+            if (mcpMode_) {
+                out << "BREAK: a tracepoint needs a trace file under --mcp -- name it first: "
+                       "TRACE ON <file>, then TRACE OFF\n";
+                failed_ = true;
+                return false;
+            }
+            m_.debug.traceTo(&out, 0);
+            m_.debug.traceOff();
+            return true;
+        };
+
         // BREAK <kind> <action> -- a DEVICE-EVENT breakpoint (BREAK TAPE STOP, and its
         // future siblings). It fires when a board reaches a named hardware state, not on a
         // bus cycle or a PC value, so it is checked here BEFORE the address path -- a
@@ -5399,12 +5419,7 @@ bool Monitor::exec(const std::string& line, std::ostream& out) {
         for (const DeviceEvent& de : kDeviceEvents) {
             if (!is(a[1], de.kind)) continue;
             if (end == 3 && is(a[2], de.action)) {
-                // A tracepoint may be the first mention of tracing this session; point the
-                // sink here but leave it off, exactly as the address path does below.
-                if (action == BreakAction::TraceOn && !m_.debug.traceConfigured()) {
-                    m_.debug.traceTo(&out, 0);
-                    m_.debug.traceOff();
-                }
+                if (!tracepointSink()) return true;
                 int id = m_.debug.add(de.bk, 0, 0, nullptr, action);
                 for (const Breakpoint& b : m_.debug.breakpoints())
                     if (b.id == id) out << "breakpoint " << id << ": " << b.describe() << "\n";
@@ -5516,14 +5531,7 @@ bool Monitor::exec(const std::string& line, std::ostream& out) {
             }
         }
 
-        // A tracepoint may be the FIRST mention of tracing in a session, and the
-        // debugger cannot default a sink for itself -- it is core, and the console is
-        // the monitor's. So point it here, but leave it OFF: the tracepoint turns it
-        // on when it fires, which is the whole point of arming one.
-        if (action == BreakAction::TraceOn && !m_.debug.traceConfigured()) {
-            m_.debug.traceTo(&out, 0);
-            m_.debug.traceOff();
-        }
+        if (!tracepointSink()) return true;
 
         int id = m_.debug.add(kind, lo, hi, cond, action, when);
         for (const Breakpoint& b : m_.debug.breakpoints())
@@ -5560,12 +5568,10 @@ bool Monitor::exec(const std::string& line, std::ostream& out) {
             return true;
         }
         if (is(a[1], "OFF")) {
-            m_.debug.traceOff();
             // The sink STAYS -- TRACE OFF stops the tracing, it does not forget where
             // it was going, so `TRACE ON <file> MASK=...` then `TRACE OFF` is how you
-            // aim a tracepoint at a file. But FLUSH it: the file has to be complete on
-            // disk for someone reading it now, even though we will write to it again.
-            if (traceFile_.is_open()) traceFile_.flush();
+            // aim a tracepoint at a file. (The debugger flushes a file as it stops.)
+            m_.debug.traceOff();
             out << "trace off.";
             if (m_.debug.traceConfigured())
                 out << "  (where it goes is remembered: TRACE ON, or a tracepoint, resumes it.)";
@@ -5609,23 +5615,24 @@ bool Monitor::exec(const std::string& line, std::ostream& out) {
             }
         }
 
-        std::ostream* sink = &out;
         if (!file.empty()) {
-            if (traceFile_.is_open()) traceFile_.close();
+            // The debugger owns the file -- it has to outlive this Monitor (issue #613).
             file = resolveInput(file);  // rooted at the machine's dir; a typed `~` expands
-            traceFile_.open(file, std::ios::out | std::ios::trunc);
-            if (!traceFile_) {
+            if (!m_.debug.traceToFile(file, mask)) {
                 out << "TRACE: cannot open " << file << "\n";
                 failed_ = true;
                 return true;
             }
-            sink = &traceFile_;
-        } else if (traceFile_.is_open()) {
-            // Back to the console: the old file is no longer the sink, so close it
-            // rather than leave a half-written trace open on a stream nobody writes.
-            traceFile_.close();
+        } else if (mcpMode_) {
+            // No file means the console, and under --mcp there is none: `out` is the text
+            // of this one reply and is gone before the next cycle runs.
+            out << "TRACE: name a file under --mcp (TRACE ON <file>), or read the cycles "
+                   "with the bus_trace tool\n";
+            failed_ = true;
+            return true;
+        } else {
+            m_.debug.traceTo(&out, mask);  // back to the console; this closes an old file
         }
-        m_.debug.traceTo(sink, mask);
         out << "trace on" << (file.empty() ? "" : (" -> " + file));
         if (mask) out << "  (masked)";
         out << ".\n";
