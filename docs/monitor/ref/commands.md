@@ -42,6 +42,48 @@ N  ; over the CALL/RST at PC (else single-step)
 ```
 
 
+### NOPASTE — `NOP[ASTE]`
+
+```
+NOPASTE
+```
+Stop a PASTE that is not finished. The part of the file that the guest has not
+read is dropped, with any TYPE that waited behind it, and the count is shown.
+
+```
+NOPASTE
+```
+
+
+### PASTE — `PA[STE]`
+
+```
+PASTE <file>
+```
+Send a host file to the guest's keyboard, as if you pasted it. TYPE sends a
+short text; PASTE sends a file of ANY SIZE. The file is read as the guest takes
+the characters, so no character is lost and the file is never held whole. At
+the end of the file the keyboard is yours again.
+
+The bytes go as they are in the file -- no line ending is changed. The guest
+reads them when it looks at the keyboard, so PASTE before the RUN that starts
+the guest is read at its first prompt. A TYPE after a PASTE waits for the file
+to end, so the two arrive in the order you gave them.
+
+A relative <file> is found beside the machine file, the same as LOAD.
+
+This loads a SOLOS ENTER script on a Sol-20 and then starts the program:
+
+```
+startup = ["PASTE \"TREK80.ENT\"", "TYPE \"EX 0000\\r\"", "RUN C000"]
+PASTE "R.HEX"  ; paste it now, at a running guest
+```
+
+The keyboard comes first: a key that you press during a paste goes to the guest
+before the remainder of the file. ^E stops the machine during a paste, and RUN
+continues it. NOPASTE drops it.
+
+
 ### POWER — `P[OWER]`
 
 ```
@@ -155,6 +197,8 @@ TYPE "XE TRK80\r"  ; type it now, at a running guest
 
 A program that clears its keyboard as it starts drops keystrokes sent before it
 is ready; TYPE cannot help there, no more than a fast typist could.
+
+TYPE is for a line or two. To send a whole file, use PASTE.
 
 ## Examining and changing memory
 

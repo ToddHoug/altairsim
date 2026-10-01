@@ -745,6 +745,27 @@ static const std::vector<CommandDef> kCommands = {
     {"POWER", true, nullptr, "POWER",
      "Power cycle. THE ONLY THING THAT LOSES RAM -- a RESET does not, because on\n"
      "real hardware it does not."},
+    {"PASTE", true, nullptr, "PASTE <file>",  // PA (POWER has P)
+     "Send a host file to the guest's keyboard, as if you pasted it. TYPE sends a\n"
+     "short text; PASTE sends a file of ANY SIZE. The file is read as the guest takes\n"
+     "the characters, so no character is lost and the file is never held whole. At\n"
+     "the end of the file the keyboard is yours again.\n"
+     "\n"
+     "The bytes go as they are in the file -- no line ending is changed. The guest\n"
+     "reads them when it looks at the keyboard, so PASTE before the RUN that starts\n"
+     "the guest is read at its first prompt. A TYPE after a PASTE waits for the file\n"
+     "to end, so the two arrive in the order you gave them.\n"
+     "\n"
+     "A relative <file> is found beside the machine file, the same as LOAD.\n"
+     "\n"
+     "This loads a SOLOS ENTER script on a Sol-20 and then starts the program:\n"
+     "\n"
+     "  startup = [\"PASTE \\\"TREK80.ENT\\\"\", \"TYPE \\\"EX 0000\\\\r\\\"\", \"RUN C000\"]\n"
+     "  PASTE \"R.HEX\"  ; paste it now, at a running guest\n"
+     "\n"
+     "The keyboard comes first: a key that you press during a paste goes to the guest\n"
+     "before the remainder of the file. ^E stops the machine during a paste, and RUN\n"
+     "continues it. NOPASTE drops it."},
     {"TRACE", true, nullptr, "TRACE ON|OFF [file] [MASK=IN,OUT,IRQ,DMA,CONTENTION]",
      "Log every BUS CYCLE while the machine runs -- to the console, or to a file.\n"
      "A cycle, not an instruction: MR/MW are memory, IN/OUT are I/O, INTA is an\n"
@@ -784,7 +805,9 @@ static const std::vector<CommandDef> kCommands = {
      "  TYPE \"XE TRK80\\r\"  ; type it now, at a running guest\n"
      "\n"
      "A program that clears its keyboard as it starts drops keystrokes sent before it\n"
-     "is ready; TYPE cannot help there, no more than a fast typist could."},
+     "is ready; TYPE cannot help there, no more than a fast typist could.\n"
+     "\n"
+     "TYPE is for a line or two. To send a whole file, use PASTE."},
     {"SNAPSHOT", true, nullptr, "SNAPSHOT <file>",                        // SN
      "Write the machine's STATE to a file: the CPU, the clock, and every board's\n"
      "registers, RAM and latches. NOT its configuration -- a snapshot is state, the\n"
@@ -803,6 +826,11 @@ static const std::vector<CommandDef> kCommands = {
      "\n"
      "  NOBREAK 2\n"
      "  NOBREAK"},
+    {"NOPASTE", true, nullptr, "NOPASTE",  // NOP (NOBREAK has NO)
+     "Stop a PASTE that is not finished. The part of the file that the guest has not\n"
+     "read is dropped, with any TYPE that waited behind it, and the count is shown.\n"
+     "\n"
+     "  NOPASTE"},
     {"HELP", true, nullptr, "HELP [<command>]",  // HE (HISTORY has H)
      "Bare HELP lists the commands and nothing else -- the whole set on a few\n"
      "lines, which is what you want when you are hunting for the name. HELP with a\n"

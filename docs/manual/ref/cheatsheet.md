@@ -74,7 +74,9 @@ Type the part before the bracket.
 | `MOV[E]` | Copy a range of memory to another address. | `MOVE <range> <dest> [ROM]` |
 | `N[EXT]` | Step one instruction, running any CALL/RST to completion. | `NEXT` |
 | `NO[BREAK]` | Remove a breakpoint, or all of them. | `NOBREAK [id]` |
+| `NOP[ASTE]` | Stop a PASTE that is not finished. | `NOPASTE` |
 | `O[UT]` | Write a byte to an I/O port. | `OUT <port> <byte>` |
+| `PA[STE]` | Send a host file of any size to the guest's keyboard, as if pasted. | `PASTE <file>` |
 | `P[OWER]` | Power-cycle the machine -- the only thing that clears RAM. | `POWER` |
 | `Q[UIT]` | Leave the simulator. | `QUIT` |
 | `REGI[ON]` | Add a RAM or ROM region to a memory board. | `REGION ADD <id> type=ram\|rom at=<addr> [size=\|mount=]` |

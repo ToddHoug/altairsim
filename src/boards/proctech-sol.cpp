@@ -76,6 +76,13 @@ uint8_t SolBoard::read(const BusCycle& c) {
             // it as fast as SOLOS looks, and `real` still holds each byte to its baud
             // through readable() (host/tape.h).
             if (clock_) tapeUart_.poll(*clock_);
+            // THE KEYBOARD, FOR THE SAME REASON. SOLOS tests KDR here and reads 0FCh
+            // only when it is clear. If the next key were latched by pump() alone, the
+            // guest would get ONE KEY A SLICE whatever its clock -- a paste of a 27 KB
+            // ENTER script took minutes at 2 MHz, and the cause was the host's slice,
+            // not the machine. Still one strobe at a time: nothing is latched while the
+            // last key is unread.
+            latchKeyboard();
             return generalStatus();
         case 3:  // FB -- tape (CUTS) data. The read strobe clears Tape Data Ready.
             if (clock_) tapeUart_.poll(*clock_);
@@ -180,7 +187,8 @@ uint8_t SolBoard::generalStatus() const {
 
 // ---------------------------------------------------------------------------
 // The host turn. Serial line and keyboard both come in here, once per slice, on the
-// main thread -- never inside a bus cycle (DESIGN.md 7.1).
+// main thread. The keyboard and the tape are ALSO fetched on the 0FAh status read (see
+// read()), so a guest that polls is not held to one byte a slice.
 // ---------------------------------------------------------------------------
 void SolBoard::pump() {
     serial_.pump();

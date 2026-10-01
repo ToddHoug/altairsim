@@ -8,6 +8,19 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+### Paste a file into the guest
+
+A new monitor command, `PASTE <file>`, sends a host file to the keyboard of the guest, as if you
+pasted it from the clipboard. The file can be of any size and no character is lost. `TYPE` is
+still the command for a line or two, and a `TYPE` after a `PASTE` arrives after the file. Use it
+in a `startup` list to enter a program that the guest reads from its keyboard, for example a
+SOLOS `ENTER` script or an Intel HEX file for `PIP`. `NOPASTE` stops a paste that is not finished.
+A key that you press during a paste goes to the guest before the remainder of the file, and
+`Ctrl-E` stops the machine as usual.
+
+The Sol-20 keyboard now gives the guest the next key when the guest looks for it. Before, it gave
+one key in each time slice of the host, and text pasted into a Sol-20 arrived very slowly.
+
 ### The guest can run between MCP calls
 
 Two new MCP tools, `start` and `stop`. `start` starts the guest and returns at once. The guest
