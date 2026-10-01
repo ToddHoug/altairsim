@@ -10,6 +10,10 @@ If you have never wired an assistant to altairsim, read `DRIVING-WITH-AI.md` (it
 this folder) first — it is the briefing you drop in front of the assistant, and it explains the
 MCP server and the one registration step that this walkthrough assumes you have done.
 
+If your assistant reads Agent Skills, install `skills/altairsim/` from the package instead. The
+assistant then loads the same briefing by itself. The manual's package chapter tells you where to
+copy it.
+
 ## Point your assistant at this machine
 
 The machine is `cpm-ai.toml`. Register the server **from this directory**, so the host bridge

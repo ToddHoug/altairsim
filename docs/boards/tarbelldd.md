@@ -5,8 +5,7 @@ the single-density #1011, but from a **mixed-density** disk. It carries an **on-
 DMA controller** and is the **first shipping board to master the S-100 bus** (DESIGN.md §4.5) —
 a CBIOS assembled `DMACNTL=TRUE` moves sectors by DMA instead of an `IN`/`OUT` byte loop.
 `tests/test_tarbell.cpp`, `acceptance-tarbelldd` and `acceptance-tarbelldd-dma` pin it. Run it
-with `altairsim tarbelldd` (mount a disk), `examples/tarbell/tarbelldd.toml` (PIO CBIOS) or
-`examples/tarbell/tarbelldd-dma.toml` (DMA CBIOS).
+with `altairsim tarbelldd` (mount a disk).
 
 ## It is the #1011's twin
 
@@ -35,7 +34,7 @@ remove it, and do not move chip construction back into the base constructor alon
 
 ## Mixed-density media
 
-The tracked master (`examples/tarbell/TARBELLDD-CPM22-SSDD-48K.DSK`, 499,456 bytes) is **single
+The tracked master (`tests/media/tarbell/TARBELLDD-CPM22-SSDD-48K.DSK`, 499,456 bytes) is **single
 density on track 0** — 26 sectors of 128 bytes, the boot format the shared PROM and cold loader read
 — and **double density on tracks 1-76** — 51 sectors of 128 bytes. Two `initFormat` ranges express
 it (`describeGeometry()`):
@@ -93,7 +92,7 @@ board's `Mover` steals one byte per grant — the FD1791 is wait-synced, so each
 pHOLD. The stolen T-states are charged to the clock, so the CPU genuinely loses the time (the
 unit test in `tests/test_tarbell.cpp` reads the exact theft back out of `clock.now()`).
 
-`examples/tarbell/TARBELLDD-CPM22-SSDD-48K-DMA.DSK` is such a disk: its CBIOS is `DMACNTL=TRUE`, so
+`tests/media/tarbell/TARBELLDD-CPM22-SSDD-48K-DMA.DSK` is such a disk: its CBIOS is `DMACNTL=TRUE`, so
 every post-boot sector read (DIR, warm boot) flows through the 8257. Its **cold boot loader stays
 PIO** — RESET reads SD track 0 the proven way, and the DMA path takes over once CP/M is up.
 `acceptance-tarbelldd-dma` boots it to `A>` and reads a directory through the on-card 8257.

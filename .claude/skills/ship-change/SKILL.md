@@ -12,7 +12,7 @@ ask.
 ## 1. Commit — after the maintainer approves the review
 
 **Before you stage: does this change what a package holder gets?** If the diff touches
-`docs/manual/`, `docs/recipes/`, `docs/monitor/`, `docs/debugger/`, `examples/` or
+`docs/manual/`, `docs/monitor/`, `docs/debugger/`, `examples/` or
 `docs/package.map`, then `docs/changelog/changelog.md` `## Unreleased` must already say what
 someone can do now that they could not do in the last release. **A new document in the archive
 and an example that now ships both count** — "it is only documentation" is how this gets missed,

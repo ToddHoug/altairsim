@@ -19,7 +19,7 @@ set timeout 60
 log_user 0
 
 set exe [lindex $argv 0]
-set dsk "examples/tarbell/CPM22b15-48K-SSSD.DSK"
+set dsk "tests/media/tarbell/CPM22b15-48K-SSSD.DSK"
 
 set before [exec shasum $dsk]
 

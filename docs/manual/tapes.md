@@ -28,13 +28,13 @@ no disk. Type the commands in the folder where you unzipped the package.
 2. Put the cassette in:
 
    ```
-   altairsim> MOUNT acr0:tape "examples/basic/4K BASIC Ver 3-1.tap"
+   altairsim> MOUNT acr0:tape "examples/basic4k/4K BASIC Ver 3-1.tap"
    ```
 
 3. Enter the bootstrap:
 
    ```
-   altairsim> LOAD "examples/basic/LDR4K31.HEX"
+   altairsim> LOAD "examples/basic4k/LDR4K31.HEX"
    ```
 
    The bootstrap is 20 bytes. On a real Altair, you entered it by hand on the front-panel
@@ -68,8 +68,7 @@ no disk. Type the commands in the folder where you unzipped the package.
    to use some of your 4K for trigonometry.
 
 You are in Altair BASIC, the first product that Microsoft sold. The *Worked examples* chapter
-does the same with one command, `altairsim examples/basic/basic4k.toml`. It also loads BASIC
-1.0, and Disk Extended BASIC from a floppy disk.
+does the same with one command, `altairsim examples/basic4k/basic4k.toml`.
 
 **If a tape load stops, and the tape is mounted, check the sense switches first.** The bootstrap
 reads them to find the device to load from. The `basic4k` machine sets `sense = 0x80` on the
@@ -94,14 +93,14 @@ chapter describes the boards that take endpoints.
 **You put the tape in by hand.** An 88-ACR cannot start, stop or rewind the tape, and the
 machine does not know that a tape is there. For this reason, a machine file has no key for the
 tape. The tape is not hardware. You put it in with `MOUNT`, and a `startup` command can type the
-`MOUNT` for you, as `examples/basic/basic4k.toml` does.
+`MOUNT` for you, as `examples/basic4k/basic4k.toml` does.
 
 ## Use a tape
 
 ### Put a tape in
 
 ```
-altairsim> MOUNT acr0:tape "examples/basic/4K BASIC Ver 3-1.tap"
+altairsim> MOUNT acr0:tape "examples/basic4k/4K BASIC Ver 3-1.tap"
 ```
 
 The ACR has one unit, so you can leave out the unit and the number:
@@ -215,15 +214,19 @@ loader only asks for the next byte, and the byte is always ready.
 Most surviving Altair and Sol cassettes are **audio**. Somebody played a cassette into a sound
 card, and saved a `.WAV` file. You can mount one on either board.
 
-**The package has two**, in `examples/basic/`: `4K BASIC Ver 3-1.wav` and `BASIC Ver 1-0.wav`.
-They are the two cassette BASICs of that folder, as 88-ACR audio. The machine files
-`basic4k-wav.toml` and `basic1-wav.toml` mount them and boot. In the `basic` folder, type:
+**`examples/basic4k/` has 4K BASIC on an audio tape**, `4K BASIC Ver 3-1.wav`. It holds the
+program of the `.tap`, encoded in the audio format of the 88-ACR. The machine file
+`basic4k-wav.toml` mounts it and boots.
+In that folder, type:
 
 ```
 altairsim> MOUNT acr0:tape "4K BASIC Ver 3-1.wav"
 acr0:tape: mounted 4K BASIC Ver 3-1.wav
 4K BASIC Ver 3-1.wav: fsk300, 4439 bytes, 0 framing errors (100.0% of frames intact)
 ```
+
+`examples/basic1/` has Altair BASIC 1.0 on an audio tape too, `BASIC Ver 1-0.wav`. The machine
+file `basic1-wav.toml` mounts it.
 
 The program decodes the recording **one time, when you mount it**, and never while the machine
 runs. After that, a `.WAV` works as a `.TAP` does. The counter gives the real minutes and
@@ -267,7 +270,7 @@ longer than any gap inside a program, so no program is cut in half.
 
 ### A board refuses audio that it cannot hear
 
-The package has the same 4K BASIC in a modulation that the 88-ACR *cannot* read,
+`examples/basic4k/` also has 4K BASIC in a modulation that the 88-ACR *cannot* read,
 `4K BASIC (Kansas City).wav`. The board refuses it:
 
 ```

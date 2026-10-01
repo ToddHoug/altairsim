@@ -1,204 +1,46 @@
 # THE EXAMPLES, IN THE LAYOUT A USER ACTUALLY GETS.
 #
-# examples/ is not a test fixture. It is what we SHIP: a user gets the `altairsim`
-# binary and that tree, and nothing else -- no repository, no build
-# directory, no tests. So the question this file asks is not "do the boards work", which
-# every other test already answers. It is:
+# examples/ is not a test fixture. It is what we SHIP: a user gets the `altairsim` binary and
+# that tree, and nothing else -- no repository, no build directory, no tests. So this file
+# does not ask "does the simulator work" -- the simulator's own tests answer that from their
+# own fixtures (tests/media, media.cmake), and none of them may read examples/. It asks:
 #
 #     DOES THE THING WE HAND PEOPLE WORK WHERE WE HAND IT TO THEM?
 #
-# Nothing asked that until now, and the coincidence that hid it is that the repo root and
-# the distribution root were the same directory on this machine. Every example carried a
-# repo-root-relative path, every test ran from the repo root, and the whole suite was green
-# while `cd tapes/MitsPS2 && altairsim ps2int.toml` -- the documented way to run it --
-# could not find its own tape.
+# So it COPIES each example out of the tree, leaving the repository behind, and runs EVERY
+# machine file in it from there -- the only arrangement in which a repo-root-relative path in
+# an example is visible as the bug it is.
 #
-# So this test COPIES an example out of the tree, leaving the repository behind, and boots
-# it from there. That is the only arrangement in which the bug is visible, which is exactly
-# why it is the arrangement to test in.
-#
-# Expects: -DSIM=<altairsim> -DSRC=<source dir> -DBIN=<binary dir>
+# Expects: -DSIM=<altairsim> -DSRC=<source dir> -DBIN=<binary dir> -DHAVE_SDL=<0|1>
 
 set(dist "${BIN}/examples-work")
 file(REMOVE_RECURSE "${dist}")
 
-# The distribution: the binary (already built, wherever it is) plus this ONE example
-# directory. Note what is NOT here -- machines/, roms/, src/, the repo. If the example
-# needs any of it, this test fails, and it should.
-file(COPY "${SRC}/examples/basic" DESTINATION "${dist}/examples")
+# The whole of an MCP session, sent up front: every `run` waits for its `until` before the
+# next request is read, so the file is a script, not a race.
+function(mcp_session file)
+  set(lines [=[{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"examples","version":"1"}}}
+{"jsonrpc":"2.0","method":"notifications/initialized"}]=])
+  set(id 2)
+  foreach(req ${ARGN})
+    string(APPEND lines "\n{\"jsonrpc\":\"2.0\",\"id\":${id},\"method\":\"tools/call\",\"params\":${req}}")
+    math(EXPR id "${id} + 1")
+  endforeach()
+  file(WRITE "${file}" "${lines}\n")
+endfunction()
 
-set(example "${dist}/examples/basic")
-
-# What 4K BASIC has to print for the machine to have actually booted off the cassette.
-# `TAPE OK` is the one that cannot be faked by a machine that merely started: it is the
-# output of a BASIC program typed into a BASIC that read itself off a period .TAP.
-function(expect_basic out why)
-  foreach(want "ALTAIR BASIC" "OK" "42" "TAPE OK")
-    string(FIND "${out}" "${want}" hit)
+function(expect_contains out why)
+  math(EXPR last "${ARGC} - 1")
+  foreach(i RANGE 2 ${last})
+    string(FIND "${out}" "${ARGV${i}}" hit)
     if(hit LESS 0)
       message(FATAL_ERROR "examples: ${why}\n"
-                          "  '${want}' never reached the terminal.\n--- output ---\n${out}")
+                          "  '${ARGV${i}}' never reached the terminal.\n--- output ---\n${out}")
     endif()
   endforeach()
 endfunction()
 
-# ---- 1. THE DOCUMENTED WAY: cd into the example's directory and name the file. --------
-#
-# This is the case the examples are FOR, and the case that was broken. `basic4k.toml` says
-# MOUNT "4K BASIC Ver 3-1.tap" -- the tape lying beside it -- and here that is also the
-# working directory, so this would pass even under the old cwd-relative rule. It passes
-# here because the tape is where the file says it is, which is the point: the file is now
-# true no matter where the directory has been moved to.
-execute_process(
-  COMMAND           "${SIM}" basic4k.toml
-  WORKING_DIRECTORY "${example}"
-  INPUT_FILE        "${SRC}/tests/acceptance/basic4k.keys"
-  OUTPUT_VARIABLE   out
-  ERROR_VARIABLE    out
-  TIMEOUT           60
-)
-expect_basic("${out}" "`cd examples/basic && altairsim basic4k.toml` did not boot BASIC")
-
-# ---- 2. ...AND BY PATH, from the top of the distribution. ------------------------------
-#
-# The same file, the same machine, from a different directory. THIS is the half that needs
-# the loader to resolve against the file rather than the process: the tape is not in the
-# working directory and never will be. If a machine file meant something different
-# depending on where you launched it from, it would be the very trap looksLikeFile()
-# refuses to walk into (core/machines.h) -- so it must not.
-execute_process(
-  COMMAND           "${SIM}" examples/basic/basic4k.toml
-  WORKING_DIRECTORY "${dist}"
-  INPUT_FILE        "${SRC}/tests/acceptance/basic4k.keys"
-  OUTPUT_VARIABLE   out
-  ERROR_VARIABLE    out
-  TIMEOUT           60
-)
-expect_basic("${out}" "`altairsim examples/basic/basic4k.toml` from the dist root did not boot BASIC")
-
-# ...and its .ini twin, run with -s from the dist root (#575). The script is named from
-# where you launched; the tape and loader it names lie beside IT, not beside you. Before
-# #575 a -s script's lines resolved against the machine's folder, so this failed while
-# `DO examples/basic/basic4k.ini` worked.
-execute_process(
-  COMMAND           "${SIM}" -s examples/basic/basic4k.ini
-  WORKING_DIRECTORY "${dist}"
-  INPUT_FILE        "${SRC}/tests/acceptance/basic4k.keys"
-  OUTPUT_VARIABLE   out
-  ERROR_VARIABLE    out
-  TIMEOUT           60
-)
-expect_basic("${out}" "`altairsim -s examples/basic/basic4k.ini` from the dist root did not boot BASIC")
-
-# ---- 2a. THE SAME BASIC, OFF A WAV CASSETTE -- the ACR's audio front end end to end. ---
-#
-# basic4k.toml mounts a decoded .tap; basic4k-wav.toml mounts "4K BASIC Ver 3-1.wav", the
-# 300-baud FSK audio a period 88-ACR actually heard, and the card demodulates it. Reaching
-# the SAME TAPE OK proves the whole audio path -- not just that a byte stream was replayed --
-# from the shipped folder, on the documented command. (The sibling "4K BASIC (Kansas
-# City).wav" is a wrong-modulation tape this card cannot read; it is proved to be refused by
-# the tapes chapter, not booted here.)
-execute_process(
-  COMMAND           "${SIM}" basic4k-wav.toml
-  WORKING_DIRECTORY "${example}"
-  INPUT_FILE        "${SRC}/tests/acceptance/basic4k.keys"
-  OUTPUT_VARIABLE   out
-  ERROR_VARIABLE    out
-  TIMEOUT           60
-)
-expect_basic("${out}" "`cd examples/basic && altairsim basic4k-wav.toml` did not boot BASIC off the WAV cassette")
-
-# ---- 2b. THE 88-UIO -- 8K BASIC over ONE board that is a serial port AND a cassette. ---
-#
-# examples/uio boots 8K BASIC 3.2 over a single 88-UIO: its 6850 serial at 0x10 (where
-# 88-2SIO Port A lives) and its cassette section at 0x06 (where an 88-ACR lives). So the
-# period bootstrap MITS shipped runs UNMODIFIED against a board that is two cards in one --
-# which is the whole claim the example makes, proved from the shipped directory and by
-# path, exactly as the basic/ and cpm/ examples are.
-file(COPY "${SRC}/examples/uio" DESTINATION "${dist}/examples")
-set(uio "${dist}/examples/uio")
-
-# 8K BASIC prints more than the four: its version banner and the EIGHT-K marker are the
-# cheapest proof it is the 8K image read whole off the cassette, and `42`/`TAPE OK` are a
-# program the interpreter ran after coming off tape.
-function(expect_basic8k out why)
-  foreach(want "ALTAIR BASIC VERSION 3.2" "[EIGHT-K VERSION]" "OK" " 42" "TAPE OK")
-    string(FIND "${out}" "${want}" hit)
-    if(hit LESS 0)
-      message(FATAL_ERROR "examples: ${why}\n"
-                          "  '${want}' never reached the terminal.\n--- output ---\n${out}")
-    endif()
-  endforeach()
-endfunction()
-
-execute_process(
-  COMMAND           "${SIM}" uio.toml
-  WORKING_DIRECTORY "${uio}"
-  INPUT_FILE        "${SRC}/tests/acceptance/basic8k.keys"
-  OUTPUT_VARIABLE   out
-  ERROR_VARIABLE    out
-  TIMEOUT           60
-)
-expect_basic8k("${out}" "`cd examples/uio && altairsim uio.toml` did not boot 8K BASIC over the 88-UIO")
-
-execute_process(
-  COMMAND           "${SIM}" examples/uio/uio.toml
-  WORKING_DIRECTORY "${dist}"
-  INPUT_FILE        "${SRC}/tests/acceptance/basic8k.keys"
-  OUTPUT_VARIABLE   out
-  ERROR_VARIABLE    out
-  TIMEOUT           60
-)
-expect_basic8k("${out}" "`altairsim examples/uio/uio.toml` from the dist root did not boot 8K BASIC")
-
-# ---- 3. ONE BASE: TYPED PATHS AND THE MACHINE FILE'S OWN RESOLVE TOGETHER. --------------
-#
-# A path a HUMAN TYPES resolves against the MACHINE's directory -- the very folder the
-# machine file's own `mount =` names -- not against whatever shell they launched from. So
-# the identical MOUNT, whether it sits in the startup list or is typed at the prompt, finds
-# the SAME tape beside the machine file, from wherever you ran altairsim. (This is the
-# unification: typed paths used to go to the shell's cwd, which is how the same disk could
-# show under two different names. hostdir is the one base that stays separate.)
-#
-# So: a machine file whose startup mounts the tape BESIDE IT, followed by the identical
-# MOUNT typed at the prompt from a directory that is NOT the machine's -- and BOTH must
-# succeed, resolving to the tape beside the machine file. The two commands are
-# character-for-character the same, and now so is where they look.
-file(WRITE "${example}/probe.toml"
-     "[machine]\nname = \"probe\"\nbase = \"basic4k\"\n"
-     "startup = [\"MOUNT acr0:tape \\\"4K BASIC Ver 3-1.tap\\\"\"]\n")
-
-execute_process(
-  COMMAND           "${SIM}" examples/basic/probe.toml -x "MOUNT acr0:tape \"4K BASIC Ver 3-1.tap\""
-  WORKING_DIRECTORY "${dist}"
-  OUTPUT_VARIABLE   out
-  ERROR_VARIABLE    out
-  TIMEOUT           30
-)
-
-# Both resolved against the machine's directory, which lives beside the tape -- so both
-# narrate the same path. The startup one proves the file rule; the typed one, run from
-# ${dist} and not from examples/basic, proves a typed path now roots there too.
-string(FIND "${out}" "mounted examples/basic/4K BASIC Ver 3-1.tap" hit)
-if(hit LESS 0)
-  message(FATAL_ERROR
-    "examples: the STARTUP mount did not resolve against the machine file's directory.\n"
-    "--- output ---\n${out}")
-endif()
-
-# The typed one must NOT have failed -- if it resolved against ${dist} (the old cwd rule)
-# it would say "no such file". One base means it found the tape beside the machine file.
-string(FIND "${out}" "no such file" miss)
-if(miss GREATER -1)
-  message(FATAL_ERROR
-    "examples: A TYPED PATH DID NOT RESOLVE AGAINST THE MACHINE'S DIRECTORY.\n"
-    "  `MOUNT acr0:tape \"4K BASIC Ver 3-1.tap\"` was typed from ${dist} and should have\n"
-    "  found the tape beside the machine file, as its own startup does. It did not --\n"
-    "  the one-base rule (typed paths root at the machine's directory) has regressed.\n"
-    "--- output ---\n${out}")
-endif()
-
-# ---- 4. THE QUICK START'S OWN COMMAND, which was never tested until now. ---------------
+# ---- 1. examples/cpm -- THE QUICK START'S OWN MACHINE, and every other file beside it. ------
 #
 # `examples/cpm` is the flagship: it is what docs/manual/quick-start.md promises, and until
 # 2026-07-19 NO test booted it. `acceptance-dcdd-readonly` boots a test-owned machine file
@@ -262,133 +104,37 @@ execute_process(
 )
 expect_cpm("${out}" "`altairsim -s examples/cpm/cpm22-buffered.ini` from the dist root did not boot CP/M")
 
-# ---- 4a. THE FDC+'s 1.5 MB FLOPPY -- a disk the boot PROM cannot read, booted anyway. ----
-#
-# cpm22-fdcplus-hdf.toml puts CPM22-48K-HDF.dsk in an FDC+ at drive type 5 and boots it with
-# the stock DBL, which knows nothing of 10,240-byte tracks. The card's firmware hands DBL a
-# fake Altair sector of its own, whose loader reads the real track 0 -- so the banner alone
-# proves the fake sector, the loader's no-handshake track read at 2 MHz, and the BIOS after
-# it; `A: ASM      COM` is the directory read off the image.
-function(expect_hdf out why)
-  foreach(want "48K CP/M 2.2b v1.2" "For Altair 1.5Mb Floppy" "A>" "A: ASM      COM")
-    string(FIND "${out}" "${want}" hit)
-    if(hit LESS 0)
-      message(FATAL_ERROR "examples: ${why}\n"
-                          "  '${want}' never reached the terminal.\n--- output ---\n${out}")
-    endif()
-  endforeach()
-endfunction()
-
+# cpm22-terminal.toml puts the console in the built-in windowed VT100. A build with SDL loads it
+# -- under SDL's dummy video driver, so no window opens on a test machine -- and the console
+# line must hold the terminal. A headless build (no SDL) must REFUSE it, with the one message
+# that says why: the spec parsed, and only the missing window stopped it. Each leg asserts the
+# answer its own build must give; neither passes on the other's.
+mcp_session("${dist}/terminal.jsonl"
+  [=[{"name":"monitor","arguments":{"command":"SHOW sio0"}}]=])
 execute_process(
-  COMMAND           "${SIM}" cpm22-fdcplus-hdf.toml
+  COMMAND           "${CMAKE_COMMAND}" -E env SDL_VIDEODRIVER=dummy
+                    "${SIM}" cpm22-terminal.toml --mcp
   WORKING_DIRECTORY "${cpm}"
-  INPUT_FILE        "${SRC}/tests/acceptance/cpm-dir.keys"
+  INPUT_FILE        "${dist}/terminal.jsonl"
   OUTPUT_VARIABLE   out
   ERROR_VARIABLE    out
-  TIMEOUT           60
+  TIMEOUT           30
 )
-expect_hdf("${out}" "`cd examples/cpm && altairsim cpm22-fdcplus-hdf.toml` did not boot CP/M")
+if(HAVE_SDL)
+  expect_contains("${out}" "`altairsim cpm22-terminal.toml` did not load on a build with SDL"
+                  "sio0  (2sio)" "serial  terminal?emulation=vt100&size=80x24")
+else()
+  expect_contains("${out}" "a headless build did not refuse cpm22-terminal.toml for its missing window"
+                  "terminal: this build has no window")
+endif()
 
-# ---- 4b. THE HARD DISK -- CP/M booted through the 88-HDSK Datakeeper controller. -------
-#
-# Same shape as the floppy CP/M above, and here for the same reason: the disk is beside the
-# machine file, so booting it from its own directory and by path proves the shipped folder
-# works where the user is handed it. But it also proves something the floppy cannot -- the
-# whole 88-HDSK command/handshake controller and its (cyl,side,sector) mapping, exercised
-# by HDBL loading the boot pages and by CP/M reading the directory off the platter.
-#
-# One directory line is enough to be a real claim: `A: BOOT     ASM` is an entry read off
-# the image through the controller, and DIR stops after one line because a CR is already
-# waiting in the pipe (the same CP/M behaviour, and the same reason, as the floppy case).
-file(COPY "${SRC}/examples/hdsk" DESTINATION "${dist}/examples")
-set(hdsk "${dist}/examples/hdsk")
-
-function(expect_hdsk out why)
-  foreach(want "HDBL 2.00" "48K CP/M 2.2b v1.6" "For MITS 88-HDSK" "A0>" "A: BOOT     ASM")
-    string(FIND "${out}" "${want}" hit)
-    if(hit LESS 0)
-      message(FATAL_ERROR "examples: ${why}\n"
-                          "  '${want}' never reached the terminal.\n--- output ---\n${out}")
-    endif()
-  endforeach()
-endfunction()
-
-execute_process(
-  COMMAND           "${SIM}" hdsk.toml
-  WORKING_DIRECTORY "${hdsk}"
-  INPUT_FILE        "${SRC}/tests/acceptance/hdsk-dir.keys"
-  OUTPUT_VARIABLE   out
-  ERROR_VARIABLE    out
-  TIMEOUT           60
-)
-expect_hdsk("${out}" "`cd examples/hdsk && altairsim hdsk.toml` did not boot CP/M off the hard disk")
-
-# ...and by path from the distribution root, where the platter is NOT.
-execute_process(
-  COMMAND           "${SIM}" examples/hdsk/hdsk.toml
-  WORKING_DIRECTORY "${dist}"
-  INPUT_FILE        "${SRC}/tests/acceptance/hdsk-dir.keys"
-  OUTPUT_VARIABLE   out
-  ERROR_VARIABLE    out
-  TIMEOUT           60
-)
-expect_hdsk("${out}" "`altairsim examples/hdsk/hdsk.toml` from the dist root did not boot CP/M")
-
-# ---- 4b. THE 8800bt -- THE SAME CP/M, BOOTED BY THE TURNKEY MODULE. ---------------------
-#
-# examples/turnkey is the front-panel-less 8800b: one card (the Systems Turnkey Module)
-# carries the boot PROM, the 6850 console at 0x10, the sense switches at FF, and the
-# Auto-Start circuit. floppy.toml and hdsk.toml are deltas on the built-in `turnkey`
-# machine that borrow the images from the cpm and hdsk directories copied above -- so this
-# proves the WHOLE card end to end: `RUN 0000` jams `JMP` onto the bus, DBL/HDBL runs out
-# of the phantom PROM, and the top 1K of the machine's 64K becomes RAM once the PROM
-# switches itself out. The two directories above must already be in ${dist}/examples for
-# the ../cpm and ../hdsk mounts to resolve.
-file(COPY "${SRC}/examples/turnkey" DESTINATION "${dist}/examples")
-set(turnkey "${dist}/examples/turnkey")
-
-function(expect_contains out why)
-  math(EXPR last "${ARGC} - 1")
-  foreach(i RANGE 2 ${last})
-    string(FIND "${out}" "${ARGV${i}}" hit)
-    if(hit LESS 0)
-      message(FATAL_ERROR "examples: ${why}\n"
-                          "  '${ARGV${i}}' never reached the terminal.\n--- output ---\n${out}")
-    endif()
-  endforeach()
-endfunction()
-
-# Floppy: DBL, jammed at reset out of the phantom PROM, to 56K CP/M.
-execute_process(
-  COMMAND           "${SIM}" floppy.toml
-  WORKING_DIRECTORY "${turnkey}"
-  INPUT_FILE        "${SRC}/tests/acceptance/hdsk-dir.keys"
-  OUTPUT_VARIABLE   out
-  ERROR_VARIABLE    out
-  TIMEOUT           60
-)
-expect_contains("${out}" "`cd examples/turnkey && altairsim floppy.toml` did not boot CP/M off the floppy"
-                "56K CP/M 2.2b" "For Altair 8" "A>")
-
-# Hard disk: HDBL from socket L1, the Auto-Start switches moved to FC00, to 48K CP/M.
-execute_process(
-  COMMAND           "${SIM}" hdsk.toml
-  WORKING_DIRECTORY "${turnkey}"
-  INPUT_FILE        "${SRC}/tests/acceptance/hdsk-dir.keys"
-  OUTPUT_VARIABLE   out
-  ERROR_VARIABLE    out
-  TIMEOUT           60
-)
-expect_contains("${out}" "`cd examples/turnkey && altairsim hdsk.toml` did not boot CP/M off the hard disk"
-                "HDBL 2.00" "48K CP/M 2.2b v1.6" "For MITS 88-HDSK" "A0>")
-
-# ---- 5. THE DEBUGGER WALKTHROUGH -- symbols and hex loaded from beside the file. -------
+# ---- 2. examples/debugger -- the walkthrough, symbols and hex loaded from beside the file. ----
 #
 # examples/debugger is a taught exercise: a 46-byte program, its .PRN listing and its .HEX,
 # and a README that walks the monitor's debugger. This runs that walkthrough non-
-# interactively through the SHIPPED binary, from the example's own directory, so it proves
-# two things at once -- the symbolic disassembler names labels and operands the way the
-# README says, and the .prn/.hex resolve beside the machine file rather than beside the repo.
+# interactively, from the example's own directory, so it proves the README is true: the
+# disassembly names labels and operands the way it says, and the .prn/.hex resolve beside
+# the machine file rather than beside the repo.
 file(COPY "${SRC}/examples/debugger" DESTINATION "${dist}/examples")
 set(dbg "${dist}/examples/debugger")
 
@@ -434,195 +180,228 @@ if(hit GREATER_EQUAL 0)
                       "  'IN 10' read as 'IN TTYS' -- a port is not an address.\n--- output ---\n${out}")
 endif()
 
-# examples/dazzler is the Cromemco Dazzler bench: KSCOPE (Li-Chen Wang's Kaleidoscope), which
-# kscope.toml LOADs and RUNs from its `startup` list -- so the machine comes up *drawing*. KSCOPE
-# is an endless animation with no HLT, so we hand the run a single ATTN byte (Ctrl-E, 0x05) on
-# stdin to break it back to the monitor, exactly as a person would; then the -x commands prove
-# the framebuffer was loaded, the Dazzler is mapped where the README says, and the running
-# program is the one that drives it. ATTN is host-intercepted and watched every poll (it does not
-# depend on the guest reading input), so this is deterministic, not a piped-keystroke race. The
-# pixels KSCOPE draws are proved headlessly in tests/test_dazzler.cpp.
-file(COPY "${SRC}/examples/dazzler" DESTINATION "${dist}/examples")
-set(daz "${dist}/examples/dazzler")
-
-# A file holding one ATTN byte (Ctrl-E) to feed on stdin -- it breaks the startup RUN.
-string(ASCII 5 attn_byte)
-file(WRITE "${dist}/attn.in" "${attn_byte}")
-
+# ...and debugger.ini, the same bench built by monitor commands. -s stops at the first line
+# that fails and exits with its status, so a clean exit plus the last lines' answers is the
+# whole script having run.
 execute_process(
-  COMMAND           "${SIM}" kscope.toml
-                    -x "SHOW BUS IO"
-                    -x "DISASM 0 6"
-  WORKING_DIRECTORY "${daz}"
-  INPUT_FILE        "${dist}/attn.in"   # ATTN out of the auto-run, then the -x commands run
+  COMMAND           "${SIM}" -s examples/debugger/debugger.ini
+  WORKING_DIRECTORY "${dist}"
+  RESULT_VARIABLE   rc
   OUTPUT_VARIABLE   out
   ERROR_VARIABLE    out
   TIMEOUT           30
 )
+expect_contains("${out}" "`altairsim -s examples/debugger/debugger.ini` did not build the bench"
+                "sio0:a: connected to console" "mem0:0: ram  0000-7FFF  32K" "power cycled")
+if(NOT rc EQUAL 0)
+  message(FATAL_ERROR "examples: debugger.ini exited ${rc}.\n--- output ---\n${out}")
+endif()
 
-foreach(want
-        "loaded 127 bytes"   # kscope.toml's startup LOADed KSCOPE.HEX from beside itself
-        "daz0"               # the Dazzler is in the machine...
-        "Dazzler"            # ...and mapped at its ports (SHOW BUS IO)
-        "OUT (0E)"           # the running program turns the card on...
-        "OUT (0F)")          # ...and sets its format -- so KSCOPE really drives the Dazzler
-                             # The parentheses are Z80 syntax: the machine has a `z80` board in
-                             # it now, and DISASM speaks the mnemonics of the CPU that is fitted.
-  string(FIND "${out}" "${want}" hit)
-  if(hit LESS 0)
-    message(FATAL_ERROR "examples: the Dazzler example did not behave as the README says.\n"
-                        "  '${want}' never reached the terminal.\n--- output ---\n${out}")
-  endif()
-endforeach()
-
-# ---- 6. THE 88-ACR CASSETTE MACHINE -- Mike Douglas's MITS Tapes disk, and a recorder. --
+# ---- 3. examples/ai-mcp -- the machine an AI assistant debugs over --mcp. -----------------
 #
-# examples/acr boots the "MITS Tapes" CP/M disk (every MITS distribution tape as a .TAP,
-# plus WRTAPE.COM) with an 88-ACR wired up to record onto. Booting it proves the shipped
-# folder comes up to A> off its own disk; the DIR line proves CP/M is really reading that
-# image (WRTAPE.COM is on it, which is the whole reason this machine exists). The recorder
-# itself is exercised, end to end and in period audio, by the acr acceptance suite -- here
-# the claim is only that the SHIPPED directory boots where the user is handed it.
-file(COPY "${SRC}/examples/acr" DESTINATION "${dist}/examples")
-set(acr "${dist}/examples/acr")
+# The README's first step, as the assistant takes it: boot (MCP does not run the startup, so
+# `run from` FF00), assemble HELLO.ASM, LOAD it, and run it -- which prints the bug the rest
+# of the README goes on to find. `ELLO, WORLD` is the proof: the source on the disk, the
+# assembler and the program all ran, and the bug is still there for the reader to fix. It runs
+# on the COPY: ASM and LOAD write to the disk, and the tracked image must not move.
+file(COPY "${SRC}/examples/ai-mcp" DESTINATION "${dist}/examples")
+set(ai "${dist}/examples/ai-mcp")
 
-function(expect_acr out why)
-  # DIR polls the console between lines and the CR already in the pipe aborts it after the
-  # first entry -- so only the first name is asserted, and it is enough: 4KBAS32.TAP is a
-  # real entry read off the MITS Tapes image, which a machine that merely started cannot show.
-  foreach(want "48K CP/M" "Version 2.2mits" "A>" "4KBAS32")
-    string(FIND "${out}" "${want}" hit)
-    if(hit LESS 0)
-      message(FATAL_ERROR "examples: ${why}\n"
-                          "  '${want}' never reached the terminal.\n--- output ---\n${out}")
-    endif()
-  endforeach()
-endfunction()
-
+mcp_session("${dist}/ai.jsonl"
+  [=[{"name":"run","arguments":{"from":65280,"until":"A>","timeout_ms":30000}}]=]
+  [=[{"name":"run","arguments":{"input":"ASM HELLO\r","until":"END OF ASSEMBLY","timeout_ms":30000}}]=]
+  [=[{"name":"run","arguments":{"until":"A>","timeout_ms":30000}}]=]
+  [=[{"name":"run","arguments":{"input":"LOAD HELLO\r","until":"RECORDS WRITTEN","timeout_ms":30000}}]=]
+  [=[{"name":"run","arguments":{"until":"A>","timeout_ms":30000}}]=]
+  [=[{"name":"run","arguments":{"input":"HELLO\r","until":"WORLD","timeout_ms":30000}}]=])
 execute_process(
-  COMMAND           "${SIM}" mitstapes.toml
-  WORKING_DIRECTORY "${acr}"
-  INPUT_FILE        "${SRC}/tests/acceptance/cpm-dir.keys"
+  COMMAND           "${SIM}" cpm-ai.toml --mcp
+  WORKING_DIRECTORY "${ai}"
+  INPUT_FILE        "${dist}/ai.jsonl"
   OUTPUT_VARIABLE   out
   ERROR_VARIABLE    out
   TIMEOUT           60
 )
-expect_acr("${out}" "`cd examples/acr && altairsim mitstapes.toml` did not boot the MITS Tapes disk")
+expect_contains("${out}" "the ai-mcp README's first step did not go as it says"
+                "56K CP/M 2.2b v2.3" "END OF ASSEMBLY" "FIRST ADDRESS 0100" "ELLO, WORLD")
 
-# ...and by path from the distribution root, where the disk is NOT.
+# ...and cpm-ai.ini, by -s from the dist root: the disk is beside the script (#575).
 execute_process(
-  COMMAND           "${SIM}" examples/acr/mitstapes.toml
+  COMMAND           "${SIM}" -s examples/ai-mcp/cpm-ai.ini
   WORKING_DIRECTORY "${dist}"
   INPUT_FILE        "${SRC}/tests/acceptance/cpm-dir.keys"
   OUTPUT_VARIABLE   out
   ERROR_VARIABLE    out
   TIMEOUT           60
 )
-expect_acr("${out}" "`altairsim examples/acr/mitstapes.toml` from the dist root did not boot")
+expect_cpm("${out}" "`altairsim -s examples/ai-mcp/cpm-ai.ini` from the dist root did not boot CP/M")
 
-# ---- 7. THE PRINTER -- a program printing a banner THROUGH the 88-C700, to a byte sink. --
+# ---- 4. examples/basic4k -- Altair 4K BASIC off its cassette. ------------------------------
 #
-# examples/printing is the printing walkthrough: a program that sends "ALTAIRSIM 8800" + CR
-# LF + a form feed through an 88-C700 parallel printer card, then halts. The README connects
-# `lpt0:prn` to a real printer (socket: or printer:); here we point the same line at an
-# `out:` file -- a byte sink that needs no host print system -- so a headless run can PROVE
-# the bytes the program prints actually leave the card and land where the line goes. This is
-# the printing PATH, not a physical page: LOAD, CONNECT, RUN, DISCONNECT, then read the file.
-file(COPY "${SRC}/examples/printing" DESTINATION "${dist}/examples")
-set(prn "${dist}/examples/printing")
-set(banner "${dist}/banner.out")
+# The worked-examples and tapes chapters of the manual boot this one. From its own folder, by
+# path from the dist root, and its .ini twin by -s: the tape and the bootstrap are found beside
+# the file that names them every time. `TAPE OK` is the output of a program typed into a BASIC
+# that read itself off the .tap, which a machine that merely started cannot print.
+file(COPY "${SRC}/examples/basic4k" DESTINATION "${dist}/examples")
+set(basic "${dist}/examples/basic4k")
 
-execute_process(
-  COMMAND           "${SIM}" printer.toml
-                    -x "LOAD PRINT.HEX"
-                    -x "CONNECT lpt0:prn out:${banner}"
-                    -x "RUN 0100"
-                    -x "DISCONNECT lpt0:prn"
-  WORKING_DIRECTORY "${prn}"
-  OUTPUT_VARIABLE   out
-  ERROR_VARIABLE    out
-  TIMEOUT           30
-)
-
-# The .HEX loaded from beside the machine file, and the line connected to the sink.
-foreach(want "loaded 42 bytes" "connected to out:")
-  string(FIND "${out}" "${want}" hit)
-  if(hit LESS 0)
-    message(FATAL_ERROR "examples: the printing example did not set up the print line.\n"
-                        "  '${want}' never reached the terminal.\n--- output ---\n${out}")
-  endif()
-endforeach()
-
-# ...and the banner the program printed actually reached the sink on the far end of the card.
-if(NOT EXISTS "${banner}")
-  message(FATAL_ERROR "examples: the printer's out: sink was never written -- nothing left the 88-C700.")
-endif()
-file(READ "${banner}" printed)
-string(FIND "${printed}" "ALTAIRSIM 8800" hit)
-if(hit LESS 0)
-  message(FATAL_ERROR "examples: the banner never reached the printer.\n"
-                      "  'ALTAIRSIM 8800' is not in the out: sink.\n--- sink ---\n${printed}")
-endif()
-
-# ---- 8. CADZILLA -- drawdemo under CP/M, off the example's own floppy. ------------------
-#
-# examples/cadzilla boots CP/M from cpm22b23-56k-drawdemo.dsk and the reader types DRAWDEMO.
-# Driven over --mcp, not piped keys: drawdemo waits for a key between screens, and a key that
-# arrives while it is still printing is taken by the BDOS's ^S check and lost (it prints with
-# function 9 and reads with function 6) -- so each key must wait for the whole prompt, which
-# only `until` can do. MCP does not run the machine file's startup, so the boot is `from` FF00.
-#
-# What it proves: the disk boots and carries the program (a machine that merely started gets
-# no banner), drawdemo started the board at 1024x768 with the wiring right (SHOW cad0 -- a
-# program that never touched the ACRTC leaves the video off), and ESC takes it back to A>.
-file(COPY "${SRC}/examples/cadzilla" DESTINATION "${dist}/examples")
-set(cz "${dist}/examples/cadzilla")
-
-file(WRITE "${dist}/drawdemo.jsonl" [=[
-{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"examples","version":"1"}}}
-{"jsonrpc":"2.0","method":"notifications/initialized"}
-{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"run","arguments":{"from":65280,"until":"A>","timeout_ms":30000}}}
-{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"run","arguments":{"input":"DRAWDEMO\r","until":"quits)... ","timeout_ms":30000}}}
-{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"run","arguments":{"input":" ","until":"quits)... ","timeout_ms":30000}}}
-{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"monitor","arguments":{"command":"SHOW cad0"}}}
-{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"monitor","arguments":{"command":"SHOW cpu0"}}}
-{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"run","arguments":{"input":"\u001b","until":"A>","timeout_ms":30000}}}
-]=])
-
-function(expect_drawdemo toml wants)
-  execute_process(
-    COMMAND           "${SIM}" ${toml} --mcp
-    WORKING_DIRECTORY "${cz}"
-    INPUT_FILE        "${dist}/drawdemo.jsonl"
-    OUTPUT_VARIABLE   out
-    ERROR_VARIABLE    err
-    TIMEOUT           60
-  )
-  foreach(want "CADzilla drawdemo: the ACRTC drawing commands, 1024x768"
-               " 1/21  DOT"
-               " 2/21  ALINE"
-               "video            on"
-               "picture          1024x768 at (0,0)"
-               "wiring           ok"
-               "drawdemo done."
-               ${wants})
-    string(FIND "${out}" "${want}" hit)
-    if(hit LESS 0)
-      message(FATAL_ERROR "examples: `altairsim ${toml} --mcp` did not run drawdemo as the README says.\n"
-                          "  '${want}' never came back.\n--- stdout ---\n${out}\n--- stderr ---\n${err}")
-    endif()
-  endforeach()
-  string(FIND "${out}" "ACRTC command error" hit)
-  if(hit GREATER_EQUAL 0)
-    message(FATAL_ERROR "examples: drawdemo reported an ACRTC command error under ${toml}.\n--- stdout ---\n${out}")
-  endif()
+function(expect_basic out why)
+  expect_contains("${out}" "${why}" "ALTAIR BASIC VERSION 3.1" "OK" "42" "TAPE OK")
 endfunction()
 
-# The full-speed machine, and the real-speed one beside it. drawdemo-real.toml names
-# `base = "drawdemo.toml"`, so this also proves a relative base resolves in the copied folder.
-expect_drawdemo(drawdemo.toml      "draw_rate        full;clock_hz         0 ")
-expect_drawdemo(drawdemo-real.toml "draw_rate        real;clock_hz         2000000")
+execute_process(
+  COMMAND           "${SIM}" basic4k.toml
+  WORKING_DIRECTORY "${basic}"
+  INPUT_FILE        "${SRC}/tests/acceptance/basic4k.keys"
+  OUTPUT_VARIABLE   out
+  ERROR_VARIABLE    out
+  TIMEOUT           60
+)
+expect_basic("${out}" "`cd examples/basic4k && altairsim basic4k.toml` did not boot BASIC")
+
+execute_process(
+  COMMAND           "${SIM}" examples/basic4k/basic4k.toml
+  WORKING_DIRECTORY "${dist}"
+  INPUT_FILE        "${SRC}/tests/acceptance/basic4k.keys"
+  OUTPUT_VARIABLE   out
+  ERROR_VARIABLE    out
+  TIMEOUT           60
+)
+expect_basic("${out}" "`altairsim examples/basic4k/basic4k.toml` from the dist root did not boot BASIC")
+
+execute_process(
+  COMMAND           "${SIM}" -s examples/basic4k/basic4k.ini
+  WORKING_DIRECTORY "${dist}"
+  INPUT_FILE        "${SRC}/tests/acceptance/basic4k.keys"
+  OUTPUT_VARIABLE   out
+  ERROR_VARIABLE    out
+  TIMEOUT           60
+)
+expect_basic("${out}" "`altairsim -s examples/basic4k/basic4k.ini` from the dist root did not boot BASIC")
+
+# The same tape as 88-ACR audio: the tapes chapter mounts it, and basic4k-wav.toml boots it. The
+# program typed into it proves the WAV decoded to the same bytes as the .tap.
+execute_process(
+  COMMAND           "${SIM}" basic4k-wav.toml
+  WORKING_DIRECTORY "${basic}"
+  INPUT_FILE        "${SRC}/tests/acceptance/basic4k.keys"
+  OUTPUT_VARIABLE   out
+  ERROR_VARIABLE    out
+  TIMEOUT           60
+)
+expect_basic("${out}" "`cd examples/basic4k && altairsim basic4k-wav.toml` did not boot BASIC")
+
+execute_process(
+  COMMAND           "${SIM}" -s examples/basic4k/basic4k-wav.ini
+  WORKING_DIRECTORY "${dist}"
+  INPUT_FILE        "${SRC}/tests/acceptance/basic4k.keys"
+  OUTPUT_VARIABLE   out
+  ERROR_VARIABLE    out
+  TIMEOUT           60
+)
+expect_basic("${out}" "`altairsim -s examples/basic4k/basic4k-wav.ini` from the dist root did not boot BASIC")
+
+# The tapes chapter's two MOUNT transcripts, on the shipped files: the FSK tape decodes clean, and
+# the Kansas City tape is refused, because a real 88-ACR cannot hear it.
+execute_process(
+  COMMAND           "${SIM}" basic4k
+                    -x "MOUNT acr0:tape \"4K BASIC Ver 3-1.wav\""
+                    -x "MOUNT acr0:tape \"4K BASIC (Kansas City).wav\""
+                    -x QUIT
+  WORKING_DIRECTORY "${basic}"
+  OUTPUT_VARIABLE   out
+  ERROR_VARIABLE    out
+  TIMEOUT           60
+)
+expect_contains("${out}" "the tapes chapter's WAV mounts did not print what the chapter shows"
+  "4K BASIC Ver 3-1.wav: fsk300, 4439 bytes, 0 framing errors (100.0% of frames intact)"
+  "4K BASIC (Kansas City).wav: this board's modem cannot hear that tape -- it carries 2400 Hz / 1200 Hz, and this board reads fsk300")
+
+# ---- 5. examples/basic1 -- Altair BASIC 1.0, the two-step boot. ----------------------------
+#
+# LOAD10 copies the tape into 0000 and loops forever, so the boot is RUN 1800, ^E, RUN 0. A pipe
+# cannot give that ^E at the right moment (it fires the instant the run loop reads stdin, before
+# the tape is in), so the boot is driven over --mcp, where RUN 1800 only sets the PC and `run`
+# stops at `timeout_ms`. The whole tape is in memory after 50 ms flat out; 3 s is the margin.
+# `TAPE OK` after `RUN` is a program typed into a BASIC that read itself off the tape. (A stored
+# line gets no READY in BASIC 1.0, so that `run` stops when BASIC waits for the next key.)
+file(COPY "${SRC}/examples/basic1" DESTINATION "${dist}/examples")
+set(basic1 "${dist}/examples/basic1")
+
+set(basic1_boot
+  [=[{"name":"run","arguments":{"timeout_ms":3000}}]=]
+  [=[{"name":"run","arguments":{"from":0,"until":"MEMSIZ?","timeout_ms":30000}}]=]
+  [=[{"name":"run","arguments":{"input":"\r","until":"SIN-COS-ATN?","timeout_ms":30000}}]=]
+  [=[{"name":"run","arguments":{"input":"\r","until":"READY","timeout_ms":30000}}]=]
+  [=[{"name":"run","arguments":{"input":"10 PRINT \"TAPE OK\"\r","timeout_ms":30000}}]=]
+  [=[{"name":"run","arguments":{"input":"RUN\r","until":"TAPE OK","timeout_ms":30000}}]=])
+
+function(expect_basic1 out why)
+  expect_contains("${out}" "${why}" "2000 BYTES FREE" "8080 BASIC VER 1.0" "RUN\\r\\nTAPE OK")
+endfunction()
+
+# The machine files, from their own folder. MCP does not run `startup`, so the session types its
+# MOUNT and LOAD (typed paths resolve beside the machine file) and puts the PC at the loader.
+foreach(tape "BASIC Ver 1-0.tap" "BASIC Ver 1-0.wav")
+  if(tape MATCHES "wav$")
+    set(toml basic1-wav.toml)
+  else()
+    set(toml basic1.toml)
+  endif()
+  mcp_session("${dist}/basic1.jsonl"
+    "{\"name\":\"monitor\",\"arguments\":{\"command\":\"MOUNT acr0:tape \\\"${tape}\\\"\"}}"
+    [=[{"name":"monitor","arguments":{"command":"LOAD \"LOAD10.HEX\""}}]=]
+    [=[{"name":"monitor","arguments":{"command":"RUN 1800"}}]=]
+    ${basic1_boot})
+  execute_process(
+    COMMAND           "${SIM}" ${toml} --mcp
+    WORKING_DIRECTORY "${basic1}"
+    INPUT_FILE        "${dist}/basic1.jsonl"
+    OUTPUT_VARIABLE   out
+    ERROR_VARIABLE    out
+    TIMEOUT           60
+  )
+  expect_basic1("${out}" "`cd examples/basic1 && altairsim ${toml}` did not boot BASIC 1.0")
+endforeach()
+
+# ...and their startup lines, by path from the dist root: the tape and the bootstrap are found
+# beside the file, and RUN 1800 enters the loader. The ^E that stops it is the only key.
+string(ASCII 5 ctrl_e)
+file(WRITE "${dist}/ctrl-e.keys" "${ctrl_e}")
+foreach(toml basic1.toml basic1-wav.toml)
+  execute_process(
+    COMMAND           "${SIM}" examples/basic1/${toml}
+    WORKING_DIRECTORY "${dist}"
+    INPUT_FILE        "${dist}/ctrl-e.keys"
+    OUTPUT_VARIABLE   out
+    ERROR_VARIABLE    out
+    TIMEOUT           60
+  )
+  # The two paths below are joined by the program, which uses the host's separator: on Windows
+  # it prints a backslash. Match one form.
+  string(REPLACE "\\" "/" out "${out}")
+  expect_contains("${out}" "`altairsim examples/basic1/${toml}` from the dist root did not start its loader"
+    "acr0:tape: mounted examples/basic1/BASIC Ver 1-0."
+    "loaded 20 bytes (1 page) from examples/basic1/LOAD10.HEX (1800-1813)"
+    "^E returns to the monitor")
+endforeach()
+
+# The .ini twins, by DO from the dist root over --mcp: the script builds the machine, its paths
+# resolve beside the script (#575), and its RUN 1800 leaves the PC at the loader.
+foreach(ini basic1.ini basic1-wav.ini)
+  mcp_session("${dist}/basic1.jsonl"
+    "{\"name\":\"monitor\",\"arguments\":{\"command\":\"DO examples/basic1/${ini}\"}}"
+    ${basic1_boot})
+  execute_process(
+    COMMAND           "${SIM}" --mcp
+    WORKING_DIRECTORY "${dist}"
+    INPUT_FILE        "${dist}/basic1.jsonl"
+    OUTPUT_VARIABLE   out
+    ERROR_VARIABLE    out
+    TIMEOUT           60
+  )
+  expect_basic1("${out}" "`DO examples/basic1/${ini}` from the dist root did not boot BASIC 1.0")
+endforeach()
 
 file(REMOVE_RECURSE "${dist}")
-message(STATUS "examples: the shipped examples boot from their own directory, and a typed "
-               "path still means the shell's.")
+message(STATUS "examples: every machine file in the shipped examples works from its own folder.")

@@ -107,9 +107,9 @@ with the 88-2SIO — see `reference/6850.md` and `docs/boards/mits-2sio.md`.
   re-arm), the Auto-Start `JMP` jam and its START ADDR strap, the sense switches, and the SIO
   at `10h`.
 - `tests/test_sio2.cpp` (unchanged) proves the shared `Sio2Port` did not disturb the 88-2SIO.
-- The acceptance suite boots CP/M on the 8800bt both ways — `examples/turnkey/floppy.toml`
-  (DBL → 56K CP/M) and `examples/turnkey/hdsk.toml` (HDBL → 48K CP/M off an 88-HDSK) — through
-  the shipped binary (`tests/acceptance/examples.cmake`).
+- The acceptance suite boots CP/M on the 8800bt both ways — `tests/media/turnkey/floppy.toml`
+  (DBL → 56K CP/M) and `tests/media/turnkey/hdsk.toml` (HDBL → 48K CP/M off an 88-HDSK) — through
+  the real CLI (`tests/acceptance/media.cmake`).
 
 ## References
 

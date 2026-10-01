@@ -212,7 +212,7 @@ container that carries its own sector map would fix this — and is explicitly n
   tracks, the file growing (256,256 SSSD on the #1011; **499,456 mixed** on the #2022, SD track 0
   then 76 DD tracks driven by the per-track `OUT FC` density bit), and the `0xE5` fill reading
   back at the right per-track geometry. A guest-driven `DFORMAT.COM` run on the tracked DD master
-  is feasible (it ships on `examples/tarbell/TARBELLDD-CPM22-SSDD-48K.DSK`) but the 9600-baud
+  is feasible (the master is `tests/media/tarbell/TARBELLDD-CPM22-SSDD-48K.DSK`) but the 9600-baud
   console makes the interactive prompt automation slow and stale-buffer-prone, so the guaranteed
   proof stays the board test.
 

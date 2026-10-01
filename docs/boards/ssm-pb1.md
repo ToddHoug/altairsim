@@ -30,10 +30,10 @@ is a safety switch that gates the programming voltage.
 
 The manual and the retrocmp page agree on the control-port bits and the sample software's
 addresses. The manual's object listings (sections 4.2–4.5) are authoritative for the driver
-code and are transcribed verbatim into `examples/pb1/*.{ASM,HEX}` — the two burners
-(2708/2716) and the two verify routines (erase-check, copy-verify). They keep the manual's own
-`JMP F021H` / `CALL F009H` to the **SSM 8080 monitor** (manual §3.3); altairsim does not ship
-that monitor yet, so `examples/pb1/README.md` shows how to run them without it.
+code — the two burners (2708/2716) and the two verify routines (erase-check, copy-verify). They
+call the **SSM 8080 monitor** (`JMP F021H` / `CALL F009H`, manual §3.3). The 2708 burner,
+transcribed verbatim, is `tests/media/pb1/PROG2708.HEX`, and `acceptance-pb1` runs it against
+the board.
 
 ## Register reference
 
@@ -112,7 +112,7 @@ an optional read-only window above `8000H` for the on-board area.
   then **runs the actual SSM 2708 programmer** (the manual's object code) through an 8080 to its
   HLT and checks that all 1024 source bytes landed in the socket, and that the result round-trips
   through Intel HEX.
-- `acceptance-pb1`: boots the `examples/pb1/pb1.toml` machine, `LOAD`s `examples/pb1/PROG2708.HEX`,
+- `acceptance-pb1`: boots the `tests/media/pb1/pb1.toml` machine, `LOAD`s `tests/media/pb1/PROG2708.HEX`,
   runs it (breaking at `F021`, where the burner returns to the monitor), and `SAVE`s the socket
   to a host hex file — asserting the burned chip equals the source and that the file is valid
   Intel HEX. **If it fails, the board is wrong, not the software.**
@@ -120,6 +120,4 @@ an optional read-only window above `8000H` for the on-board area.
 ## References
 
 - `reference/SSM PB1 EPROM Programmer.md` — the distilled hardware reference.
-- `examples/pb1/` — the four SSM driver routines (§4.2–4.5), transcribed and runnable, with a
-  machine and a burn-to-hex walkthrough.
 - GitHub issues #397 (add the board) and #382 (why a burner board, not just `LOAD … ROM`).

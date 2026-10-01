@@ -110,12 +110,13 @@ of them comes up the moment you name it:
 
 ```
 $ ls examples/
-$ ./altairsim examples/basic/basic4k.toml
+$ ./altairsim examples/basic4k/basic4k.toml
 ```
 
-`examples/basic/` toggles in the MITS bootstrap by hand and loads **Altair 4K BASIC** off a
+`examples/basic4k/` toggles in the MITS bootstrap by hand and loads **Altair 4K BASIC** off a
 cassette — the machine that shows you what an Altair actually was. Each folder carries its own
-`README.pdf` describing what it is and what to type.
+`README.pdf` describing what it is and what to type. More examples, and their documentation, are
+at https://altairsim.com.
 
 ## Where to go next
 

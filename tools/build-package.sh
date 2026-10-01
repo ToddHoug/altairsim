@@ -15,9 +15,10 @@
 #   LICENSE                  ours (MIT)
 #   LICENSE-SDL3             SDL3's, because SDL3 is linked STATICALLY INTO the program
 #   examples/cpm/            \
-#   examples/basic/           \  the examples, each a self-contained folder: a machine file
-#   examples/hdsk/            /  and the media it mounts, lying beside it
-#   examples/diskbasic/      /
+#   examples/basic4k/         \  the examples, each a self-contained folder: a machine file
+#   examples/basic1/           | and the media it mounts, lying beside it
+#   examples/debugger/        /
+#   examples/ai-mcp/         /
 #   skills/altairsim/        SKILL.md + the briefing again, for a client that reads skills
 #
 # ONE ARCHIVE, FOR ONE PLATFORM, BUILT ON THAT PLATFORM. --target names it and picks the
@@ -428,26 +429,6 @@ while IFS='|' read -r dest src; do
   # they are in a published zip.
   rm -f "$pkg/$dest"/.DS_Store "$pkg/$dest"/.altairsim_history 2>/dev/null || true
 
-  # THE RECIPES SHIP AS PDFs AND NOTHING ELSE. docs/recipes/ is Markdown plus an ORDER list plus
-  # the rendered PDF of each recipe; the reader wants the PDF. This is the same rule as the
-  # README.md above -- the .md is the source, written for someone standing in the tree -- and
-  # ORDER is a build input, which is not a document at all.
-  if [ "$dest" = recipes ]; then
-    rm -f "$pkg/$dest"/*.md "$pkg/$dest"/ORDER 2>/dev/null || true
-
-    # ...and having stripped the sources, CHECK SOMETHING IS LEFT. A recipe's PDF is a committed
-    # CI artifact like the manual's, so a tree where docs.yml has not run yet holds the Markdown
-    # and no PDF -- and the strip above would then leave an EMPTY recipes/ folder in the zip,
-    # silently. The examples get this check (the "NO MEDIA" refusal below); this is the same
-    # refusal for the one shipped DIR that is documentation rather than a machine.
-    if ! ls "$pkg/$dest"/*.pdf 2>/dev/null | head -1 | grep -q .; then
-      echo "build-package: docs/recipes/ has no PDFs -- CI (docs.yml) builds them." >&2
-      echo "  They are committed at the tag, so a checkout of vX.Y.Z has them. Are you on the" >&2
-      echo "  tag, or packaging before docs.yml has run on master? See DISTRIBUTION.md 5 step 2." >&2
-      exit 1
-    fi
-  fi
-
   # The assembler files are the CONDITIONAL half, and the condition is what the example's
   # product IS. Beside a disk or a tape, a .ASM and its .PRN listing are how that image was
   # made -- provenance, exactly like the .ENT and the make-*.sh above, and they stay in the
@@ -463,8 +444,8 @@ while IFS='|' read -r dest src; do
   # PROGRAM rather than a disk -- the Intel HEX the machine loads. This is a presence check,
   # not a completeness one: it catches a directory that arrived carrying nothing, and it
   # cannot notice that one image of two went missing. What notices that is the acceptance
-  # suite, which boots every shipped example WITH its media (tests/acceptance/examples.cmake,
-  # plus trek80.exp and diskbasic.exp) and goes red the moment a file it mounts is absent.
+  # suite, which runs every shipped example WITH its media (tests/acceptance/examples.cmake)
+  # and goes red the moment a file it mounts is absent.
   #
   # ONLY FOR AN EXAMPLE. Not every DIR line is a machine: hostbridge/ is utility source and
   # skills/ is documentation, and neither has media to be missing. hostbridge/ passed this

@@ -1,9 +1,8 @@
 #!/usr/bin/expect -f
 #
-# THE SHIPPED SOL-20 EXAMPLE MUST LOAD ITS GAME OFF THE CASSETTE, BY ITSELF.
+# THE SOL-20 MUST LOAD ITS GAME OFF THE CASSETTE, BY ITSELF.
 #
-# examples/sol20 is product: trek80.toml, a tape, and a README. The shipped machine file
-# AUTO-LAUNCHES -- its `startup` MOUNTs the tape, `TYPE`s `XE TRK80` at the console, and
+# The fixture machine file AUTO-LAUNCHES -- its `startup` MOUNTs the tape, `TYPE`s `XE TRK80` at the console, and
 # RUNs SOLOS, so the game comes up with no keystroke from anyone. This runs that path end
 # to end: SOLOS's own tape reader, the `sol` board's motor and 0FBh data register, the CUTS
 # modem when the media is a .WAV, the VDM-1 screen the game paints on -- against a 1977
@@ -22,7 +21,7 @@
 # stopped with ATTN and the screen is READ -- which is also the only way this test could run
 # headless in CI, with no window and no SDL.
 #
-# THE MACHINE IS A TEST FIXTURE, not the shipped file: tests/acceptance/trek80-{tap,wav}.toml.
+# THE MACHINE IS A TEST FIXTURE: tests/acceptance/trek80-{tap,wav}.toml, media in tests/media/sol20.
 # It has the shipped `startup` -- MOUNT, TYPE the XE, RUN -- but at flat-out speed with the
 # idle nap off, so the test does not pay the minute a 2.045 MHz Sol spends reading a cassette.
 # The two fixtures differ only in the media they mount: the byte stream, and the same tape as

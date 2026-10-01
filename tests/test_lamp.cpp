@@ -1,6 +1,6 @@
 // THE DEVELOPER GUIDE'S BOARD, ON A REAL BUS.
 //
-// examples/boards/lamp/lamp.h is the card the guide teaches you to write, and this is what
+// tests/boards/lamp/lamp.h is the card the guide teaches you to write, and this is what
 // stops it from rotting. A tutorial whose code is a listing inside a Markdown file is a
 // tutorial that compiled once, on the day it was written, against headers that have since
 // moved. This one has to keep working or the suite goes red.
@@ -13,7 +13,7 @@
 
 #include "test.h"
 
-#include "../examples/boards/lamp/lamp.h"
+#include "./boards/lamp/lamp.h"   // tests/boards/, not src/boards/
 #include "boards/mits-frontpanel.h"
 #include "core/machine.h"
 

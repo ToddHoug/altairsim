@@ -22,7 +22,7 @@ set timeout 60
 log_user 0
 
 set exe [lindex $argv 0]
-set dsk "examples/sdsys/SDOS-18B-SSDDR-256-32K-MASTER.DSK"
+set dsk "tests/media/sdsys/SDOS-18B-SSDDR-256-32K-MASTER.DSK"
 
 set before [exec shasum $dsk]
 

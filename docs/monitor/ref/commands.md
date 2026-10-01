@@ -865,8 +865,9 @@ DO file can do. It is the easy landing for an AltairZ80 `.ini`, whose SET and
 ATTACH lines are monitor commands too.
 
 PATHS INSIDE IT ARE RELATIVE TO THE FILE, not to where you are standing -- so
-`DO examples/cpm/cpm.ini` mounts the disk beside that file from anywhere. Blank
-lines and `;` or `#` comments are skipped, so a DO file reads like a script.
+`DO examples/cpm/cpm22-buffered.ini` mounts the disk beside that file from
+anywhere. Blank lines and `;` or `#` comments are skipped, so a DO file reads like
+a script.
 
 It runs against whatever machine is loaded, so a DO file usually opens with MACHINE
 to pick its own base -- `MACHINE default` then MOUNT/RUN, or `MACHINE none` then
@@ -878,8 +879,8 @@ It is a LINE RUNNER, not SIMH's scripting language: no arguments, no IF or GOTO.
 For conditional or interactive automation, drive a live guest over --mcp.
 
 ```
-DO cpm.ini               ; paths relative to cpm.ini's own directory
-DO examples/basic/b.ini  ; run it from anywhere
+DO cpm22-buffered.ini                  ; paths relative to the file's own directory
+DO examples/basic4k/basic4k.ini       ; run it from anywhere
 ```
 
 

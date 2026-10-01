@@ -1,7 +1,7 @@
 # MITS 88-HDSK — the Altair "Datakeeper" hard disk
 
 **Status:** done (2026-07-23). Boots CP/M 2.2 (`HDCPM22v16-48K.DSK`) to `A>` through the
-HDBL PROM at `FC00`. See `examples/hdsk/`.
+HDBL PROM at `FC00`.
 
 ## The real hardware
 
@@ -96,7 +96,7 @@ the right offset with no arithmetic in the board. A **logical drive is one platt
 Descriptor Page (cyl 0 / side 0 / sector 0), which names the boot pages, loads them from `0000h`,
 and jumps in. Sense switch **A11** picks the platter: down (the default `sense = 0x00`) is the
 removable cartridge, which is the shipped image. The console is the base machine's 88-2SIO at
-`10h`, which is where HDBL and the CP/M BIOS expect it. `examples/hdsk/hdsk.toml` is `base =
+`10h`, which is where HDBL and the CP/M BIOS expect it. `tests/media/hdsk/hdsk.toml` is `base =
 "default"` plus the controller, the PROM region, and the platter — three additions and a
 `startup = ["RUN FC00"]`.
 
@@ -113,5 +113,5 @@ removable cartridge, which is the shipped image. The console is the base machine
 - `tests/test_hdsk.cpp` — the probe, the `(cyl,side,sector)→offset` mapping pinned three ways,
   the Seek→Read Sector→Read Buffer boot sequence, the Write Buffer→Write Sector→read-back round
   trip, the power-on `0xFF` status quirk, the error flags, and one-pass handshake termination.
-- `tests/acceptance/examples.cmake` — boots `examples/hdsk` to `A>` and reads a directory entry
-  off the platter, from the example's own directory and by path.
+- `tests/acceptance/media.cmake` — boots `tests/media/hdsk` to `A>` and reads a directory entry
+  off the platter, from the fixture's own directory and by path.

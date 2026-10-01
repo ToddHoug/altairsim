@@ -6,14 +6,14 @@ A C++ simulator of the **MITS Altair 8800** and the **S-100 bus**.
 
 It boots Altair 4K and 8K BASIC (and the 1975 8080 BASIC 1.0) off cassettes, MITS Programming System II (polled *and* interrupt-driven), CP/M 2.2 off 8″ and 5¼″ floppies, CP/M 3 off CompactFlash and SD cards, Cromemco CDOS, SD Systems SDOS, and iCOM FDOS — every one a real period artifact, running unmodified.
 
-Every one of those boots is an **acceptance test**: it runs the period software on the whole machine through the real CLI and checks what lands on the terminal. There are more than forty of them. Three CP/M images are tracked in git — one 8″ floppy and the minidisk's two — so a fresh clone boots CP/M and runs those tests without downloading anything first. The examples that ship live in `examples/`, one directory each, and `acceptance-examples` boots them from a scratch directory with no repository in sight. The larger images that no test needs are fetched by `tools/fetch-disk-images.sh`.
+Every one of those boots is an **acceptance test**: it runs the period software on the whole machine through the real CLI and checks what lands on the terminal. There are more than forty of them. The tests carry their own disks and tapes, in `tests/media/` (plus the minidisk's two under `disks/`), so a fresh clone runs them without downloading anything first. The examples that ship live in `examples/`, one directory each; `acceptance-examples` runs them from a scratch directory with no repository in sight, and no other test reads them. The larger images that no test needs are fetched by `tools/fetch-disk-images.sh`.
 
 ```
 $ altairsim basic4k
-altairsim> MOUNT acr0:tape "examples/basic/4K BASIC Ver 3-1.tap"
-acr0:tape: mounted examples/basic/4K BASIC Ver 3-1.tap
-altairsim> LOAD "examples/basic/LDR4K31.HEX"
-loaded 20 bytes from examples/basic/LDR4K31.HEX (0000-0013)
+altairsim> MOUNT acr0:tape "examples/basic4k/4K BASIC Ver 3-1.tap"
+acr0:tape: mounted examples/basic4k/4K BASIC Ver 3-1.tap
+altairsim> LOAD "examples/basic4k/LDR4K31.HEX"
+loaded 20 bytes from examples/basic4k/LDR4K31.HEX (0000-0013)
 altairsim> RUN 0
 [console -- ^E returns to the monitor]
 

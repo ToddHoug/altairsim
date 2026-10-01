@@ -16,6 +16,21 @@ breakpoint. All the other tools still work while it runs, and `status` tells if 
 Use it for a server on the guest that must answer its clients in time, for two machines that talk
 to each other, and to let a person take over the console through `--mirror`.
 
+### Fewer examples in the package, and more at altairsim.com
+
+The package now has five examples: `cpm`, `basic4k`, `basic1`, `debugger` and `ai-mcp`. `basic4k`
+and `basic1` replace `basic`. `basic4k` has Altair 4K BASIC 3.1 as a `.tap` and as audio, and the
+worked-examples chapter and the tapes chapter use it. `basic1` has Altair BASIC 1.0, the first
+one, as a `.tap` and as audio. More examples, with their media and more documentation, are at
+https://altairsim.com.
+
+The `cpm` example no longer has the two FDC+ machine files, `cpm22-fdcplus.toml` and
+`cpm22-fdcplus-hdf.toml`, and the 1.5 MB disk `CPM22-48K-HDF.dsk`. The boards chapter still tells
+you how to set up the FDC+ in the `default` machine.
+
+The `recipes/` folder is removed from the package. The worked-examples chapter no longer has the
+BASIC 1.0, 88-HDSK and Disk BASIC walkthroughs.
+
 ### The CADzilla graphics board
 
 A new board, `cadzilla`: a new design built from two chips of the mid 1980s. The Hitachi
@@ -36,10 +51,6 @@ write FIFO fills, and the command-end bit comes late, as on the real board. Use 
 or any guest that is sensitive to time. The `interrupt` strap connects the ACRTC's IRQ\* to `int`
 or `vi0`..`vi7`. It is `none` by default. `SHOW <id>` has a `wiring` line. It tells you when the
 guest set the ACRTC in a way that the board is not wired for.
-
-The source repository has an example, `examples/cadzilla/`, that is not in the release package.
-It runs **drawdemo** under CP/M 2.2 on an 8" floppy. Type `DRAWDEMO`, and the window shows
-every drawing command of the ACRTC, one screen for each.
 
 For developers, a test can now check the **whole picture** of a video board as a text grid. When
 the check fails, it writes what the board drew as a `.ppm` file that you can open. The new

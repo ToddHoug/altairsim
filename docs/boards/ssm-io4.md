@@ -4,7 +4,7 @@
 port reversal, the word-format switches), all four 8212 parallel ports with their
 service-request flip-flops and the §3.2.2 status/data console strap, the S3/S4 address
 switches with their overlap rule, and the W4 interrupt header. Board type `io4`. See
-`examples/io4/io4.toml` and `tests/test_io4.cpp`.
+`tests/test_io4.cpp`.
 
 **Not modelled:** the current-loop and EIA electrical options, separate RX and TX rates on the
 W3 header, the UART error flags (they read inactive), and the parallel *output* handshake. See
@@ -211,7 +211,7 @@ config and are re-applied from the machine file.
   strobe, several straps at once, a board with no clock, and two end-to-end runs where an 8080
   behind an 88-VI vectors to `RST 2` (Serial A receive on VI2) and `RST 6` (a parallel strobe
   on VI6).
-- `acceptance-io4`: boots `examples/io4/io4.toml` — the file a package holder gets — through the
+- `acceptance-io4`: boots `tests/media/io4/io4.toml`, copied out of the tree, through the
   real CLI, and checks the SSM monitor's sign-on on the IO-4 console.
 
 ## References

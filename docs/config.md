@@ -72,7 +72,7 @@ The same base covers what you type. When you type
 altairsim> MOUNT dsk0:drive1 "scratch.dsk"
 ```
 
-you get the `scratch.dsk` in the machine's own directory — the same folder its own disks come from — no matter which shell you launched from. Typed paths used to resolve against your shell instead, which is how the identical disk could appear under two different names; `acceptance-examples` has a control that fails the build if a typed path ever stops resolving against the machine's directory.
+you get the `scratch.dsk` in the machine's own directory — the same folder its own disks come from — no matter which shell you launched from. Typed paths used to resolve against your shell instead, which is how the identical disk could appear under two different names; `acceptance-media` has a control that fails the build if a typed path ever stops resolving against the machine's directory.
 
 **There is no search path.** A file is looked for in exactly one place. If it is not there, the error names the place it looked — not the name you wrote — because the whole point of a resolved path is to be able to see where it went.
 

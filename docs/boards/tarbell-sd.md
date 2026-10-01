@@ -2,8 +2,7 @@
 
 **Status:** built (`tarbell`). Boots CP/M 2.2 automatically off its 32-byte boot PROM;
 `tests/test_tarbell.cpp` and `acceptance-tarbell` pin it. The double-density #2022 is its
-sibling — see [`tarbelldd.md`](tarbelldd.md). Run it with `altairsim tarbell` (mount a disk)
-or `examples/tarbell/tarbell.toml`.
+sibling — see [`tarbelldd.md`](tarbelldd.md). Run it with `altairsim tarbell` (mount a disk).
 
 > **Deferred, then built (2026-07-26).** This card was scoped in 2026-07 and shelved — the
 > note below is the retained learning, and it is why the build was cheap when it came. The

@@ -155,8 +155,7 @@ with a bad checksum or cut short, and each failed WRIT/WSTA try). `link` prints 
 - **Real hardware** (2026-09-24): an ESP32 FDC+ Serial Drive Server at 38,400 baud, with
   `cpm22b23-56k.dsk`, `games.dsk` and `zork1.dsk` in drives 0–2. `default` machine, `dsk0`
   replaced by `fdcplus`, `clock_hz = 2000000`, DBL at `FF00`: CP/M 2.2b booted to `A>`, and
-  `DIR B:` and `DIR C:` listed the games and Zork disks. The shipped example
-  `examples/cpm/cpm22-fdcplus.toml` is that machine as a file; it boots the same way.
+  `DIR B:` and `DIR C:` listed the games and Zork disks.
 
 ## Drive type 5: the 1.5 MB floppy
 
@@ -246,7 +245,7 @@ DBL's checksum.
   missing track, a write at 14 µs that lands, **a write at 18 µs that falls behind**, write
   protect, the step and settle times, the motor timer, the size check, `[[board.drive]]` and a
   snapshot. The timing tests were checked by breaking the byte timing.
-- `acceptance-examples` boots `examples/cpm/cpm22-fdcplus-hdf.toml` from a copy of the folder:
+- `acceptance-media` boots `tests/media/cpm/cpm22-fdcplus-hdf.toml` from a copy of the folder:
   DBL, the fake boot sector, HDFBL and the BIOS, to `48K CP/M 2.2b v1.2`, `For Altair 1.5Mb
   Floppy`, `A>` and a directory line.
 - By hand, over `--mcp`, on a copy of `CPM22-48K-HDF.dsk`: `DIR`, `STAT` (`920k` free), `SAVE 4

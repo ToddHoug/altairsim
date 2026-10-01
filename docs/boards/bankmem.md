@@ -112,7 +112,7 @@ correct in a matching machine (`DESIGN.md` §13), exactly as the `memory` board 
 ## Driving it
 
 Each decode is proven by unit tests (`tests/test_bankmem.cpp`), and the `expandoram2` card boots a
-real banked operating system: `examples/sdsys/cpm3-b.toml` runs **SD Systems CP/M Plus 3.0
+real banked operating system: `tests/media/sdsys/cpm3-b.toml` runs **SD Systems CP/M Plus 3.0
 (banked)** on an SBC-200 + VersaFloppy II with this board as a 256K ExpandoRAM II
 (`partition=ex48`, `honors_phantom=read`). The CP/M 3 BIOS bank-switches port FF with its resident
 half in the common region — `SHOW mem0` at the `A>` prompt reads `active = bank N + common`.

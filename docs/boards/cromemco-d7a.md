@@ -115,7 +115,7 @@ SW1–SW4 → **D4–D7**.
   at an emulated instant (`clock_->now()`, in T-states) but the device plays at 44100 Hz,
   so each write must be timestamped and sample-and-hold resampled to the device rate.
   That only sounds right when the machine runs **at or near real time** — a *paced*
-  clock (`Clock::free() == false`, a real `clock_hz`, as `examples/dazzler/adctest.toml` uses);
+  clock (`Clock::free() == false`, a real `clock_hz`);
   under the default flat-out clock emulated time compresses arbitrarily and the audio is
   garbage. The recommended shape mirrors the display/joystick seams: an injected
   `Audio` host service (`src/host/audio.h`) + `NullAudio` + `SdlAudio`, with the board
@@ -151,7 +151,7 @@ SW1–SW4 → **D4–D7**.
   bits in the correct nibbles; per-console `auto` resolution (console 2 takes gamepad 1,
   falls back to the keyboard) and its `statusLines()` report; `js_invert_y`; that the host
   is polled in `pump()` and not in a bus cycle; and a snapshot round-trip.
-- **Smoke test:** `altairsim -f examples/dazzler/adctest.toml` boots; a program that does `IN 19` /
+- **Smoke test:** a Dazzler machine with a D+7A boots; a program that does `IN 19` /
   `IN 18` runs, exercising the real `SdlJoystick` runtime path (SDL gamepad subsystem
   init on first pump, with or without a controller plugged in).
 
@@ -159,5 +159,5 @@ SW1–SW4 → **D4–D7**.
 
 - `reference/D+7A.md`, `reference/JS-1.md` — the distilled hardware specs.
 - `src/boards/cromemco-d7a.{h,cpp}`, `src/host/joystick.h`, `src/host/joystick_null.h`,
-  `src/host/joystick_sdl.{h,cpp}`, `examples/dazzler/adctest.toml`.
+  `src/host/joystick_sdl.{h,cpp}`.
 - `docs/boards/cromemco-dazzler.md` — the picture half of a Dazzler game console.

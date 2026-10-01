@@ -137,7 +137,7 @@ The **data rate is MAXI × DDEN**, not DDEN alone: only 8″ double density is 5
 
 ## Verification
 
-- **`acceptance-cdos`** (`tests/acceptance/cdos.exp`) boots the shipped `examples/cdos/cdos.toml`:
+- **`acceptance-cdos`** (`tests/acceptance/cdos.exp`) boots `tests/media/cdos/cdos.toml`:
   CDOS 2.58 cold-boots off the 16FDC's RDOS 2.52 PROM with no carriage return (the fixed-baud
   strap), then `DIR` reads the whole directory off the mixed-density 8″ DSDD image — proving the
   read path, the interleave order, and the density split.

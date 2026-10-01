@@ -27,8 +27,8 @@ set timeout 90
 log_user 0
 
 set exe [lindex $argv 0]
-set dsk1 "examples/sdsys/CPM3-B-SSDD-60K-DISK1.DSK"
-set dsk2 "examples/sdsys/CPM3-B-SSDD-DISK2.DSK"
+set dsk1 "tests/media/sdsys/CPM3-B-SSDD-60K-DISK1.DSK"
+set dsk2 "tests/media/sdsys/CPM3-B-SSDD-DISK2.DSK"
 
 set before1 [exec shasum $dsk1]
 set before2 [exec shasum $dsk2]

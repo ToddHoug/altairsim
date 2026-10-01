@@ -24,7 +24,7 @@ set(work "${BIN}/hostbridge-attrs")
 file(REMOVE_RECURSE "${work}")
 file(MAKE_DIRECTORY "${work}/host")
 foreach(f cpm3-b.toml CPM3-B-SSDD-60K-DISK1.DSK CPM3-B-SSDD-DISK2.DSK)
-  configure_file("${SRC}/examples/sdsys/${f}" "${work}/${f}" COPYONLY)
+  configure_file("${SRC}/tests/media/sdsys/${f}" "${work}/${f}" COPYONLY)
 endforeach()
 
 # 005CH: the FCB the CCP would have parsed for `W HELP.COM` (drive 0, name, type, zeros), with

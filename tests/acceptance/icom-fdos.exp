@@ -15,7 +15,7 @@ set timeout 60
 log_user 0
 
 set exe [lindex $argv 0]
-set dsk "examples/icom/FDOS-III (2SIO).DSK"
+set dsk "tests/media/icom/FDOS-III (2SIO).DSK"
 
 set before [exec shasum $dsk]
 

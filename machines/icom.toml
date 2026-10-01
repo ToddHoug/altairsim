@@ -1,12 +1,10 @@
 # iCOM FD3712 8" floppy machine -- boots CP/M 2.2 off a single-density iCOM disk.
 #
 #     altairsim icom
-#     MOUNT fdc0:drive0 "examples/icom/CPM22v1.0-3712-48K.DSK"
+#     MOUNT fdc0:drive0 "CPM22v1.0-3712-48K.DSK"
 #     RUN F000
 #     -> 48K CP/M 2.2
 #        A>
-#
-# ...or, with the disk already in the drive, `cd examples/icom && altairsim cpm22.toml`.
 #
 # THE BOOT PROM IS THE BOOT COMMAND. There is no BOOT verb (DESIGN.md 10.0). The iCOM
 # controller carries a 1K boot PROM at F000 (roms/ICOM-FD3712-CPM). The front panel jumps
