@@ -72,12 +72,15 @@ to end, so the two arrive in the order you gave them.
 
 A relative <file> is found beside the machine file, the same as LOAD.
 
-This loads a SOLOS ENTER script on a Sol-20 and then starts the program:
+This puts R.HEX on a CP/M disk. In CP/M, start PIP R.HEX=CON: and press ^E.
+Then:
 
 ```
-startup = ["PASTE \"TREK80.ENT\"", "TYPE \"EX 0000\\r\"", "RUN C000"]
-PASTE "R.HEX"  ; paste it now, at a running guest
+PASTE "hostbridge/R.HEX"
+RUN
 ```
+
+When PIP has shown the last line, press Ctrl-Z to close the file.
 
 The keyboard comes first: a key that you press during a paste goes to the guest
 before the remainder of the file. ^E stops the machine during a paste, and RUN
