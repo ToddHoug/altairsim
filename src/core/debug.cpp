@@ -32,7 +32,13 @@ static void onSigint(int sig) {
         // way they meant: the default disposition, not whatever was installed before us.
         std::signal(sig, SIG_DFL);
         std::raise(sig);
+        return;
     }
+    // RE-ARM. The Windows CRT resets a signal to SIG_DFL before it calls the handler, so
+    // without this the NEXT ^C killed the process there even though this one was heard and
+    // answered -- a server that took one ^C to stop a free run (#602) died on the second.
+    // POSIX keeps the handler; installing it again is harmless.
+    std::signal(sig, onSigint);
 }
 
 // IF IT WAS IGNORED, LEAVE IT IGNORED -- the same POSIX idiom, and for the same reason,

@@ -270,6 +270,14 @@ public:
     void feed(const std::string& s) { in_ += s; }  // as if typed
     const std::string& out() const { return out_; }
     void clearOut() { out_.clear(); }
+    // Keep only the newest `keep` bytes of output; returns how many older ones went. The
+    // --mcp free run (#602) holds output for a `recv` that may never come.
+    size_t trimOut(size_t keep) {
+        if (out_.size() <= keep) return 0;
+        const size_t n = out_.size() - keep;
+        out_.erase(0, n);
+        return n;
+    }
 
     // Has the guest consumed everything we typed? Lets a caller wait for the guest
     // to catch up without inventing a timeout.

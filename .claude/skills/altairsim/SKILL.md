@@ -42,6 +42,12 @@ run {input: "ASM FOO\r", until: "A>", timeout_ms: 120000}
 the CPU. `monitor {command}` runs any one monitor command (`MOUNT`, `SET`, `DISASM`, `IN`,
 `OUT`, `CONNECT`, …) and returns its text — the escape hatch for anything without a tool.
 
+**When the guest must keep running between calls** — a server on the guest, two machines that
+talk to each other, a person taking over through `--mirror` — use `start {from?, input?}`. It
+returns at once and the guest runs until `stop {}`, a HLT or a breakpoint. Every other tool
+still works meanwhile; `recv` collects the output, `status` says `running` or why it stopped.
+`run` and `step` are refused until you `stop`.
+
 ## Do not hand-roll a pty
 
 Driving a guest with `expect` or a bare pty fights console pacing and recurring prompts. Use

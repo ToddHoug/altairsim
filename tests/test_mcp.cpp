@@ -294,6 +294,46 @@ SigintRun runWithSigint(Machine& m, const std::vector<std::string>& setup,
     return r;
 }
 
+// A LIVE runMcp a test calls into one request at a time, reading each reply as it lands --
+// for the free run (#602), where the guest runs BETWEEN calls, so a finished script handed
+// to runScript would be over before the guest had done anything. Destroying it closes the
+// feed (EOF) and joins the server.
+struct LiveMcp {
+    FeedBuf      feedBuf;
+    std::istream in{&feedBuf};
+    SinkBuf      sinkBuf;
+    std::ostream out{&sinkBuf};
+    int          id = 0;
+    std::thread  worker;  // last: everything it touches is built first
+
+    explicit LiveMcp(Machine& m) : worker([this, &m] { runMcp(m, in, out, ""); }) {}
+    ~LiveMcp() { close(); }
+
+    // The reply's `result`; null if none came within 30 s.
+    Json call(const std::string& name, const std::string& args = "{}") {
+        const int          want = ++id;
+        std::ostringstream line;
+        line << R"({"jsonrpc":"2.0","id":)" << want
+             << R"(,"method":"tools/call","params":{"name":")" << name
+             << R"(","arguments":)" << args << "}}\n";
+        feedBuf.feed(line.str());
+        std::map<int, Json> rep;
+        if (!waitFor([&] { rep = repliesById(sinkBuf.text()); return rep.count(want) != 0; },
+                     30000))
+            return Json();
+        return rep[want].at("result");
+    }
+    Json data(const std::string& name, const std::string& args = "{}") {
+        return call(name, args).at("structuredContent");
+    }
+    static bool isError(const Json& result) { return result.at("isError").boolean(); }
+
+    void close() {
+        feedBuf.close();
+        if (worker.joinable()) worker.join();
+    }
+};
+
 std::string tmpPath(const char* leaf) {
     return (std::filesystem::temp_directory_path() / leaf).string();
 }
@@ -1501,5 +1541,156 @@ void test_mcp() {
               "connect reports the wiring it made");
         CHECK(rep[2].at("result").has("isError") && rep[2].at("result").at("isError").boolean(),
               "mount on an unknown board is an error, not a silent no-op");
+    }
+
+    SECTION("MCP: start leaves the guest running between calls; the other tools still work; "
+            "stop ends it (#602)");
+    {
+        Machine m;
+        if (!loadAltmon(m)) return;
+        LiveMcp mcp(m);
+
+        const Json st = mcp.data("start", R"({"from":63488})");
+        CHECK(st.at("running").boolean(), "start reports the guest running");
+
+        // No `run` from here on: the guest must reach its prompt by itself.
+        std::string got;
+        CHECK(waitFor([&] {
+                  got += mcp.data("recv").at("output").str();
+                  return got.find("ALTMON") != std::string::npos;
+              }, 10000),
+              "the guest printed its banner with no run call -- it ran between the recvs");
+
+        const uint64_t s1 = (uint64_t)mcp.data("status").at("steps").integer();
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        const Json     status = mcp.data("status");
+        CHECK(status.at("running").boolean(), "status says the guest is running");
+        CHECK((uint64_t)status.at("steps").integer() > s1,
+              "the guest went on running while no call was made at all");
+
+        mcp.call("send", R"({"text":"?\r"})");
+        std::string reply;
+        CHECK(waitFor([&] {
+                  reply += mcp.data("recv").at("output").str();
+                  return reply.find('*') != std::string::npos;
+              }, 10000),
+              "a line typed with send is read and answered by the running guest");
+
+        CHECK(LiveMcp::isError(mcp.call("run", R"({"timeout_ms":200})")),
+              "run is refused while the guest free-runs");
+        CHECK(LiveMcp::isError(mcp.call("step")), "step is refused while the guest free-runs");
+        CHECK(LiveMcp::isError(mcp.call("start")), "a second start is refused");
+        CHECK(mcp.data("regs").has("pc"), "regs answers between two slices");
+
+        const Json stop = mcp.data("stop");
+        CHECK(stop.at("stopped").str() == "requested" && stop.at("was_running").boolean(),
+              "stop ends the free run and says so");
+        CHECK(stop.at("steps").integer() > 0 && stop.at("t_states").integer() > 0,
+              "stop reports what the whole free run did");
+        const Json after = mcp.data("status");
+        CHECK(!after.at("running").boolean() && after.at("stop_reason").str() == "requested",
+              "status says the free run ended, and why");
+        CHECK(!mcp.data("stop").at("was_running").boolean(),
+              "a second stop reports the same stop, not a new one");
+        CHECK(!LiveMcp::isError(mcp.call("run", R"({"timeout_ms":200})")),
+              "run works again once the free run is stopped");
+    }
+
+    SECTION("MCP: a free run ends by itself at a HLT and at a breakpoint (#602)");
+    {
+        Machine m;
+        if (!loadAltmon(m)) return;
+        LiveMcp mcp(m);
+
+        mcp.call("mem_deposit", R"({"addr":256,"bytes":"F3 76"})");  // DI; HLT
+        mcp.call("start", R"({"from":256})");
+        CHECK(waitFor([&] { return !mcp.data("status").at("running").boolean(); }),
+              "the free run ended by itself");
+        CHECK(mcp.data("status").at("stop_reason").str() == "halt", "... at the HLT");
+        const Json stop = mcp.data("stop");
+        CHECK(!stop.at("was_running").boolean() && stop.at("stopped").str() == "halt",
+              "stop after the fact reports the HLT");
+
+        // Only an interrupt or RESET ends a HLT -- setting the PC does not, for `start` as for
+        // `run` and on the real 8080 -- so press RESET before the next program.
+        mcp.call("reset", R"({"kind":"bus"})");
+        mcp.call("mem_deposit", R"({"addr":512,"bytes":"00 00 C3 00 02"})");  // NOP NOP JMP 0200
+        mcp.call("breakpoints", R"({"action":"add","kind":"pc","lo":513})");
+        mcp.call("start", R"({"from":512})");
+        CHECK(waitFor([&] { return !mcp.data("status").at("running").boolean(); }),
+              "the free run ended by itself again");
+        const Json s = mcp.data("status");
+        CHECK(s.at("stop_reason").str() == "breakpoint" && s.at("pc").integer() == 513,
+              "... at the breakpoint, with the PC on it");
+    }
+
+    SECTION("MCP: a SIGINT ends a free run, and is not left standing for the next call (#602)");
+    {
+        Machine m;
+        if (!loadAltmon(m)) return;
+        LiveMcp mcp(m);
+
+        mcp.call("start", R"({"from":63488})");
+        // raise() lands inside runMcp's SigintGuard: the server is up and answering.
+        std::raise(SIGINT);
+        CHECK(waitFor([&] { return !mcp.data("status").at("running").boolean(); }),
+              "the ^C ended the free run");
+        CHECK(mcp.data("status").at("stop_reason").str() == "interrupted",
+              "... reported as interrupted");
+        CHECK(mcp.data("run", R"({"timeout_ms":300})").at("stopped").str() != "interrupted",
+              "the ^C was consumed -- the next run is not killed by it");
+
+        // A ^C that lands just as a request is dispatched: the dispatch clears a STALE stop
+        // flag, and must not clear this one, which is for the free run.
+        mcp.call("start");
+        std::raise(SIGINT);
+        mcp.call("regs");
+        CHECK(waitFor([&] { return !mcp.data("status").at("running").boolean(); }),
+              "a ^C beside a dispatched request still ends the free run");
+        CHECK(mcp.data("status").at("stop_reason").str() == "interrupted",
+              "... as interrupted, not lost");
+    }
+
+    SECTION("MCP: a paced free run keeps to its crystal and still answers at once; EOF ends "
+            "the session (#602)");
+    {
+        Machine m;
+        if (!loadAltmon(m)) return;
+        LiveMcp mcp(m);
+
+        // At 1 kHz one 2,000-instruction slice is many SECONDS of crystal time, so after the
+        // first slice the worker waits a long while before the next -- and must wait for a
+        // request, not sleep through it.
+        mcp.call("monitor", R"({"command":"SET cpu0 clock_hz=1000"})");
+        mcp.call("start", R"({"from":63488})");
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+        const auto t0 = std::chrono::steady_clock::now();
+        CHECK(mcp.data("regs").has("pc"), "regs answers during the pacing wait");
+        const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::steady_clock::now() - t0)
+                            .count();
+        CHECK(ms < 1000, ("the request was not held for the pacing wait (took " +
+                          std::to_string(ms) + "ms)").c_str());
+        const Json stop = mcp.data("stop");
+        CHECK(stop.at("t_states").integer() <= 2 * 2000 * 18,
+              ("at 1 kHz the guest ran a slice or two, not flat out (" +
+               std::to_string(stop.at("t_states").integer()) + " T)").c_str());
+
+        mcp.call("monitor", R"({"command":"SET cpu0 clock_hz=0"})");
+        mcp.call("start");
+        std::atomic<bool> done{false};
+        std::thread       closer([&] { mcp.close(); done = true; });
+        CHECK(waitFor([&] { return done.load(); }, 5000),
+              "EOF on stdin ends the session while the guest free-runs");
+        closer.join();
+    }
+
+    SECTION("ScriptedStream::trimOut keeps the newest bytes (#602's held-output cap)");
+    {
+        ScriptedStream s;
+        const std::string msg = "0123456789";
+        s.write(reinterpret_cast<const uint8_t*>(msg.data()), msg.size());
+        CHECK(s.trimOut(4) == 6 && s.out() == "6789", "trimOut drops the oldest bytes");
+        CHECK(s.trimOut(4) == 0 && s.out() == "6789", "and nothing when already under the cap");
     }
 }

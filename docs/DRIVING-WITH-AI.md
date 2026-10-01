@@ -150,9 +150,10 @@ Add `?ro` to watch without being able to type — quote it (`--mirror 'socket:23
 `?` is a shell wildcard and an unquoted `socket:2323?ro` makes the shell fail with `no matches
 found`. One watcher at a time.
 
-The guest only advances **during a `run`**, so a character you type between the assistant's runs
-waits on the line and is read on its next `run` — the same as staging input with `send`. While a
-`run` is in flight you and the assistant share the console live. (This is the same `|socket:PORT`
+Between two `run`s the guest is stopped, so a character you type then waits on the line and is
+read on the next `run` — the same as staging input with `send`. To hand the console to a person,
+**`start`** the guest instead (see *Leaving the guest running* below): it then runs between calls,
+as after `RUN` at the monitor, and answers what the person types at once. (This is the same `|socket:PORT`
 mirror the monitor's `CONNECT` offers on any line; the *Serial lines* chapter of the User Manual
 covers it in full.)
 
@@ -174,6 +175,8 @@ reading and writing memory, the ROMs, reset — is a `board_*`, `bus_*` or `mem_
 | `send` | `text` | Type at the console without running. |
 | `recv` | — | Drain output since last read, without running. |
 | `regs` | — | CPU registers now (`pc`, `halted`, `registers{}`). |
+| `start` | `from?`, `input?` | Start the guest and **leave it running** between calls; returns at once. See *Leaving the guest running*. |
+| `stop` | — | End a free run; report `stopped`, `pc`, `steps`, `t_states` for all of it. |
 
 **Control bytes: use `\uXXXX`.** `input` and `text` are raw bytes — whatever you pass reaches
 the guest untouched, control characters included, and every line in the machine is 8-bit
@@ -247,15 +250,49 @@ A `run` ends by itself at `timeout_ms`. Two things stop it sooner, and both retu
   the background, or with `nohup`, ignores `^C`.
 
 Either way the machine is left as it was, and the next `run` starts clean. A `^C` with no `run` in
-progress does nothing to the guest.
+progress does nothing to the guest, unless the guest is free-running (`start`, below). A `^C` then
+ends the free run, with `stop_reason: "interrupted"`.
 
 **`status` never waits.** It is answered by the reader thread, not the worker, so it answers even
 while a `run` (or a long `monitor`, `mem_load` or `snapshot`) is in progress. It returns the board
 id, `in_flight` (whether the worker is busy on any request), and the `pc` and `steps` of the last
-`run`. Those two go stale: a `step` or a `monitor` command moves the real PC without changing them,
-and `steps` restarts at zero on the next `run`. `generation` is the one field that always climbs, so
-use it to tell "still advancing" from "stuck on the same slice". Poll `status` before you cancel, to
-see whether the `run` is still alive.
+`run` or free run. Those two go stale: a `step` or a `monitor` command moves the real PC without
+changing them, and `steps` restarts at zero on the next `run`. `generation` is the one field that
+always climbs, so use it to tell "still advancing" from "stuck on the same slice". Poll `status`
+before you cancel, to see whether the `run` is still alive. `running` and `stop_reason` report the
+free run (next section).
+
+### Leaving the guest running: `start` and `stop`
+
+A `run` is bounded: the guest stops when the call returns. Some jobs need the guest to keep going
+between calls — a server on the guest that must answer its clients in time, two machines that
+talk to each other and must run side by side, or a person who takes over the console through
+`--mirror`. For these, use `start`:
+
+```
+start  {from: 65280}               # boot, and keep running; returns at once
+send   {text: "TNFSD\r"}           # the guest reads it by itself -- no run needed
+recv   {}                          # what it has printed so far
+status {}                          # running: true
+stop   {}                          # stopped: "requested", steps, t_states
+```
+
+- **The guest runs until** `stop`, a `HLT`, a breakpoint, `SET BUS UNCLAIMED=HALT`, a
+  `BREAK TAPE STOP` or a `^C` to the process. Never on a timeout, and never because it is idle.
+  `status` gives `running`, and once it has stopped, `stop_reason` says why.
+- **Every other tool works while it runs.** The server runs the guest in short slices, and
+  answers each request between two slices, with the guest paused. `send`, `recv`, `regs`,
+  `mem_dump`, `breakpoints`, `monitor` — all answer in well under a millisecond. Only `run` and
+  `step` are refused until you `stop`, because they move the guest themselves.
+- **Output collects until `recv`.** The server holds the newest 1 MiB. If a guest prints more
+  than that before you read it, `recv` reports how many older bytes it let go, in `dropped`.
+- **`SET cpu0 clock_hz=N` paces the guest to that crystal**, as at the monitor, so a real serial
+  device or a network peer gets wall-clock time to reply. Without it the guest runs flat out, and
+  at a prompt the server naps between slices, so an idle guest does not use a whole core.
+- **Only an interrupt or RESET ends a `HLT`.** `start {from: ...}` on a halted processor stops
+  again at once with `halt`, as `run` does. Send `reset` first.
+- **Two machines are two servers.** Start each with its own `altairsim --mcp`, and `start` both.
+  They then run side by side, each on its own server.
 
 **The console under `--mcp`.** There is no host keyboard behind a pipe, so the server moves the
 console line onto an in-memory terminal that `send`, `run` and `recv` read and write. Every other

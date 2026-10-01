@@ -8,6 +8,14 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+### The guest can run between MCP calls
+
+Two new MCP tools, `start` and `stop`. `start` starts the guest and returns at once. The guest
+then runs between tool calls, as it does after `RUN` at the monitor, until `stop`, a `HLT` or a
+breakpoint. All the other tools still work while it runs, and `status` tells if it still runs.
+Use it for a server on the guest that must answer its clients in time, for two machines that talk
+to each other, and to let a person take over the console through `--mirror`.
+
 ### Fewer examples in the package, and more at altairsim.com
 
 The package now has five examples: `cpm`, `basic4k`, `basic1`, `debugger` and `ai-mcp`. `basic4k`
