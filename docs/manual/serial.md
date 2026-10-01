@@ -9,12 +9,51 @@ and you can CONNECT each unit to an ENDPOINT.** The unit is the connector on the
 board. The endpoint is what you connect to it.
 
 ```
-altairsim> CONNECT sio0:b socket:2323
-altairsim> DISCONNECT sio0:b
+altairsim> CONNECT sio0:a socket:2323
+altairsim> DISCONNECT sio0:a
 ```
 
-A machine file does the same with `connect = "socket:2323"` in the table of the unit. The
-configuring chapter shows it.
+## The same in a machine file
+
+`CONNECT` connects a unit now. A machine file makes the same connection each time that the
+machine starts. `CONNECT <id>:<unit> <endpoint>` becomes `connect = "<endpoint>"` in the
+`[board.unit.<unit>]` table of the board that has that `id`.
+
+```
+altairsim> CONNECT sio0:a telnet:2323
+```
+
+In a machine file:
+
+```toml
+[machine]
+name = "cpm-telnet"
+base = "default"
+
+[[board]]
+id = "sio0"                    # no type: change the board that is there
+
+  [board.unit.a]
+  connect = "telnet:2323"
+```
+
+This is a complete machine file. The `default` machine already has the board `sio0`. The file
+names that board by its `id`, and gives only the key that changes. All the other settings of the
+board stay.
+
+**Do not write a `type` on that `[[board]]`.** With a `type`, the file replaces the board, and
+the settings that the base made on it are lost. The configuring chapter gives the rule.
+
+The endpoint is always one string in quotes, with its options and its tap.
+
+You can get the same result in two other ways:
+
+- Type the `CONNECT` command at the monitor, and then type `CONFIG SAVE mine.toml`. The saved
+  file is a complete machine with no `base`. It lists every board and every setting.
+- Put the command in the `startup` list: `startup = ["CONNECT sio0:a telnet:2323", "RUN FF00"]`.
+
+In this chapter, the words "In a machine file:" introduce the machine-file form of the command
+above them. Each sample shows only the tables that change.
 
 ## The endpoints
 
@@ -72,19 +111,33 @@ characters. `SHOW CONSOLE` shows which unit has the console, and the console set
 Connect a unit to a `telnet:` port, and the guest has a serial port with a terminal on it:
 
 ```
-altairsim> CONNECT sio0:b telnet:2323
+altairsim> CONNECT sio0:a telnet:2323
 altairsim> RUN
+```
+
+In a machine file:
+
+```toml
+[[board]]
+id = "sio0"
+
+  [board.unit.a]
+  connect = "telnet:2323"
 ```
 
 In another terminal on your computer, type:
 
 ```
 $ telnet localhost 2323
-Connected to AltairSim X.Y.Z (sio0:b) on port 2323
+Connected to AltairSim X.Y.Z (sio0:a) on port 2323
 ```
 
-The guest now talks to that window. Your first terminal still has the monitor and `Ctrl-E`. In
-this way, a machine can have two terminals.
+The console of the guest is now that window. Your first terminal still has the monitor and
+`Ctrl-E`.
+
+Unit `a` is the console port of the `default` machine. To keep the console where it is and give
+the guest a second terminal, connect unit `b`: write `sio0:b` at the monitor, or
+`[board.unit.b]` in the machine file.
 
 ### `socket:` or `telnet:`
 
@@ -113,11 +166,11 @@ that you reached the correct machine. Only the caller sees it, and nothing goes 
 turn it off, add `?banner=off`:
 
 ```
-altairsim> CONNECT sio0:b telnet:2323?banner=off
+altairsim> CONNECT sio0:a telnet:2323?banner=off
 ```
 
 A `socket:PORT` line has no banner, because a program at the far end would read the banner as
-data. To greet a person on a raw socket, add `?banner`: `CONNECT sio0:b socket:2323?banner`. A
+data. To greet a person on a raw socket, add `?banner`: `CONNECT sio0:a socket:2323?banner`. A
 banner is only for a port that listens. On a line that calls out, the program refuses `?banner`.
 
 ## A terminal in its own window
@@ -147,6 +200,19 @@ altairsim> CONNECT sio0:a "terminal?emulation=h19&size=132x24"
 altairsim> CONNECT sio0:a terminal?emulation=vt100&phosphor=amber&width=1100
 ```
 
+In a machine file:
+
+```toml
+[[board]]
+id = "sio0"
+
+  [board.unit.a]
+  connect = "terminal?emulation=vt52&size=80x24"
+```
+
+The options are part of the string. A machine file always has quotes around the endpoint, so
+the `&` needs no special quotes there.
+
 - `emulation` is `vt100` (the default, and `ansi` is the same), `adm3a` (the Lear Siegler
   ADM-3A, the usual CP/M terminal), `vt52`, or `h19` (the Heath/Zenith H19, a VT52 with an ANSI
   mode).
@@ -173,8 +239,8 @@ terminal program of the period over it.
 ## A real serial port
 
 ```
-altairsim> CONNECT sio0:b serial:/dev/tty.usbserial-A600K1XY
-altairsim> CONNECT sio0:b serial:COM3
+altairsim> CONNECT sio0:a serial:/dev/tty.usbserial-A600K1XY
+altairsim> CONNECT sio0:a serial:COM3
 ```
 
 The second form is for Windows. The bytes go out of a real UART, down a real cable, to the
@@ -211,6 +277,34 @@ in a few milliseconds, and it decides that your sender is dead. Full speed is co
 machine that talks only to itself. **A machine that talks to the outside world needs the real
 crystal.** The troubleshooting chapter tells you more.
 
+### The port, the baud rate and the crystal in a machine file
+
+The three commands are:
+
+```
+altairsim> SET cpu0 clock_hz=2000000
+altairsim> SET sio0:a baud=9600
+altairsim> CONNECT sio0:a serial:/dev/tty.usbserial-A600K1XY
+```
+
+In a machine file:
+
+```toml
+[[board]]
+id       = "cpu0"
+clock_hz = 2000000             # SET cpu0 clock_hz=2000000
+
+[[board]]
+id = "sio0"
+
+  [board.unit.a]
+  baud    = 9600               # SET sio0:a baud=9600
+  connect = "serial:/dev/tty.usbserial-A600K1XY"
+```
+
+A `SET` on a board is a key in the `[[board]]` of that board. A `SET` on a unit is a key in the
+table of that unit.
+
 ## A paper-tape reader and punch: `in:` and `out:`
 
 A **paper-tape station** was connected to a serial or parallel line. The program makes one from
@@ -221,6 +315,18 @@ altairsim> CONNECT lpt0:prn out:printout.txt              # a punch: save what t
 altairsim> CONNECT 4pio0:ja in:reader.tap                 # a reader: give a file to the board
 altairsim> CONNECT 4pio0:ja in:reader.tap,out:punch.tap   # both, on one line
 ```
+
+In a machine file, for a machine that has the board `4pio0`:
+
+```toml
+[[board]]
+id = "4pio0"
+
+  [board.unit.ja]
+  connect = "in:reader.tap,out:punch.tap"
+```
+
+The name of the table is the name of the unit: `ja` here, `a` on a 2SIO.
 
 `in:` is a **reader**. It gives the bytes of the file to the board one at a time, from the
 start. When the file ends, the line goes **quiet**, with no error and no end-of-file byte, as a
@@ -296,7 +402,17 @@ the tap is there, and the tap never changes a byte. For this reason, you can use
 transfer.
 
 ```
-altairsim> CONNECT sio0:b socket:2323|bbs.hex
+altairsim> CONNECT sio0:a socket:2323|bbs.hex
+```
+
+In a machine file:
+
+```toml
+[[board]]
+id = "sio0"
+
+  [board.unit.a]
+  connect = "socket:2323|bbs.hex"
 ```
 
 Connect with telnet, and use the guest. `bbs.hex` fills with the conversation:
@@ -323,8 +439,8 @@ The program empties the file each time that you connect. `SHOW` prints the tap, 
 The tap takes options after the file name, in the `?key=value` form:
 
 ```
-altairsim> CONNECT sio0:b socket:2323|bbs.hex?fmt=cols
-altairsim> CONNECT sio0:b in:reader.tap?cps=300|trace.log?fmt=jsonl
+altairsim> CONNECT sio0:a socket:2323|bbs.hex?fmt=cols
+altairsim> CONNECT sio0:a in:reader.tap?cps=300|trace.log?fmt=jsonl
 ```
 
 - **`fmt=dump`** (the default) is the layout above: one hex row on each line, in time order.
@@ -368,7 +484,7 @@ bytes. `SHOW` prints the mirror, and `CONFIG SAVE` writes it.
 If the program cannot read your endpoint, it **refuses, and lists the forms that it accepts**:
 
 ```
-altairsim> CONNECT sio0:b sockit:2323
+altairsim> CONNECT sio0:a sockit:2323
 no endpoint 'sockit:2323'. Try: console | null | loopback | scripted | socket:PORT[?banner] | socket:HOST:PORT |
 telnet:PORT[?banner=off] | telnet:HOST:PORT | serial:DEVICE | in:PATH |
 out:PATH | terminal[?emulation=vt100&size=80x24] | printer:QUEUE |
@@ -402,6 +518,19 @@ altairsim> CONSOLE strip7out=on
 altairsim> CONSOLE upper=on crlf=off
 altairsim> CONSOLE stop=1D
 ```
+
+In a machine file:
+
+```toml
+[console]
+strip7out = true
+upper     = true
+crlf      = false
+stop      = 0x1D
+```
+
+`[console]` is a table of its own, not a `[[board]]`. A setting that is `on` or `off` at the
+monitor is `true` or `false` in the file.
 
 `stop=1D` moves the STOP key from `Ctrl-E` to `Ctrl-]`. **The STOP key must be a control
 character**, so that you cannot press it by accident in the middle of a word.
@@ -468,6 +597,19 @@ a machine file. The settings apply to the `terminal` line that is open.
 ```
 altairsim> CONNECT sio0:a terminal
 altairsim> SET TERMINAL strip7out=on
+```
+
+In a machine file:
+
+```toml
+[[board]]
+id = "sio0"
+
+  [board.unit.a]
+  connect = "terminal"
+
+[terminal]
+strip7out = true
 ```
 
 `strip7out` is useful for an **even-parity monitor**. MITS Programming System II puts parity in

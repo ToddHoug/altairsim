@@ -188,8 +188,13 @@ port = 0x20
 
 If the base had a board called `sio0`, the program removes it and adds a new `2sio` in its
 place. **All the settings that the base made on that board are lost**, also the ones that you
-did not write. You get the defaults of the type, and the settings that you write here. Usually
-you want to modify the board instead.
+did not write. You get the defaults of the type, and the settings that you write here.
+
+**In a file with a `base`, you almost always want MODIFY.** Leave the `type` out.
+
+`CONFIG SAVE` writes every board with its `type` and all its keys. Do not copy a board from a
+saved file into a file that has a `base`, because that is a REPLACE. Write the `id` and the keys
+that you change.
 
 ### MODIFY: no `type`
 
@@ -229,9 +234,8 @@ the board**, and the board accepts it or rejects it by name:
 
 ```toml
 [[board]]
-type = "2sio"
-id   = "sio0"
-port = 0x10
+id     = "dsk0"
+drives = 8
 ```
 
 **The board reference at the back of this manual lists the keys of every board.** The boards
@@ -245,21 +249,24 @@ each one has its own table:
 
 ```toml
 [[board]]
-type = "2sio"
-id   = "sio0"
-port = 0x10                    # a property of the board. Both units use this base port.
+id = "sio0"                    # no type: the board is already in the machine
 
   [board.unit.a]
-  baud    = 9600               # a property of unit a
-  connect = "console"
+  connect = "telnet:2323"      # a property of unit a
 
   [board.unit.b]
-  baud    = 1200               # unit b has its own setting
-  connect = "socket:2323"
+  baud    = 1200               # unit b has its own settings
+  connect = "socket:2324"
 ```
 
-A key in `[board.unit.a]` is the same key that `SET sio0:a baud=9600` sets at the monitor. The
-board reference tells you which boards have units, and the keys of each unit.
+This sample is for a file whose base has the board `sio0`, such as `base = "default"`. It has no
+`type`, and it gives only the keys that change. The other settings of the board and of each unit
+stay.
+
+A key in a unit table is a command at the monitor. `connect` in `[board.unit.a]` is
+`CONNECT sio0:a telnet:2323`, and `baud` in `[board.unit.b]` is `SET sio0:b baud=1200`. The
+serial chapter shows each `CONNECT` command with its machine-file form. The board reference
+tells you which boards have units, and the keys of each unit.
 
 ## `[[board.region]]`: memory
 
@@ -327,6 +334,9 @@ and `create`.
 
 Without `create`, a `mount` that names a missing file is an **error, and the machine does not
 load**.
+
+Each `[[board.drive]]` is one `MOUNT` command. The disks chapter shows each `MOUNT` command with
+its machine-file form.
 
 ## Numbers: hex on the bus, decimal for counts
 
