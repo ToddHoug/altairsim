@@ -3,6 +3,9 @@
 #include "core/paths.h"
 #include "platform/terminal.h"
 
+#include <filesystem>
+#include <system_error>
+
 namespace altair {
 
 // NO OS IN THIS FILE. Raw mode, non-blocking stdin and the three-way read all live
@@ -151,10 +154,11 @@ bool Console::readable() const {
     // guest which will wait for ever, and a scripted run uses it to know it may leave.
     // A terminal NEVER ends, so it never starves -- and a machine at a prompt with a
     // human in front of it is not begging, it is waiting. Keep them apart.
-    if (in_.empty()) ++hungry_;
-    if (in_.empty() && eof_) ++starved_;
+    const bool any = !in_.empty() || pasteReady();
+    if (!any) ++hungry_;
+    if (!any && eof_) ++starved_;
 
-    return !in_.empty();
+    return any;
 }
 
 // THE GUEST'S DOOR, and everything that comes through it is filtered. The chain
@@ -187,12 +191,22 @@ size_t Console::read(uint8_t* buf, size_t n) {
 }
 
 size_t Console::readRaw(uint8_t* buf, size_t n) {
-    if (!n || in_.empty()) return 0;
+    if (!n) return 0;
 
     // ONE BYTE. The card asking is a UART with a single receive register, and
     // handing it a block would be handing it something no 6850 ever had.
-    buf[0] = in_.front();
-    in_.pop_front();
+    //
+    // THE KEYBOARD COMES FIRST. A key the operator pressed goes to the guest ahead of
+    // whatever is left of a paste; the paste is offered only when no key is waiting.
+    if (!in_.empty()) {
+        buf[0] = in_.front();
+        in_.pop_front();
+        return 1;
+    }
+    if (!pasteReady()) return 0;
+    Source& s = sources_.front();
+    buf[0]    = (uint8_t)s.text[s.pos++];
+    if (s.left) --s.left;
     return 1;
 }
 
@@ -204,6 +218,77 @@ void Console::inject(const uint8_t* buf, size_t n) {
         }
         in_.push_back(buf[i]);
     }
+}
+
+// IS THERE A PASTED BYTE TO GIVE? A PASTE NEVER ENTERS THE KEYBOARD BUFFER. If it did,
+// it would keep the buffer full for as long as the file lasted, and a full buffer is
+// when poll() stops asking the OS for keys -- so ATTN went dead and a key from the
+// window was dropped, for the whole paste. The file stays here, behind the keyboard, and
+// is read one small block at a time as the guest takes bytes.
+bool Console::pasteReady() const {
+    while (!sources_.empty()) {
+        Source& s = sources_.front();
+        if (s.pos < s.text.size()) return true;
+        if (s.file.is_open() && s.left) {
+            char buf[kMaxIn];
+            s.file.read(buf, (std::streamsize)sizeof buf);
+            const size_t got = (size_t)s.file.gcount();
+            if (got) {
+                s.text.assign(buf, got);
+                s.pos = 0;
+                return true;
+            }
+        }
+        // The text is used up, or the file has ended (or shrank under us).
+        sources_.pop_front();
+    }
+    return false;
+}
+
+uint64_t Console::queued() const {
+    uint64_t n = 0;
+    for (const Source& s : sources_) n += s.left;
+    return n;
+}
+
+bool Console::pasteFile(const std::string& path, std::string& err) {
+    std::error_code ec;
+    if (std::filesystem::is_directory(path, ec)) {
+        err = "'" + path + "' is a directory";
+        return false;
+    }
+    Source s;
+    s.file.open(path, std::ios::binary);
+    if (!s.file.is_open()) {
+        err = "cannot open '" + path + "'";
+        return false;
+    }
+    const auto size = std::filesystem::file_size(path, ec);
+    if (ec) {
+        err = "cannot read the size of '" + path + "'";
+        return false;
+    }
+    s.left = (uint64_t)size;
+    if (s.left) sources_.push_back(std::move(s));
+    return true;
+}
+
+void Console::typeText(const std::string& s) {
+    if (!pasteReady()) {
+        inject(s);
+        return;
+    }
+    Source src;
+    src.text = s;
+    src.left = s.size();
+    if (src.left) sources_.push_back(std::move(src));
+}
+
+uint64_t Console::cancelPaste() {
+    if (!pasteReady()) return 0;
+    const uint64_t n = queued();
+    sources_.clear();
+    return n;
 }
 
 void Console::inject(const std::string& s) {

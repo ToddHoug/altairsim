@@ -223,7 +223,7 @@ const std::vector<std::string> kBoardOrder = {
 // A monitor command's functional group. Every built command must name one (see die()).
 const char* commandGroup(const std::string& n) {
     if (n == "RUN" || n == "STEP" || n == "NEXT" || n == "RESET" || n == "POWER" ||
-        n == "TYPE") return "Running the machine";
+        n == "TYPE" || n == "PASTE" || n == "NOPASTE") return "Running the machine";
     if (n == "DUMP" || n == "EXAMINE" || n == "DEPOSIT" || n == "EDIT" || n == "FILL" ||
         n == "MOVE" || n == "SEARCH" || n == "COMPARE" || n == "LOAD" || n == "SAVE" ||
         n == "IN" || n == "OUT" || n == "REGS") return "Examining and changing memory";
@@ -282,6 +282,8 @@ const char* commandSummary(const std::string& n) {
     if (n == "POWER") return "Power-cycle the machine -- the only thing that clears RAM.";
     if (n == "TRACE") return "Log every bus cycle while the machine runs.";
     if (n == "TYPE") return "Feed text to the guest as if typed at its keyboard.";
+    if (n == "PASTE") return "Send a host file of any size to the guest's keyboard, as if pasted.";
+    if (n == "NOPASTE") return "Stop a PASTE that is not finished.";
     if (n == "SNAPSHOT") return "Save the whole machine state to a file.";
     if (n == "RESTORE") return "Load machine state back from a snapshot.";
     if (n == "NOBREAK") return "Remove a breakpoint, or all of them.";

@@ -5262,7 +5262,55 @@ bool Monitor::exec(const std::string& line, std::ostream& out) {
             failed_ = true;
             return true;
         }
-        Console::instance().inject(keys);
+        // Behind a PASTE the text waits its turn, so the two arrive in the order given.
+        Console::instance().typeText(keys);
+        return true;
+    }
+
+    if (cmd == "PASTE") {
+        // A host file as keyboard input -- what a paste from the clipboard does, for a
+        // file of any size. The console reads the file as the guest takes bytes
+        // (host/console.h, pasteFile); it is never held whole. See the command's HELP.
+        if (!need(2, "PASTE <file>")) return true;
+        const std::string name = unquote(a[1]);
+        const std::string path = resolveInput(name);  // beside the machine, as LOAD
+        if (mcpMode_) {
+            // The scripted line has no size limit, so it takes the file whole (see TYPE).
+            ScriptedStream* con = mcpScriptedConsole(m_);
+            if (!con) {
+                out << "PASTE: no console line under --mcp -- CONNECT a serial unit to the "
+                       "console\n";
+                failed_ = true;
+                return true;
+            }
+            std::ifstream f(path, std::ios::binary);
+            std::error_code ec;
+            if (!f.is_open() || std::filesystem::is_directory(path, ec)) {
+                out << "PASTE: cannot open '" << name << "'\n";
+                failed_ = true;
+                return true;
+            }
+            std::string bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+            con->feed(bytes);
+            out << "pasting " << name << " (" << bytes.size() << " bytes)\n";
+            return true;
+        }
+        std::string err;
+        if (!Console::instance().pasteFile(path, err)) {
+            out << "PASTE: " << err << "\n";
+            failed_ = true;
+            return true;
+        }
+        std::error_code ec;
+        out << "pasting " << name << " (" << std::filesystem::file_size(path, ec)
+            << " bytes)\n";
+        return true;
+    }
+
+    if (cmd == "NOPASTE") {
+        const uint64_t n = Console::instance().cancelPaste();
+        if (n) out << "paste stopped: " << n << " byte(s) not sent.\n";
+        else   out << "nothing is being pasted.\n";
         return true;
     }
 

@@ -232,12 +232,32 @@ void test_sol() {
         CHECK(g.in(KDATA) == 'A', "IN 0FCH returns the keystroke");
         CHECK((g.in(STAPT) & KDR) != 0, "and reading it clears KDR back to 1");
 
-        // Two keys, one per host turn (one strobe at a time, like the hardware).
+        // Two keys, one strobe at a time, like the hardware.
         kbd->feed("BC");
         g.sol->pump();
         CHECK(g.in(KDATA) == 'B', "first of two");
         g.sol->pump();
         CHECK(g.in(KDATA) == 'C', "then the second");
+
+        // THE GUEST'S OWN POLL FETCHES THE NEXT KEY. With the latch in pump() only, the
+        // guest got one key a host slice whatever its clock, and a pasted file crawled.
+        // No pump() below: the status read is what brings each key in.
+        kbd->feed("XYZ");
+        std::string got;
+        for (int i = 0; i < 3; ++i) {
+            CHECK((g.in(STAPT) & KDR) == 0, "the status read finds the next key, with no host turn");
+            got += (char)g.in(KDATA);
+        }
+        CHECK(got == "XYZ", "three keys, three polls, in order");
+        CHECK((g.in(STAPT) & KDR) != 0, "and then the keyboard is idle again");
+
+        // Still one strobe at a time: an unread key is not replaced by the next one.
+        kbd->feed("12");
+        g.in(STAPT);
+        g.in(STAPT);
+        CHECK(g.in(KDATA) == '1', "two status reads latch one key, not two");
+        g.in(STAPT);
+        CHECK(g.in(KDATA) == '2', "the second key was not lost");
     }
 
     SECTION("Sol I/O -- the serial port round-trips on F8/F9, active-high status");

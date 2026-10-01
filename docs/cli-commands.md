@@ -74,11 +74,13 @@ derived from. It is here for the notes; the list itself is `HELP`'s, which print
 | `CONN` | CONNECT | any endpoint — `HELP CONNECT` lists them |
 | `RES` | RESET | it sits with POWER, and it pays three letters — see above |
 | `P` | POWER | |
+| `PA` | PASTE | sends a host file to the guest's keyboard; `P` is still POWER |
 | `T` | TRACE | logs every bus cycle — to the console or a file |
 | `TY` | TYPE | |
 | `SN` | SNAPSHOT | writes the machine's state to a file |
 | `REST` | RESTORE | reads a snapshot back into a machine of the same shape |
 | `NO` | NOBREAK | `N` is NEXT — the step you type mid-debug wins the letter |
+| `NOP` | NOPASTE | stops a PASTE; `NO` is still NOBREAK |
 | `HE` | HELP | or `?` |
 | `Q` | QUIT | the only way out — there is no EXIT |
 

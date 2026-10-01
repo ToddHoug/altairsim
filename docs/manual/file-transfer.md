@@ -278,6 +278,19 @@ a new disk, or a minidisk image that you brought. For the paste below, open `hos
    and paste it into the window where `altairsim` runs. PIP shows each line as it arrives, about
    117 lines. That shows you that the guest receives it.
 
+   **The monitor can paste the file for you.** Press `Ctrl-E` to go to the monitor, give it the
+   file, and continue:
+
+   ```
+   altairsim> PASTE "hostbridge/R.HEX"
+   pasting hostbridge/R.HEX (5231 bytes)
+   altairsim> RUN
+   ```
+
+   `PASTE` sends a file of any size to the keyboard of the guest, and no character is lost. It
+   finds a relative file name in the folder of the machine file, the same as `LOAD`. To stop a
+   paste that is not finished, press `Ctrl-E` and type `NOPASTE`.
+
 3. **End it with `Ctrl-Z`.**
 
    ```

@@ -292,6 +292,14 @@ void test_cli() {
     CHECK(ty && std::string(ty->name) == "TYPE" && ty->built, "TY is TYPE, and built");
     CHECK(std::string(resolveCommand("T")->name) == "TRACE", "and T is still TRACE, above it");
 
+    // PASTE and NOPASTE landed after POWER and NOBREAK, and took nothing from them.
+    const CommandDef* pa = resolveCommand("PA");
+    CHECK(pa && std::string(pa->name) == "PASTE" && pa->built, "PA is PASTE, and built");
+    CHECK(std::string(resolveCommand("P")->name) == "POWER", "and P is still POWER");
+    const CommandDef* nop = resolveCommand("NOP");
+    CHECK(nop && std::string(nop->name) == "NOPASTE" && nop->built, "NOP is NOPASTE, and built");
+    CHECK(std::string(resolveCommand("NO")->name) == "NOBREAK", "and NO is still NOBREAK");
+
     // SNAPSHOT and RESTORE are built now (SN/REST); their prefixes are theirs.
     const CommandDef* snap = resolveCommand("SN");
     CHECK(snap && std::string(snap->name) == "SNAPSHOT" && snap->built,
@@ -1794,6 +1802,60 @@ void test_cli() {
         got.clear();
         while (con.read(&b, 1)) got += (char)b;
         CHECK(got == "a\tb\\zc", "a tab, and an unknown escape left as written");
+    }
+
+    // PASTE sends a FILE to the same keyboard. TYPE is for a line; a file does not fit
+    // in the 256-byte buffer, so PASTE reads it as the guest takes bytes (test_console
+    // proves the stream). Here: the command, its order against TYPE, and its refusals.
+    SECTION("cli: PASTE sends a file to the guest, a later TYPE follows it, NOPASTE drops it");
+    {
+        namespace pfs = std::filesystem;
+        Console& con = Console::instance();
+        uint8_t  b;
+        while (con.read(&b, 1)) {}
+
+        std::string script = "ENTER 0000\n";
+        for (int i = 0; i < 400; ++i) script += "0000: AF C3 5C 1D 3E 03 32 BD\n";  // > 256 bytes
+        script += "/\n";
+        const pfs::path sp = pfs::temp_directory_path() / "altairsim paste test.ent";
+        {
+            std::ofstream f(sp, std::ios::binary);
+            f << script;
+        }
+
+        Machine            mp;
+        Monitor            monp(mp);
+        std::ostringstream ps;
+        monp.exec("PASTE \"" + sp.string() + "\"", ps);
+        monp.exec("TYPE \"EX 0000\\r\"", ps);
+        CHECK(!monp.failed(), "PASTE of a quoted path with a space in it is accepted");
+        CHECK(ps.str().find(std::to_string(script.size()) + " bytes") != std::string::npos,
+              "and it reports the size of the file");
+        std::string got;
+        while (con.read(&b, 1)) got += (char)b;
+        CHECK(got == script + "EX 0000\r", "the whole file, then the TYPE that came after it");
+
+        ps.str("");
+        monp.exec("NOPASTE", ps);
+        CHECK(ps.str().find("nothing is being pasted") != std::string::npos,
+              "NOPASTE with no paste says so");
+        monp.exec("PA \"" + sp.string() + "\"", ps);
+        for (int i = 0; i < 10; ++i) con.read(&b, 1);
+        ps.str("");
+        monp.exec("NOP", ps);
+        CHECK(ps.str().find(std::to_string(script.size() - 10) + " byte(s) not sent") != std::string::npos,
+              "NOPASTE part-way reports the bytes the guest did not read");
+        CHECK(con.read(&b, 1) == 0, "and the guest gets no more of it");
+        CHECK(!monp.failed(), "none of that is a failure");
+
+        // The refusal last: failed() is sticky.
+        ps.str("");
+        monp.exec("PASTE \"" + (pfs::temp_directory_path() / "altairsim-no-such.ent").string() + "\"", ps);
+        CHECK(monp.failed() && ps.str().find("cannot open") != std::string::npos,
+              "a file that is not there is an error, and names itself");
+        CHECK(con.pending() == 0, "and nothing was queued");
+        std::error_code pec;
+        pfs::remove(sp, pec);
     }
 
     // ---------------------------------------------------------------------

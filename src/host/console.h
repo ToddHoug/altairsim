@@ -163,10 +163,29 @@ public:
     void inject(const uint8_t* buf, size_t n);
     void inject(const std::string& s);
 
+    // PASTE A FILE. The file is NOT put in the keyboard buffer: it waits behind it and
+    // is read as the guest takes bytes, so the file has no size limit and no byte of it
+    // is dropped. A KEY THE OPERATOR PRESSES GOES FIRST -- the guest is offered a pasted
+    // byte only when no key is waiting -- and ATTN works all through it, because the
+    // paste never fills the buffer the keyboard uses. At end of file the source goes
+    // away. Returns false, with a reason, if PATH will not open; nothing is queued then.
+    bool pasteFile(const std::string& path, std::string& err);
+
+    // Type text IN ORDER with a paste. With nothing pasted ahead of it this is
+    // inject(); behind a paste it waits its turn, so PASTE then TYPE arrive as given.
+    void typeText(const std::string& s);
+
+    // Drop a paste part-way: every waiting source. Returns the bytes that will now
+    // never reach the guest (0 = nothing was being pasted). The keyboard buffer is the
+    // operator's own type-ahead and is left alone.
+    uint64_t cancelPaste();
+    bool     pasting() const { return pasteReady(); }
+
     // What is waiting in the buffer, and what has been dropped because it was full.
     // A dropped keystroke that nobody ever mentions is a bug report about "flaky
     // input" six months from now.
-    size_t   pending() const { return in_.size(); }
+    // A paste still waiting behind the buffer counts: it is type-ahead like any other.
+    size_t   pending() const { return in_.size() + (size_t)queued(); }
     uint64_t dropped() const { return dropped_; }
 
     uint8_t attn() const { return attn_; }
@@ -263,7 +282,7 @@ private:
         std::string describe() const override { return "console"; }
         size_t      read(uint8_t* b, size_t n) override { return c_->readRaw(b, n); }
         size_t      write(const uint8_t* b, size_t n) override { return c_->writeRaw(b, n); }
-        bool        readable() const override { return !c_->in_.empty(); }
+        bool        readable() const override { return !c_->in_.empty() || c_->pasteReady(); }
         bool        writable() const override { return true; }
         void        flush() override { c_->flushRaw(); }
 
@@ -324,6 +343,19 @@ private:
     // That is not a compromise of the model; it is the model. This is HARDWARE: a
     // UART's receive register fills whether or not anybody asks it to.
     mutable std::deque<uint8_t> in_;
+
+    // WHAT IS WAITING BEHIND THE BUFFER (pasteFile/typeText). A source is a file, read
+    // a block at a time into `text`, or a short text queued behind one. Mutable for the
+    // reason in_ is: readable() is const, and answering it may mean reading the file.
+    struct Source {
+        std::ifstream file;      // open = a pasted file; `text` is then its current block
+        std::string   text;
+        size_t        pos  = 0;  // the next byte of `text` to give
+        uint64_t      left = 0;  // bytes of this source the guest has not read
+    };
+    mutable std::deque<Source> sources_;
+    bool     pasteReady() const;
+    uint64_t queued() const;
     mutable bool                attnSeen_ = false;
     mutable bool                eof_      = false;
 };
