@@ -1061,7 +1061,7 @@ set_tests_properties(acceptance-io4 PROPERTIES LABELS acceptance TIMEOUT 120)
 # ONE TEST, AND A SECOND MODE OF THE SAME SCRIPT THAT IS RUN BY HAND.
 #
 #   acceptance-hostbridge   THE CARD. Boots CP/M off the TRACKED floppy
-#                           (examples/cpm/cpm22b23-56k.dsk), LOADs the utilities from the
+#                           (tests/media/cpm/cpm22b23-56k.dsk), LOADs the utilities from the
 #                           .HEX that is checked in, and moves files -- including 256 bytes
 #                           holding every value 00..FF, compared on the HOST's disk, which
 #                           is the only place the answer actually is. About 1.5 seconds, on
@@ -1167,21 +1167,52 @@ add_test(NAME acceptance-snapshot
 set_tests_properties(acceptance-snapshot PROPERTIES LABELS acceptance TIMEOUT 60)
 
 # ---------------------------------------------------------------------------
+# THE SIMULATOR'S OWN FIXTURE MACHINES, BOOTED FROM A FOLDER COPIED OUT OF THE TREE.
+#
+# Every other test in this file runs from the repo root, which is the one arrangement in which
+# a repo-root-relative path in a machine file looks like it works. So this test copies each
+# tests/media/<name> folder OUT of the tree and boots it from there -- by its own folder, by
+# path and by -s -- which is the only place the truth shows up. It is also the whole-machine
+# boot of the 88-HDSK, the Turnkey Module, the 88-UIO, the FDC+ 1.5 MB floppy and CADzilla.
+# ---------------------------------------------------------------------------
+add_test(NAME acceptance-media
+         COMMAND ${CMAKE_COMMAND}
+                 -DSIM=$<TARGET_FILE:altairsim>
+                 -DSRC=${CMAKE_CURRENT_SOURCE_DIR}
+                 -DBIN=${CMAKE_CURRENT_BINARY_DIR}
+                 -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/acceptance/media.cmake)
+set_tests_properties(acceptance-media PROPERTIES LABELS acceptance TIMEOUT 120)
+
+# ---------------------------------------------------------------------------
 # THE EXAMPLES, IN THE LAYOUT WE ACTUALLY SHIP THEM IN.
 #
-# tapes/ and disks/ are not fixtures -- they are the product. A user gets the binary and
-# those two trees, and NOT this repository. Every other test in this file runs from the
-# repo root, which is the one arrangement in which a repo-root-relative path in an example
-# looks like it works. So this test copies an example OUT of the tree and boots it from
-# there, which is the only place the truth shows up.
+# examples/ is the product, not a fixture: a user gets the binary and that tree, and NOT this
+# repository. This test proves the EXAMPLES work -- every machine file in each one, run from
+# a copy outside the tree -- and nothing else. No test of the simulator may read the examples
+# (examples-isolation, below, enforces it); a test that needs media takes it from tests/media.
+# HAVE_SDL tells it which answer cpm22-terminal.toml's windowed console must give on this build.
 # ---------------------------------------------------------------------------
+if(SDL3_FOUND)
+  set(examples_have_sdl 1)
+else()
+  set(examples_have_sdl 0)
+endif()
 add_test(NAME acceptance-examples
          COMMAND ${CMAKE_COMMAND}
                  -DSIM=$<TARGET_FILE:altairsim>
                  -DSRC=${CMAKE_CURRENT_SOURCE_DIR}
                  -DBIN=${CMAKE_CURRENT_BINARY_DIR}
+                 -DHAVE_SDL=${examples_have_sdl}
                  -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/acceptance/examples.cmake)
 set_tests_properties(acceptance-examples PROPERTIES LABELS acceptance TIMEOUT 120)
+
+# ...and the rule that makes that true: no test script, fixture or test source may name
+# examples/ in a line of code (comments may). Text only, so it runs on every leg.
+add_test(NAME examples-isolation
+         COMMAND ${CMAKE_COMMAND}
+                 -DSRC=${CMAKE_CURRENT_SOURCE_DIR}
+                 -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/acceptance/no-example-deps.cmake)
+set_tests_properties(examples-isolation PROPERTIES LABELS acceptance TIMEOUT 60)
 
 # ---------------------------------------------------------------------------
 # THE EBERHARD ROM MACHINES ACTUALLY RUN.
@@ -1310,15 +1341,15 @@ if(EXPECT_EXECUTABLE)
   # Altair BASIC 1.0 booted off a cassette THE TWO-MOVE WAY: RUN the primitive loader, ^E when
   # the tape is done, RUN what it loaded from 0. ^E only exists on a tty, so this is an expect
   # test where basic4k.cmake is a piped one -- the 4K loader jumps on its own; the 1.0 one does
-  # not. WORKING_DIRECTORY is the example's own folder, the documented `cd examples/basic` path,
-  # so the tape and bootstrap resolve against the machine file exactly as a user's would.
+  # not. WORKING_DIRECTORY is the fixture's own folder, so the tape and bootstrap resolve
+  # against the machine file beside them.
   add_test(NAME acceptance-basic1
            COMMAND ${EXPECT_EXECUTABLE}
                    -f ${CMAKE_CURRENT_SOURCE_DIR}/tests/acceptance/basic1.exp
                    $<TARGET_FILE:altairsim>)
   set_tests_properties(acceptance-basic1 PROPERTIES
                        LABELS acceptance TIMEOUT 60
-                       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/examples/basic)
+                       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tests/media/basic)
 
   # ...and the PS2 package USED, not merely booted: the ReadMe's steps 5-8, including a
   # CASSETTE CHANGE while the machine is running (^E, MOUNT the editor tape, RUN, EDT).
@@ -1466,16 +1497,15 @@ if(EXPECT_EXECUTABLE)
 
   # ---------------------------------------------------------------------------
   # CDOS 2.58 off a Cromemco 16FDC -- Cromemco's CP/M work-alike, booted from an 8" mixed-
-  # density diskette. This boots the SHIPPED example (examples/cdos/cdos.toml) so the file a
-  # user is handed is the file under test, then types DIR and reads the whole directory back
-  # off the platter through the WD FD1793 -- which a machine that merely booted a resident
+  # density diskette (tests/media/cdos/cdos.toml), then types DIR and reads the whole directory
+  # back off the platter through the WD FD1793 -- which a machine that merely booted a resident
   # image could not do.
   #
   # It is an EXPECT test because the proof is a command TYPED at the prompt -- a piped run can
   # only assert what the machine says unprompted. No RETURN is needed to boot: the 16FDC is
   # strapped for its fixed-300-baud modem console (RDOS switch 5, no auto-baud), so the prompt
   # comes up on its own, and the console's rate=full default means that strap costs no speed.
-  # The image is mounted read/write in the example, so cdos.exp shasums it before and after: the
+  # The image is mounted read/write in the fixture, so cdos.exp shasums it before and after: the
   # boot and DIR only read, and the master must come out byte-identical (the same discipline as
   # acceptance-sdos, without a separate fixture toml).
   # ---------------------------------------------------------------------------
@@ -1573,7 +1603,7 @@ if(EXPECT_EXECUTABLE)
                    -f ${CMAKE_CURRENT_SOURCE_DIR}/tests/acceptance/icom.exp
                    $<TARGET_FILE:altairsim>
                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/acceptance/icom.toml
-                   ${CMAKE_CURRENT_SOURCE_DIR}/examples/icom/CPM22v1.0-3712-48K.DSK
+                   ${CMAKE_CURRENT_SOURCE_DIR}/tests/media/icom/CPM22v1.0-3712-48K.DSK
                    STAT)
   set_tests_properties(acceptance-icom PROPERTIES
                        LABELS acceptance TIMEOUT 90
@@ -1584,7 +1614,7 @@ if(EXPECT_EXECUTABLE)
                    -f ${CMAKE_CURRENT_SOURCE_DIR}/tests/acceptance/icom.exp
                    $<TARGET_FILE:altairsim>
                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/acceptance/icom-dd.toml
-                   ${CMAKE_CURRENT_SOURCE_DIR}/examples/icom/CPM22-3812-48K.dsk
+                   ${CMAKE_CURRENT_SOURCE_DIR}/tests/media/icom/CPM22-3812-48K.dsk
                    PIP)
   set_tests_properties(acceptance-icom-dd PROPERTIES
                        LABELS acceptance TIMEOUT 90
@@ -1629,27 +1659,13 @@ if(EXPECT_EXECUTABLE)
                        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
   # ---------------------------------------------------------------------------
-  # THE S100Computers IDE-AB (CF) BOARD boots CP/M 3 -- the CF half of the combination board:
-  # the `v2z80rom` paged-EEPROM MASTER monitor, the `dualide` 8255/ATA register engine, and the
-  # card medium (a truncated `.img` + `.geo` sidecar). The monitor's `P` command reads the CP/M 3
-  # cold loader off the CompactFlash card and boots; DIR reads the directory back off it. An
-  # expect test because `P` and DIR must be TYPED. The card is mounted WRITE-PROTECTED and it
-  # shasums the image -- the boot only reads.
-  # ---------------------------------------------------------------------------
-  add_test(NAME acceptance-dualide
-           COMMAND ${EXPECT_EXECUTABLE}
-                   -f ${CMAKE_CURRENT_SOURCE_DIR}/tests/acceptance/dualide.exp
-                   $<TARGET_FILE:altairsim>)
-  set_tests_properties(acceptance-dualide PROPERTIES
-                       LABELS acceptance TIMEOUT 90
-                       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-
-  # ---------------------------------------------------------------------------
   # THE WHOLE IDE-AB CF+ESP32 COMBINATION BOARD -- both halves, all four CP/M 3 drives. One V2 Z80
   # CPU runs the HIDE3 combination BIOS over the `dualide` 8255/ATA engine at 30-34 (CF drives
   # A:/B:) and the `dualsd` ESP32 engine at 80/81 (SD drives C:/D:). The monitor's `P` command
   # boots CP/M 3 off CompactFlash (A:), the sign-on names BOTH halves, and DIR C:/DIR D: read the
-  # SD side -- proving image portability (cpm3-sd.img is a byte copy of cpm3-cf.img). An expect
+  # SD side -- proving image portability (cpm3-sd.img is a byte copy of cpm3-cf.img). It is also
+  # the CF half's boot test: the `P` boot off CF and the dualide engine are the same here as in a
+  # CF-only machine, so a separate one would prove nothing more. An expect
   # test because `P` and DIR must be TYPED; all four cards are WRITE-PROTECTED and it shasums the
   # two system images.
   # ---------------------------------------------------------------------------
@@ -1673,7 +1689,7 @@ if(EXPECT_EXECUTABLE)
   # would be indistinguishable from the bug, and this is the one test where that would be a
   # false ALARM rather than a false pass.
   #
-  # It runs off the TRACKED floppy (examples/cpm/cpm22b23-56k.dsk -- the same one
+  # It runs off the TRACKED floppy (tests/media/cpm/cpm22b23-56k.dsk -- the same one
   # acceptance-hostbridge uses, unguarded), and it MOUNTS THAT DISK READ-ONLY -- the test
   # cannot dirty it, and it shasums the image to prove it.
   # ---------------------------------------------------------------------------
@@ -1710,11 +1726,10 @@ if(EXPECT_EXECUTABLE)
   # open task, not a settled one.
 
   # ---------------------------------------------------------------------------
-  # THE SOL-20 EXAMPLE AUTO-LAUNCHES ITS GAME OFF THE CASSETTE.
+  # THE SOL-20 AUTO-LAUNCHES ITS GAME OFF THE CASSETTE.
   #
-  # examples/sol20 is product: a machine file, a tape, and a README. The shipped trek80.toml
-  # MOUNTs the tape, `TYPE`s `XE TRK80` at the console, and RUNs SOLOS -- so the game comes up
-  # by itself. This runs that path end to end, and for the .WAV media it is also the REGRESSION
+  # The fixture MOUNTs the tape (tests/media/sol20), `TYPE`s `XE TRK80` at the console, and RUNs
+  # SOLOS -- so the game comes up by itself. This runs that path end to end, and for the .WAV media it is also the REGRESSION
   # TEST for the CUTS demodulator: TRK80.WAV is Philip Lord's Sol-20 cassette digitization
   # (hosted on deramp.com), which an earlier decoder garbled (27 framing errors, most of the
   # payload wrong) and the matched-filter decoder now reads clean. A SOLOS tape carries a
@@ -1727,8 +1742,8 @@ if(EXPECT_EXECUTABLE)
   # with ATTN and the screen READ -- which is also what lets this run headless, with no
   # window and no SDL.
   #
-  # THE FIXTURE IS NOT THE SHIPPED FILE: trek80-{tap,wav}.toml carry the shipped auto-launch
-  # `startup` but flat out with the idle nap off, so the test does not pay the minute a real
+  # THE FIXTURES, trek80-{tap,wav}.toml, carry the auto-launch `startup` but run flat out with
+  # the idle nap off, so the test does not pay the minute a real
   # 2.045 MHz Sol spends reading a cassette. Two fixtures, one per media: the byte stream, and
   # the same tape as CUTS audio at 1200 baud through the modem.
   # ---------------------------------------------------------------------------
@@ -1746,34 +1761,11 @@ if(EXPECT_EXECUTABLE)
                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/acceptance/trek80-wav.toml)
   set_tests_properties(acceptance-trek80-wav PROPERTIES LABELS acceptance TIMEOUT 180)
 
-  # AND THE SHIPPED FILE ITSELF, unmodified -- acceptance-trek80-shipped. The two fixtures
-  # above prove the mechanism and the decoder, but they are flat-out rewrites of the product;
-  # until now nothing booted examples/sol20/trek80.toml, the file a user actually runs, with its
-  # real 2.045 MHz clock, its `SET vdm0 cursor=steady` line and its config-relative TRK80.WAV.
-  # This does, through the same driver, so a regression in the shipped machine file -- a broken
-  # `startup`, a moved tape, a wrong clock -- fails here where the fixtures cannot see it. It
-  # stays cheap because the .WAV decodes at full speed regardless of the throttled CPU (~5 s).
-  add_test(NAME acceptance-trek80-shipped
-           COMMAND ${EXPECT_EXECUTABLE}
-                   -f ${CMAKE_CURRENT_SOURCE_DIR}/tests/acceptance/trek80.exp
-                   $<TARGET_FILE:altairsim>
-                   ${CMAKE_CURRENT_SOURCE_DIR}/examples/sol20/trek80.toml)
-  set_tests_properties(acceptance-trek80-shipped PROPERTIES LABELS acceptance TIMEOUT 180)
-
-  # A SECOND GAME, A SECOND TAPE. trek80 proves the mechanism and the decoder on one tape;
-  # this proves ATC off its own -- so a game tape cannot ship without something reading it.
-  add_test(NAME acceptance-atc
-           COMMAND ${EXPECT_EXECUTABLE}
-                   -f ${CMAKE_CURRENT_SOURCE_DIR}/tests/acceptance/atc.exp
-                   $<TARGET_FILE:altairsim>
-                   ${CMAKE_CURRENT_SOURCE_DIR}/tests/acceptance/atc-boot.toml)
-  set_tests_properties(acceptance-atc PROPERTIES LABELS acceptance TIMEOUT 180)
-
   # ---------------------------------------------------------------------------
-  # THE SHIPPED DISK BASIC EXAMPLE REACHES ITS PROMPT -- acceptance-diskbasic.
+  # DISK BASIC REACHES ITS PROMPT -- acceptance-diskbasic.
   #
-  # examples/diskbasic is product: DBL in the PROM at FF00, the 88-DCDD reading track 0, and
-  # Altair Disk Extended BASIC 4.1 (MITS, 1977) coming up in a 56K machine.
+  # DBL in the PROM at FF00, the 88-DCDD reading track 0, and Altair Disk Extended BASIC 4.1
+  # (MITS, 1977) coming up in a 56K machine, off tests/media/diskbasic.
   #
   # IT MUST BE `expect`, AND THAT IS NOT STYLE. This guest re-initialises the 6850 during
   # startup; a master reset clears the receive register and the byte in it is LOST. Driven by
@@ -1786,7 +1778,7 @@ if(EXPECT_EXECUTABLE)
            COMMAND ${EXPECT_EXECUTABLE}
                    -f ${CMAKE_CURRENT_SOURCE_DIR}/tests/acceptance/diskbasic.exp
                    $<TARGET_FILE:altairsim>
-                   ${CMAKE_CURRENT_SOURCE_DIR}/examples/diskbasic)
+                   ${CMAKE_CURRENT_SOURCE_DIR}/tests/media/diskbasic)
   set_tests_properties(acceptance-diskbasic PROPERTIES LABELS acceptance TIMEOUT 180)
 
 else()

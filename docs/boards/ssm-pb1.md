@@ -112,7 +112,7 @@ an optional read-only window above `8000H` for the on-board area.
   then **runs the actual SSM 2708 programmer** (the manual's object code) through an 8080 to its
   HLT and checks that all 1024 source bytes landed in the socket, and that the result round-trips
   through Intel HEX.
-- `acceptance-pb1`: boots the `examples/pb1/pb1.toml` machine, `LOAD`s `examples/pb1/PROG2708.HEX`,
+- `acceptance-pb1`: boots the `tests/media/pb1/pb1.toml` machine, `LOAD`s `tests/media/pb1/PROG2708.HEX`,
   runs it (breaking at `F021`, where the burner returns to the monitor), and `SAVE`s the socket
   to a host hex file — asserting the burned chip equals the source and that the file is valid
   Intel HEX. **If it fails, the board is wrong, not the software.**

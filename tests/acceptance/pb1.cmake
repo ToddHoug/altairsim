@@ -2,7 +2,7 @@
 # read the burned chip back out as an Intel HEX file (issues #397, #382).
 #
 # This is the whole point of the board (issue #382): not "prepare a ROM image with LOAD ...
-# ROM", but RUN the software a 1970s operator ran. `examples/pb1/PROG2708.HEX` is the SSM PB1
+# ROM", but RUN the software a 1970s operator ran. `tests/media/pb1/PROG2708.HEX` is the SSM PB1
 # manual's own 2708 programmer (section 4.2), object code verbatim -- it arms the board, copies
 # 1K from RAM at 4000 into the programming socket at D000, and jumps back to the SSM 8080
 # monitor at F021. altairsim does not ship that monitor yet, so we catch the return with a
@@ -28,7 +28,7 @@ file(MAKE_DIRECTORY "${work}")
 set(script "${work}/burn.cmds")
 file(WRITE "${script}"
   "CONNECT sio0:a null\n"
-  "LOAD ${SRC}/examples/pb1/PROG2708.HEX\n"
+  "LOAD ${SRC}/tests/media/pb1/PROG2708.HEX\n"
   "BREAK F021\n"
   "RUN 100\n"
   "SAVE ${work}/eprom.hex D000-D3FF\n"
@@ -37,7 +37,7 @@ file(WRITE "${script}"
   "QUIT\n")
 
 execute_process(
-  COMMAND           "${SIM}" "${SRC}/examples/pb1/pb1.toml" -s "${script}"
+  COMMAND           "${SIM}" "${SRC}/tests/media/pb1/pb1.toml" -s "${script}"
   WORKING_DIRECTORY "${work}"
   OUTPUT_VARIABLE   out
   ERROR_VARIABLE    out

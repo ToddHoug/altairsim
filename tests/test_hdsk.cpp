@@ -1,7 +1,7 @@
 // The 88-HDSK "Datakeeper" hard disk controller (docs/boards/mits-88hdsk.md).
 //
-// The acceptance test boots CP/M off this card to `A>` (tests/acceptance/examples.cmake,
-// examples/hdsk). This file pins what the boot cannot: the exact (cylinder,side,sector)
+// The acceptance test boots CP/M off this card to `A>` (tests/acceptance/media.cmake,
+// tests/media/hdsk). This file pins what the boot cannot: the exact (cylinder,side,sector)
 // -> image-offset mapping, the command/handshake sequencing, and the write path -- the
 // things that fail on the sector you have not read yet, or fail silently.
 //

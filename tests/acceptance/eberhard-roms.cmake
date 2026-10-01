@@ -67,7 +67,7 @@ expect("${out}" ">" "acuter")
 
 # ---- cdbl ----
 #
-# The disk is TRACKED (examples/cpm/), so this runs on every machine and every CI leg --
+# The disk is TRACKED (tests/media/cpm/), so this runs on every machine and every CI leg --
 # unlike the tests that need a fetched image.
 #
 # THE KEYSTROKES HERE ARE CARRIAGE RETURNS AND THEY ARE LOAD-BEARING, in a way `amon`'s
@@ -78,7 +78,7 @@ expect("${out}" ">" "acuter")
 # AFTER the banner, which is the point: they are what keeps the machine alive through the
 # boot, and they cannot mangle anything because CP/M is not being told to do anything.
 run_machine(out KEYS eberhard-cdbl.keys ARGS cdbl
-            -x "MOUNT dsk0:drive0 examples/cpm/cpm22b23-56k.dsk" -x "RUN FF00")
+            -x "MOUNT dsk0:drive0 tests/media/cpm/cpm22b23-56k.dsk" -x "RUN FF00")
 expect("${out}" "56K CP/M 2.2b" "cdbl")
 expect("${out}" "For Altair 8\" Floppy" "cdbl")
 

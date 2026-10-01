@@ -8,9 +8,8 @@
 # cold-boot loader's writes fall through).
 #
 # Both disks are mounted READ-ONLY so the test can never dirty the tracked images
-# (cpm3-banked.exp shasums them). The shipped example (examples/sdsys/cpm3-b.toml) mounts
-# them read/write instead -- this is the test's fixture, not the example. DISK3 (the 8" SD
-# source disk) is not part of the boot and is not mounted here.
+# (cpm3-banked.exp shasums them); they are the test's own copies in tests/media/sdsys. DISK3
+# (the 8" SD source disk) is not part of the boot and is not mounted here.
 
 [machine]
 name    = "cpm3-banked-acceptance"
@@ -56,10 +55,10 @@ port    = 60
 
   [[board.drive]]
   unit         = 0
-  mount        = "../../examples/sdsys/CPM3-B-SSDD-60K-DISK1.DSK"
+  mount        = "../media/sdsys/CPM3-B-SSDD-60K-DISK1.DSK"
   writeprotect = true
 
   [[board.drive]]
   unit         = 1
-  mount        = "../../examples/sdsys/CPM3-B-SSDD-DISK2.DSK"
+  mount        = "../media/sdsys/CPM3-B-SSDD-DISK2.DSK"
   writeprotect = true

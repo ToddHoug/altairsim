@@ -2,7 +2,7 @@
 #
 # ALTAIR BASIC 1.0 BOOTS OFF A CASSETTE -- THE TWO-MOVE WAY, WHICH ONLY A TTY CAN DRIVE.
 #
-# examples/basic/basic1.toml boots "8080 BASIC VER 1.0", the first Altair BASIC. Unlike the
+# tests/media/basic/basic1.toml boots "8080 BASIC VER 1.0", the first Altair BASIC. Unlike the
 # 4K next to it, its bootstrap (LOAD10) neither stops nor jumps: it copies the tape into
 # 0000 and loops forever, because it cannot know the tape's length. So the boot is genuinely
 # two moves, exactly as it was in 1975 -- RUN the loader, and when the tape runs out STOP/RESET
@@ -13,7 +13,7 @@
 # ^E is needed). If THIS fails, the ACR, the 88-SIO console, or the two-step boot is wrong,
 # not the tape: the tape and the bootstrap are period artifacts run unmodified.
 #
-# usage: expect -f basic1.exp <altairsim>   (WORKING_DIRECTORY = examples/basic)
+# usage: expect -f basic1.exp <altairsim>   (WORKING_DIRECTORY = tests/media/basic)
 
 set timeout 30
 log_user 0

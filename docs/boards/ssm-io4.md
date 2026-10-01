@@ -211,7 +211,7 @@ config and are re-applied from the machine file.
   strobe, several straps at once, a board with no clock, and two end-to-end runs where an 8080
   behind an 88-VI vectors to `RST 2` (Serial A receive on VI2) and `RST 6` (a parallel strobe
   on VI6).
-- `acceptance-io4`: boots `examples/io4/io4.toml` — the file a package holder gets — through the
+- `acceptance-io4`: boots `tests/media/io4/io4.toml`, copied out of the tree, through the
   real CLI, and checks the SSM monitor's sign-on on the IO-4 console.
 
 ## References

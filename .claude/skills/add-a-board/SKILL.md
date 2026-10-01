@@ -5,7 +5,7 @@ description: Add a new S-100 board (or CPU board) to the simulator — the wirin
 
 # Add a board
 
-**The tutorial is `docs/devguide/adding-a-board.md`** — a worked board (the `examples/boards/lamp/`
+**The tutorial is `docs/devguide/adding-a-board.md`** — a worked board (the `tests/boards/lamp/`
 card) from `type()` through properties and tests. Read §1–5 for the shape; this skill is the
 part that bites *after* the board compiles. Everything here fails somewhere that does not point
 back at the board you just wrote.

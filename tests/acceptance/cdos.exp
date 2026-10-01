@@ -16,8 +16,8 @@
 # machine says unprompted (and piped stdin derails RDOS's ESC-to-abort window besides -- see the
 # [[altairsim-pipe-cannot-type-at-a-guest]] rule).
 #
-# This boots the SHIPPED example (examples/cdos/cdos.toml) so the file a user is handed is the
-# file under test. The image is mounted read/write there, so the test SHASUMS it before and
+# This boots tests/media/cdos/cdos.toml, the test's own copy of the machine file and disk. The
+# image is mounted read/write there, so the test SHASUMS it before and
 # after: booting and DIR only read, and the tracked master must come out byte-identical.
 #
 # usage: expect -f cdos.exp <altairsim>   (run from the repo root)
@@ -26,7 +26,7 @@ set timeout 60
 log_user 0
 
 set exe [lindex $argv 0]
-set dsk "examples/cdos/CDOS258-8IN-DSDD.DSK"
+set dsk "tests/media/cdos/CDOS258-8IN-DSDD.DSK"
 
 # TYPE IT ALL AT ONCE -- and this is the regression guard. CDOS's console routine samples the
 # line between characters, so a whole command pasted in at once used to lose the ones that
@@ -42,7 +42,7 @@ proc bail {code msg} { if {$msg ne ""} { puts $msg }; catch {exec kill [exp_pid]
 
 set before [exec shasum $dsk]
 
-spawn $exe examples/cdos/cdos.toml
+spawn $exe tests/media/cdos/cdos.toml
 
 # CDOS loads and prints its sign-on with no input at all.
 expect {

@@ -1,7 +1,6 @@
 # SDOS boot acceptance fixture: the SBC-200 + a VersaFloppy II with the SDOS master in
 # drive A, mounted READ-ONLY so the test can never dirty the tracked image (the boot only
-# reads; sdos.exp shasums the disk to prove it). The shipped example (examples/sdsys/sdos.toml)
-# mounts it read/write instead -- this is the test's fixture, not the example.
+# reads; sdos.exp shasums the disk to prove it).
 
 [machine]
 name = "sdos-acceptance"
@@ -15,5 +14,5 @@ port    = 60
 
   [[board.drive]]
   unit      = 0
-  mount     = "../../examples/sdsys/SDOS-18B-SSDDR-256-32K-MASTER.DSK"
+  mount     = "../media/sdsys/SDOS-18B-SSDDR-256-32K-MASTER.DSK"
   writeprotect = true

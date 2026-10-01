@@ -178,16 +178,19 @@ clone knows what it is missing and why. All of it is Mike Douglas's work, from *
 
 An image that has to be downloaded before a test can run is an image that makes the test **skip** —
 and three acceptance tests were skipping on every fresh clone and in all of CI. 480 KB buys them
-back, so `.gitignore` names these, one line each (2026-07-18):
+back, so `.gitignore` names these, one line each (2026-07-18). Since 2026-09-30 the tests read
+only their own copies under `tests/media/` — no test of the simulator reads `examples/`
+(`examples-isolation` enforces it) — and every image under `tests/media/` is tracked. Where a
+shipped example carries the same image, git stores the two identical files once:
 
 | Tracked file | Upstream SHA-256 | Why this one |
 |---|---|---|
-| `examples/cpm/cpm22b23-56k.dsk` | `3147946a…57a2cc` | The bootable 8″ system disk, and the only CP/M a fresh clone gets. `acceptance-examples`, `acceptance-dcdd-readonly`, `acceptance-ddt`, `acceptance-hostbridge`. |
+| `tests/media/cpm/cpm22b23-56k.dsk` | `3147946a…57a2cc` | The bootable 8″ system disk. `acceptance-dcdd-readonly`, `acceptance-ddt`, `acceptance-hostbridge`, `acceptance-eberhard-roms`, and the Turnkey boot in `acceptance-media`. The shipped copy is `examples/cpm/cpm22b23-56k.dsk` (`acceptance-examples`). |
 | `mits-88mds/cpm22/CPM56K-1.DSK` | `41c87b01…32d3d` | The minidisk system disk (A:). `acceptance-minidisk`. |
 | `mits-88mds/cpm22/CPM56K-2.DSK` | `0f6480b1…586db` | Its tools disk (B:) — `cpm22-mini.toml` mounts both, so one without the other does not boot. |
-| `examples/diskbasic/Disk BASIC 4.1.dsk` | `e1fb7255…36b69` | Altair BASIC Rev 4.1 [Disk Extended Version], MITS 1977. `acceptance-diskbasic`. Added 2026-07-19. |
-| `examples/cpm/CPM22-48K-HDF.dsk` | `6cb1d68b…5c413eb` | 48K CP/M 2.2b for the FDC+ **1.5 MB floppy** (drive type 5), from `…/1.5mb_floppy/CPM 2.2/`. Untouched. `examples/cpm/cpm22-fdcplus-hdf.toml` boots it, and `acceptance-examples` checks that it does. Added 2026-09-25. |
-| `examples/cadzilla/cpm22b23-56k-drawdemo.dsk` | *derived*; tracked `25909be4…7b9141` | The CADzilla example's floppy: `cpm22b23-56k.dsk` above with `DRAWDEMO.COM` put on. `acceptance-examples`. Added 2026-09-26. |
+| `tests/media/diskbasic/Disk BASIC 4.1.dsk` | `e1fb7255…36b69` | Altair BASIC Rev 4.1 [Disk Extended Version], MITS 1977. `acceptance-diskbasic`. Added 2026-07-19. |
+| `tests/media/cpm/CPM22-48K-HDF.dsk` | `6cb1d68b…5c413eb` | 48K CP/M 2.2b for the FDC+ **1.5 MB floppy** (drive type 5), from `…/1.5mb_floppy/CPM 2.2/`. Untouched. `acceptance-media` boots it; the shipped copy is `examples/cpm/CPM22-48K-HDF.dsk` (`acceptance-examples`). Added 2026-09-25. |
+| `tests/media/cadzilla/cpm22b23-56k-drawdemo.dsk` | *derived*; tracked `25909be4…7b9141` | The CADzilla floppy: `cpm22b23-56k.dsk` above with `DRAWDEMO.COM` put on (`tools/make-drawdemo-disk.sh`). `acceptance-media`. Added 2026-09-26. |
 
 **The Disk BASIC image came from deramp.com** (Patrick, 2026-07-19), like everything else above,
 but it arrived by hand rather than through `fetch-disk-images.sh` — so the SHA recorded for it is

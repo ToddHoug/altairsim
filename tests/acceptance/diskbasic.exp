@@ -1,9 +1,9 @@
 #!/usr/bin/expect -f
 #
-# THE SHIPPED DISK BASIC EXAMPLE MUST REACH ITS PROMPT.
+# ALTAIR DISK BASIC MUST REACH ITS PROMPT.
 #
-# examples/diskbasic is product: a machine file, an 8" floppy, and a README that tells the
-# reader which five answers to type. This types them. It proves the whole path -- DBL in the
+# tests/media/diskbasic holds a machine file and an 8" floppy; BASIC asks five questions on
+# the way up, and this types the answers. It proves the whole path -- DBL in the
 # PROM at FF00, the 88-DCDD reading track 0, the loader pulling Altair Disk Extended BASIC
 # into a 56K machine -- against a 1977 artifact.
 #
@@ -21,7 +21,7 @@
 # and it is a legal answer even here, where no printer board is fitted; it only tells BASIC
 # where LPRINT would go. (MITS, "Basic Versions", under disks/mits-88dcdd/diskbasic/.)
 #
-# usage: expect -f diskbasic.exp <altairsim> <example-dir>
+# usage: expect -f diskbasic.exp <altairsim> <fixture-dir>
 
 set timeout 120
 log_user 0
@@ -31,8 +31,8 @@ set dir [lindex $argv 1]
 
 cd $dir
 
-# FLAT OUT, ON PURPOSE. The example runs at the default free-running clock already; this is
-# stated so the test does not silently inherit a different answer if the example ever pins a
+# FLAT OUT, ON PURPOSE. The machine file runs at the default free-running clock already; this
+# is stated so the test does not silently inherit a different answer if the file ever pins a
 # speed. Nothing here is guest-observable.
 spawn $exe diskbasic.toml -i -x "SET cpu0 clock_hz=0"
 
@@ -83,12 +83,12 @@ if {!$done} {
 }
 
 # WHICH BASIC, not merely "a BASIC". Without this the test passes on any image that reaches an
-# OK prompt -- a different revision dropped in here would sail through, and the manual and the
-# README both name 4.1 specifically (the C/O/Q answer set above is 4.1's, and earlier revisions
-# do not ask this question at all).
+# OK prompt -- a different revision dropped in here would sail through, and the dialogue above
+# is 4.1's specifically (the C/O/Q answer set is 4.1's, and earlier revisions do not ask this
+# question at all).
 if {!$banner} {
     puts "FAIL: reached an OK prompt but never saw `ALTAIR BASIC REV. 4.1` -- this is not the\
-          image this example is documented against."
+          image the dialogue above is written for."
     exit 1
 }
 
@@ -110,5 +110,5 @@ expect {
 send "QUIT\r"
 expect eof
 
-puts "OK: examples/diskbasic reaches Altair BASIC 4.1's prompt and evaluates PRINT 2+2."
+puts "OK: tests/media/diskbasic reaches Altair BASIC 4.1's prompt and evaluates PRINT 2+2."
 exit 0

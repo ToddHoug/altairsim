@@ -396,7 +396,8 @@ load, and `machines/cadzilla.toml`'s header walks the default 1024x768 case from
 prompt. **`examples/cadzilla/`** (in the repository, not in the release package) holds a whole
 program: drawdemo, under CP/M 2.2 on an 8" floppy, steps through every drawing command at 1024x768, one screen each (`drawdemo.toml` at
 `draw_rate = "full"`, `drawdemo-real.toml` at a 2 MHz 8080 and `draw_rate = "real"`).
-`acceptance-examples` boots it from a copy of the folder, runs DRAWDEMO, and checks through
+`acceptance-media` boots the same machine files and floppy (its own copy, in `tests/media/cadzilla`)
+from a copy of the folder, runs DRAWDEMO, and checks through
 `SHOW` that it started the board at 1024x768 with the wiring right.
 
 ## References
