@@ -613,9 +613,19 @@ UPCASE: CPI     'a'
 ;-----------------------------------------------------------------------
 ; LEGAL -- CY set if A is a character CP/M cannot put in a filename.
 ;          A is preserved either way. Clobbers C.
+;
+; THE RANGE CHECK COMES BEFORE THE TABLE. A space or a control character
+; ends a name for the CCP, so a file stored with one can never be typed
+; again -- `zq a.txt` went into the directory as `ZQ A.TXT`. DEL and
+; anything with bit 7 set (a host name that is not ASCII) go the same
+; way: CP/M keeps the file attributes in bit 7 of a name byte.
 ;-----------------------------------------------------------------------
 LEGAL:  PUSH    H
         MOV     C,A
+        CPI     21H             ; a space, or anything below it
+        JC      LGBAD
+        CPI     7FH             ; DEL, or bit 7 set
+        JNC     LGBAD
         LXI     H,ILLCHR
 LG1:    MOV     A,M
         ORA     A
@@ -866,7 +876,9 @@ ESAY:   MVI     C,PRSTR
 ;=======================================================================
 IDWANT: DB      'ALTAIRSIM HOSTBRIDGE',0
 
-; The characters CP/M will not store in a filename. Note 5CH is the
+; The printable characters CP/M will not store in a filename -- LEGAL
+; refuses a space, a control character and anything from DEL up before
+; it ever looks here. Note 5CH is the
 ; backslash and 2FH the slash -- a path separator has no business in an
 ; FCB, and BASENM should have removed it long before we get here.
 ILLCHR: DB      '<>.,'
@@ -881,7 +893,7 @@ MNOHB:  DB      CR,LF,'R: no host bridge at B0H.',CR,LF
         DB      'This machine has no `hostbridge` card in it, or it is at'
         DB      ' another port.',CR,LF,'$'
 
-MUSAGE: DB      CR,LF,'R -- copy a file from the host into CP/M.  (1.1)',CR,LF,CR,LF
+MUSAGE: DB      CR,LF,'R -- copy a file from the host into CP/M.  (1.2)',CR,LF,CR,LF
         DB      '   R <hostfile> [cpmfile]',CR,LF
         DB      '   R <pattern>',CR,LF,CR,LF
         DB      'Examples',CR,LF

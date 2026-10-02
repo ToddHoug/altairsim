@@ -19,7 +19,7 @@
 ; IT PRINTS TRUE HOST NAMES, AND THAT IS THE POINT OF IT.
 ;
 ; R and W have to squeeze a host name into an 8.3 FCB -- `my-notes(2).txt`
-; comes across as `MYNOTES2.TXT`, and a name too long or too strange to map
+; comes across as `MY-NOTES.TXT`, and a name too long or too strange to map
 ; is reported and skipped. HDIR does no such thing: it prints what is
 ; actually on the host disk, in its real case, at its real length. So when
 ; R says it cannot name something, you can still see what it was.

@@ -164,7 +164,7 @@ CP/M stores whole 128-byte records and **keeps no byte count anywhere**, so a fi
 
 ### 8.3 mapping
 
-The CP/M name defaults to the host name uppercased, base truncated to 8 and extension to 3, with characters CP/M cannot store simply **dropped** — `my-notes(2).txt` becomes `MYNOTES2.TXT`. Dropping rather than refusing is the friendly choice for a name that came off a host filesystem. A subdirectory prefix cannot survive (`SRC/FOO.ASM` → `FOO.ASM`), because a CP/M file has no directory to live in. An explicit second argument overrides all of it, and **`HDIR` always prints true host names** — so when `R` cannot name something, you can still see what it was.
+The CP/M name defaults to the host name uppercased, with characters CP/M cannot store simply **dropped**, and then the base truncated to 8 and the extension to 3. What is dropped is a space, a control character, anything that is not ASCII, and `< > . , ; : = ? * [ ] | \ /` — the characters that end a name for the CCP, and the two path separators. Everything else stays, `-` and parentheses included: `notes[old].txt` becomes `NOTESOLD.TXT`, and `my-notes(2).txt` becomes `MY-NOTES.TXT`, the `(2)` falling past the eighth character. A space is dropped because a name stored with one could never be typed at the CCP again. Dropping rather than refusing is the friendly choice for a name that came off a host filesystem. A subdirectory prefix cannot survive (`SRC/FOO.ASM` → `FOO.ASM`), because a CP/M file has no directory to live in. An explicit second argument overrides all of it, and **`HDIR` always prints true host names** — so when `R` cannot name something, you can still see what it was.
 
 ## Limitations
 
