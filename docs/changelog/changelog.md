@@ -21,6 +21,12 @@ Sound needs a crystal. At full speed (`clock_hz = 0`, the default), the board pl
 Newtech's programs are timed for 2 MHz: `SET cpu0 clock_hz=2000000`. `SHOW` on the board tells
 you if the speaker plays and, if it is silent, the reason.
 
+### A short message when two machine files name each other
+
+When two machine files name each other as `base`, the message is now one short line: the file
+that you loaded, the line of its `base`, and the cause. Before, the file and line were there
+once for each of the 8 levels.
+
 ### The manual shows a machine file that starts from a machine file
 
 The configuration chapter has a new example: one machine file that uses a second machine file

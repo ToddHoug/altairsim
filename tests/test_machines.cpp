@@ -4,6 +4,9 @@
 #include "config/toml.h"
 #include "core/machines.h"
 
+#include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -917,4 +920,54 @@ void test_toml_errors() {
                       "base = \"default\"\n",
                       {"line 5: `base` must come before the first [[board]]"}),
           "`base` below a [[board]] still gets its own message, now with its line");
+
+    SECTION("a chain of base FILES: one prefix for a loop, one per level for a bad file (#627)");
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path() / "altairsim-base-chain";
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+    fs::create_directories(dir);
+    auto put = [&](const char* file, const char* base) {
+        std::ofstream(dir / file) << "[machine]\nname = \"x\"\nbase = \"" << base << "\"\n";
+    };
+    auto loadErr = [&](const char* file) {
+        std::ifstream     f(dir / file);
+        std::stringstream ss;
+        ss << f.rdbuf();
+        Machine     mc;
+        std::string e;
+        CHECK(!loadTomlText(ss.str(), (dir / file).string(), mc, e), "the chain is refused");
+        return e;
+    };
+    auto count = [](const std::string& s, const std::string& what) {
+        int n = 0;
+        for (size_t at = s.find(what); at != std::string::npos; at = s.find(what, at + 1)) ++n;
+        return n;
+    };
+    const std::string tooDeep = ": more than 8 levels deep -- do two files name each other?";
+    auto endsWith = [](const std::string& s, const std::string& tail) {
+        return s.size() >= tail.size() && s.compare(s.size() - tail.size(), tail.size(), tail) == 0;
+    };
+
+    put("a.toml", "b.toml");
+    put("b.toml", "a.toml");
+    std::string e = loadErr("a.toml");
+    CHECK(endsWith(e, "a.toml: line 3: base = \"b.toml\"" + tooDeep),
+          "two files that name each other: the file that was loaded, its line, its base");
+    CHECK(count(e, "line 3:") == 1, "...and that prefix is there once, not once per level");
+
+    put("p.toml", "q.toml");
+    put("q.toml", "r.toml");
+    put("r.toml", "p.toml");
+    e = loadErr("p.toml");
+    CHECK(endsWith(e, "p.toml: line 3: base = \"q.toml\"" + tooDeep),
+          "a loop of three: the base named is the loaded file's own, not the deepest one");
+    CHECK(count(e, "line 3:") == 1, "...with one prefix");
+
+    put("c.toml", "nope.toml");
+    put("d.toml", "c.toml");
+    e = loadErr("d.toml");
+    CHECK(count(e, "line 3:") == 2 && e.find("c.toml: line 3: base: cannot open") != std::string::npos,
+          "a base that cannot be opened still shows each level on the way to it");
+    fs::remove_all(dir, ec);
 }

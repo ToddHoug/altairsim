@@ -180,11 +180,11 @@ clock_hz = 2000000
 - **A change to `cpm22.toml` reaches the two machines.**
 
 If two files name each other as a base, the chain has no end. The program stops at 8 levels
-and does not load the machine. The message names each file in the chain, and it ends with
-this text:
+and does not load the machine. The message gives the file that you loaded and the line of its
+`base`:
 
 ```
-base = "b.toml": more than 8 levels deep -- do two files name each other?
+a.toml: line 3: base = "b.toml": more than 8 levels deep -- do two files name each other?
 ```
 
 ### `startup`: the operator's commands
