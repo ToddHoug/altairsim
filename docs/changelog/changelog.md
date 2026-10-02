@@ -8,6 +8,12 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+### The manual shows a machine file that starts from a machine file
+
+The configuration chapter has a new example: one machine file that uses a second machine file
+as its `base`, and that second file starts from a built-in machine. The example shows what the
+first file gets from the second, and the message that you see when two files name each other.
+
 ### The D+7A plays the JS-1 speaker
 
 The Cromemco D+7A board (`d7a`) now plays the speaker of each JS-1 joystick. A guest that writes

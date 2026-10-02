@@ -108,8 +108,15 @@ startup = ["RUN FF00"]
 
 ### `name`
 
-The name of the machine. `SHOW MACHINE` prints it, and the title bar of the video window shows
-it. `SET MACHINE name=` changes it at the monitor.
+The name of the machine. **The name is a label for you, and nothing more.**
+
+- **The program shows it in three places:** the `machine:` line that it prints when the
+  monitor starts, the first line of `SHOW MACHINE`, and the title bar of the video window.
+- **`SET MACHINE name=` changes it** at the monitor, and `CONFIG SAVE` writes it.
+- **The program does not find a machine file by its name.** The command line and the `base`
+  key find a file by its path. The name in the file can be different from the file name.
+- **A file with no `name` has the name of its base.** A file that starts from `default` and
+  gives no name is called `default`.
 
 ### `base`: start from a machine, and write what is different
 
@@ -129,6 +136,56 @@ machines chapter gives the rule. A file path is relative to the file that names 
 
 With `base`, a machine file contains **only what is different** from its base. You do not copy
 every board, so a change to the base reaches every file that uses it.
+
+#### A file that starts from a file
+
+A base can be a machine file that you wrote, and that file can have a base of its own. These
+two files are in the same folder as the disk image. The first file is a CP/M machine:
+
+```toml
+# cpm22.toml
+[machine]
+name    = "cpm22"
+base    = "default"
+startup = ["RUN FF00"]
+
+[[board]]
+id = "dsk0"
+
+  [[board.drive]]
+  unit  = 0
+  mount = "cpm22b23-56k.dsk"
+```
+
+The second file is the same machine at 2 MHz. It contains the one setting that is different:
+
+```toml
+# cpm22-2mhz.toml
+[machine]
+name = "cpm22-2mhz"
+base = "cpm22.toml"
+
+[[board]]
+id       = "cpu0"
+clock_hz = 2000000
+```
+
+- **The chain has three levels:** `cpm22-2mhz.toml`, then `cpm22.toml`, then the built-in
+  machine `default`.
+- **The second file gets the disk and the `startup` list from the first.** It does not write
+  them again. A file that has its own `startup` list uses that list and not the list of its
+  base.
+- **`base = "cpm22.toml"` is the file in the same folder**, because the path is relative to the
+  file that names it.
+- **A change to `cpm22.toml` reaches the two machines.**
+
+If two files name each other as a base, the chain has no end. The program stops at 8 levels
+and does not load the machine. The message names each file in the chain, and it ends with
+this text:
+
+```
+base = "b.toml": more than 8 levels deep -- do two files name each other?
+```
 
 ### `startup`: the operator's commands
 
@@ -543,6 +600,16 @@ altairsim> CONFIG LOAD mine.toml
 **`CONFIG SAVE` writes the machine that you are running now.** It writes every board and every
 property, with every change that you made with `SET`. When you load the file, you get the same
 machine. Give the machine a name with `SET MACHINE name=` before you save it.
+
+**`CONFIG SAVE` writes a new file each time. It does not edit the file that is there.** If you
+save to the name of a machine file that you wrote by hand, these things from that file are not
+in the new file:
+
+- **Each `#` comment and each `#>` note.** The saved file has no comments.
+- **The `base` line.** The saved file contains every board in full, so that it does not need a
+  base.
+
+To keep a file that you wrote by hand, save to a different name.
 
 **`CONFIG LOAD` replaces the machine that you have**, the same as a machine file on the command
 line. You cannot undo it, except with a file that you saved. It **loads all of the file or

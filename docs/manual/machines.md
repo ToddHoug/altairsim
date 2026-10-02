@@ -178,8 +178,8 @@ Two more commands are often part of a machine. `CONFIG SAVE` saves both of them:
 - **`STARTUP ADD RUN FF00`** records the command that starts the machine. Use `MOUNT` to put a
   disk in a drive.
 - **`SET MACHINE name=<name>`** gives the machine a name. A machine that you build from `-n` is
-  called `none` until you give it a name. `CONFIG SAVE` writes the name, and the `base =` key of
-  another file uses it.
+  called `none` until you give it a name. `CONFIG SAVE` writes the name. The name is a label:
+  the `base =` key of another file finds this machine by the path of its file, not by its name.
 
 ## The path rule: one base directory
 
