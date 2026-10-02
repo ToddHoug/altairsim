@@ -237,6 +237,12 @@ bool parse(const std::string& text, std::vector<Table>& out, std::string& err,
 // ---------------------------------------------------------------------------
 constexpr int kMaxBaseDepth = 8;
 
+// The depth guard's message, alone. Every other error in a chain of bases gains one
+// `file: line N:` per level, which is the path to the bad file. A loop has no bad file,
+// so this one goes up unchanged and only the file the user loaded puts its name on it.
+const std::string kBaseTooDeep = "more than " + std::to_string(kMaxBaseDepth) +
+                                 " levels deep -- do two files name each other?";
+
 bool loadInto(const std::string& text, const std::string& source, Machine& m,
               std::string& err, int depth, std::vector<std::string>* notesOut = nullptr);
 
@@ -247,8 +253,7 @@ bool loadInto(const std::string& text, const std::string& source, Machine& m,
 bool loadBase(const std::string& name, const std::string& dir, Machine& m, std::string& err,
               int depth) {
     if (depth >= kMaxBaseDepth) {
-        err = "base = \"" + name + "\": more than " + std::to_string(kMaxBaseDepth) +
-              " levels deep -- do two files name each other?";
+        err = kBaseTooDeep;
         return false;
     }
 
@@ -387,7 +392,10 @@ bool loadInto(const std::string& text, const std::string& source, Machine& m,
                     return false;
                 }
                 if (!loadBase(v, dir, m, err, depth)) {
-                    err = at(t.kvLine[i]) + err;
+                    if (err != kBaseTooDeep)
+                        err = at(t.kvLine[i]) + err;
+                    else if (depth == 0)
+                        err = at(t.kvLine[i]) + "base = \"" + v + "\": " + err;
                     return false;
                 }
                 for (const auto& b : m.boards()) fromBase.insert(b->id);
