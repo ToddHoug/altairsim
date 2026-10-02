@@ -43,14 +43,14 @@ IBM 3740 — it is North Star's own hard-sectored layout (§4).
 | Sides | 1 (SA-400) | `SS` bit selects side of a double-sided diskette |
 | **Address case map** | 0/1 = PROM · 2 = write-data · 3 = command | 0 = PROM · **1 = write-data** · **2 = Controller Orders** · 3 = command |
 | Drive/side/density/step | folded into Case-3 command codes + `M1M0` | separate **Case-2 "Controller Orders"** register (`DD SS DP ST DS`) |
-| Drive-select encoding | `M1M0` (2-bit binary, drives 0–3) via `CC=0` | `DS` field **one-hot**: `1`/`2`/`4`/`8` = drive 1/2/3/4, `0` = none |
+| Drive-select encoding | `M1M0` (binary: `01`,`10`,`11` = drives 1–3, `00` = none — **three drives**, see §5) via `CC=0` | `DS` field **one-hot**: `1`/`2`/`4`/`8` = drive 1/2/3/4, `0` = none |
 | Status bytes | **two** (A, B) | **three** (A, B, C) — different bit layouts (§3) |
 | Case-3 fields | `MO RD BST CC(3) M1 M0` | `DM(3) CC(3)` (`DM` = which byte on the DI bus) |
 | Motor-on | `MO` bit in every Case-3 command | Case-3 command **code 5** ("turn on drive motors") |
 | Interrupt control | `CC=3` (arm/disarm via `M0`) | Case-3 **codes 2 (disarm) / 3 (arm)** |
 | Sector sync char | `FB` ×1 | `FB` ×1 (SD) / ×2 (DD) |
 | Standard PROM origin | `E800H` (PROMs `LE820-3`, `RE820-3`, `SE8-1`) | `E800H` (PROMs `DWE-1`, `DSEL-E8-1`, `DPGM-E8-1`) |
-| Auto-motor-off | fixed timer | **9.6 s** default, jumper-selectable **3.2–38.4 s** |
+| Auto-motor-off | **16 revolutions** (3.2 s) | **9.6 s** default (48 revolutions), jumper-selectable **3.2–38.4 s** |
 
 Everything in §2–§5 is common to both boards except where a heading calls out SD or DD.
 
@@ -115,7 +115,7 @@ write-precompensation enable (precomp iff `DP=1`) during a write; `ST` head-step
 - **CC** — command code:
   | CC | Action |
   |---|---|
-  | 0 | Load drive-select register from `M1,M0`; lower head on selected drive |
+  | 0 | Load drive-select register from `M1,M0` (`00` = no drive); lower head on selected drive. The register is held clear while the motors are off |
   | 1 | Write record — start a write-sector sequence |
   | 2 | Load track-step flip-flop from `M0` |
   | 3 | Load interrupt-armed flip-flop from `M0` |
@@ -225,6 +225,47 @@ path but compares each byte against RAM instead of storing it.
   the 4.0 monitor's continuous RTC interrupt must have that interrupt disconnected to use the
   disk at all.
 
+### Facts from the MDS-A schematics and the MDS-A-D checkout tables
+
+The manuals' prose leaves these open. The four MDS-A schematic pages (© 1976, pp. 27–30 of
+the scan) and the MDS-A-D checkout tables (steps C1 and C3) settle them.
+
+| Fact | Value | Where |
+|---|---|---|
+| Window | **96 µs** = 12 bit times of 8 µs | MDS-A schematic p. 3 ("sets WINDOW width to 12 bit times"); MDS-A-D C3 |
+| Read enable `RE` (MDS-A-D) | goes high **480 µs** after the sector pulse | MDS-A-D C3 |
+| Double-density indicator (MDS-A-D) | goes high at **512 µs** ("32us after RE") | MDS-A-D C3 |
+| Body | at the end of the sync character(s): 96 µs + 17 × 64 µs (SD) or 34 × 32 µs (DD) = **1184 µs** | from the sector format; writing begins at the end of the window |
+| Sector pulse with no hole to see | every **32.768 ms** (2 MHz ÷ 2¹⁶): motors off, or no diskette | MDS-A p. 3 `HOLE NOT FOUND`; MDS-A-D C1 "CC15 … 32ms square wave" |
+| Sector counter | MDS-A: a **74LS160**, 0–9 always. MDS-A-D: 4-bit binary, 0–15 when it runs free ("SC03 … 500ms square wave") | MDS-A p. 3; MDS-A-D C1 |
+| Index hole | **loads 9** into the sector counter, so the next sector hole starts sector 0. The index hole is in the last sector of the revolution. MDS-A-D `IX` ("index hole detected during previous sector") is therefore true in sector 0 | MDS-A p. 3 (1G: `D3..D0 = H L L H`, load on `INDEX HOLE`) |
+| MDS-A drive select | two flip-flops; three lines decoded: `01` = drive 1, `10` = drive 2, `11` = drive 3. `00` = none. **Three drives, not four.** `MOTOR-ENB` false holds the register clear | MDS-A p. 4 |
+| MDS-A motor off | counter 1F: "turns motors off after **16 revolutions**" = 3.2 s with a diskette, 5.2 s without (160 × 32.768 ms — the checkout text's "about 5 seconds") | MDS-A p. 3 |
+| MDS-A status sampling | `MOTOR-SAMP` and `WINDOW-SAMP` are flip-flops clocked by the **leading edge of the read**, so a status byte shows the state *before* the command in the same read acts. The PROM's `LDA CTLMO+CTLNOP / ANI SAMO` depends on it | MDS-A p. 4 |
+| MDS-A begin-write | `WRITE REQ` takes `WINDOW-SAMP` on its J input: the command is accepted only in the window. `WRITE`, `HUNT` and `BODY` are cleared by the next window | MDS-A p. 2 |
+| MDS-A status bit 5 | a pad "jumper for diagnostic"; reads 0 | MDS-A p. 1 |
+| MDS-A interrupt | `SECTOR FLAG` AND `INT ARM`, to one of `PINT`, `VI0`–`VI7` by jumper. It stays active until the sector flag is reset | MDS-A p. 1 |
+| MDS-A reset | `RST` = `POC` or the reset command (`ROS`). The front-panel reset does not reach the board. It clears motor-enable, the step flip-flop and interrupt-arm, not the sector flag | MDS-A p. 1, p. 4 |
+| Step | the step flip-flop drives the drive's `STEP` line; an SA-400 moves on the trailing edge of the pulse | MDS-A p. 4 |
+
+### What the period software shows
+
+- **DD write stream** (North Star DOS 5.1DQ, at `2230`): begin-write (`EB16`), wait for `WI`
+  false, zeros to `E900`, `E9FB` once, `E9FB` a second time **only at double density**, the
+  data, the check character. The read path reads 512 bytes and the check character with no
+  byte to skip, so body starts after **both** sync characters.
+- **DD read** (the same driver, at `217B`): wait for `RE`, delay 72 µs, then test `DD`
+  against the density that the caller asked for.
+- **⚠ Double-density North Star DOS reads `2000` before anything writes it.** The MDS-A-D
+  PROM uses no RAM and loads the boot sector from byte 1 of its page (`<PA>00` is never
+  written). The DOS keeps drive 1's track at `2000` and uses it on its first read. A value of
+  `80` or more sends the head in from track 0 and the boot loads the wrong sectors. The DOS
+  stores the right value before it steps, so a second boot works. The MDS-A PROM does not have
+  this problem: it stores `59` (not initialized) in the table first.
+- **Side 2** (Lifeboat CP/M 2.23 on a two-sided image): the tracks of side 2 follow side 1 in
+  the image **from the innermost track out** (image track 35 = physical track 34, side 2).
+- **North Star DOS prompts:** `*` single density (5.1S), `+` double density (5.1DQ).
+
 ---
 
 ## 6. Emulation notes and gotchas
@@ -247,7 +288,10 @@ path but compares each byte against RAM instead of storing it.
   status-byte layouts, drive-select encoding (binary `M1M0` vs one-hot `DS`), and where motor-on
   and interrupt-arm live all differ (§1). A single decoder cannot serve both without branching on
   board type.
-- **Standard origin `E800H`.** The bootstrap is entered by jumping to `E800H`; non-standard PROM
+- **Emulated** as the `mdsa` and `mdsad` boards (`src/boards/northstar-mds.{h,cpp}`,
+  `docs/boards/northstar-mds.md`).
+- **Standard origin `E800H`.** The MDS-A-D bootstrap is entered by jumping to `E800H`, the
+  MDS-A bootstrap (assembled for case 1) at `E900H`; non-standard PROM
   origins move both the PROM and the whole 1 K window (`xx` in a PROM label is the two high hex
   digits of the origin).
 - **CPU-agnostic bootstrap.** The on-board PROM holds 8080/Z80 machine code and the board is
@@ -263,7 +307,7 @@ path but compares each byte against RAM instead of storing it.
 | Density | FM (single) | FM + MFM (single/double) |
 | Geometry | 35 trk × 10 sec × 256 B | 35 trk × 10 sec × 256/512 B |
 | Capacity/diskette | ≈ 89.6 KB | 179.2 KB (DD) |
-| Drives | up to 4 | up to 4 |
+| Drives | up to 3 | up to 4 |
 | Interface | 1 K memory window, command-by-read | same |
 | Standard origin | `E800H` | `E800H` |
 | Controller clock | 4 MHz xtal ÷2 = 2 MHz | 4 MHz xtal ÷2 = 2 MHz |

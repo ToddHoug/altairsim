@@ -128,6 +128,8 @@ Type the part before the bracket.
 | `hdsk` | MITS 88-HDSK Datakeeper: Pertec hard disk controller |
 | `icom` | iCOM FD3712/FD3812: 8" floppy controller with boot PROM |
 | `mds` | MITS 88-MDS: 5.25" minidisk controller |
+| `mdsa` | North Star MDS-A: single-density 5.25" floppy controller |
+| `mdsad` | North Star MDS-A-D: double-density 5.25" floppy controller |
 | `tarbell` | Tarbell #1011: single-density floppy controller |
 | `tarbelldd` | Tarbell #2022: double-density floppy controller |
 | `versafloppy` | SD Systems VersaFloppy I/II: WD177x floppy controller |
@@ -218,6 +220,8 @@ Type the part before the bracket.
 | `lineprinter-lpc` | The `default` machine with an 88-LPC line printer at port 02; CONNECT `lpt0:prn` to a file or the console. |
 | `lineprinter` | The `default` machine with an 88-C700 line printer at port 02; CONNECT `lpt0:prn` to a file or the console. |
 | `minidisk` | The Altair Minidisk: an 88-MDS at 08 and the MDBL boot PROM. You supply the 5.25" disk. |
+| `northstar` | North Star MDS-A single-density floppy: the controller at E800 and its boot PROM. You supply the disk. |
+| `northstardd` | North Star MDS-A-D double-density floppy: the controller at E800 and its boot PROM. You supply the disk. |
 | `original` | The Altair as it actually left Albuquerque. |
 | `parallel` | The `default` machine with two MITS parallel boards: an 88-PIO and an 88-4PIO. |
 | `ps2` | The machine MITS Programming System II ran on: basic8k's cards, but not basic8k's bootstrap. |

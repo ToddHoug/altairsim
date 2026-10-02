@@ -119,6 +119,7 @@ const struct {
     {"spindle", test_spindle},
     {"dcdd", test_dcdd},
     {"mds", test_mds},
+    {"northstar", test_northstar},
     {"fdcplus", test_fdcplus},
     {"hdsk", test_hdsk},
     {"icom", test_icom},

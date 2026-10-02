@@ -1,0 +1,51 @@
+# North Star MDS-A-D double-density floppy: the controller at E800 and its boot PROM. You supply the disk.
+#
+#     altairsim northstardd
+#     MOUNT fd0:drive0 "CPM223DQ-48K-SSDD.NSI"
+#     RUN E800
+#     -> A>
+#
+# THE BOOT PROM IS ON THE CONTROLLER, at E800. It reads track 0, sector 4 -- 512 bytes --
+# into the page that the first byte of the sector names, and jumps to byte 0A of that page.
+#
+# THE DRIVES ARE EMPTY HERE, as in every built-in machine: the file is compiled into the
+# program and may not name a file outside itself. With no diskette the PROM finds no index
+# hole and stops in a loop, so this file has no `startup` -- mount a disk, then RUN E800.
+#
+# THE SIZE OF THE IMAGE SAYS WHAT THE DISKETTE IS: 89,600 bytes is single density, 179,200
+# is double density, 358,400 is double density on two sides.
+#
+# `drive0` IS THE DRIVE THAT NORTH STAR CALLS DRIVE 1. The units count from zero, as on
+# every other controller here.
+#
+# THE REST IS THE DEFAULT MACHINE: an 8080, a 2SIO console at port 10, 56K of RAM. The
+# 88-DCDD comes out. The RAM stops at DFFF, which leaves E800-EBFF for the controller: the
+# board is a block of MEMORY, not a set of ports.
+
+[machine]
+name = "northstardd"
+base = "default"
+
+[[board]]
+id     = "dsk0"
+remove = true
+
+[[board]]
+type   = "mdsad"
+id     = "fd0"
+base   = E800
+drives = 4
+
+# THE RAM COMES UP ZEROED, and on this machine that is not a convenience. The boot PROM
+# uses no RAM at all, and it loads the boot sector from byte 1 of its page: byte 0 -- 2000,
+# for North Star DOS -- is never written. But 2000 is where double-density North Star DOS
+# keeps the track that drive 1 is on, and it reads that byte before anything has set it. A
+# value of 80 or more sends the head 1 to 128 tracks IN from track 0, the wrong sectors
+# load, and the machine runs them. The DOS has by then stored the right track there, so a
+# second RUN E800 boots. A real machine did the same, on whatever its RAM held at power-on.
+#
+# So this machine starts with its RAM at zero and boots the first time. Set `fill` back to
+# "random" to see the other machine. CP/M does not care: its BIOS keeps its own table.
+[[board]]
+id   = "mem0"
+fill = "zero"

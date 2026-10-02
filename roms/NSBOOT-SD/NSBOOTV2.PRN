@@ -1,0 +1,368 @@
+
+
+                ;================================================================
+                ; North-Star MDS-A disk boot ROM disassembly (later version PROM)
+                ; Disassembled by Martin Eberhard (borrowing from an unattributed
+                ; disassembly called NSBOOT.LST 'found on the internet'.)
+                ; * Disassembly corrected 30 Jan 2018 *
+                ;
+                ; This later version of the boot ROM differs from the early
+                ; version in two areas:
+                ;
+                ;    1) The older version loops forever attempting to boot when
+                ; 	a disk error occurs. This version tries 10 times and
+                ;	then dies in a loop.
+                ;
+                ;    2) The older version uses a sector timeout constant of
+                ; 	46h (70) versus 8Ch (140) used in this version. The
+                ;       timeout was increased to support a 4mhz processor. 
+                ;
+                ; The Northstar MDS-A disk controller works by reading and
+                ; writing to memory addresses - no INs or OUTs occur. Commands
+                ; are encoded into the low byte of the address. This onboard
+                ; ROM is hard-coded for execution at E900. There is ROM space on
+                ; the board for another copy of this code, which may be ORG'd at
+                ; a different address.
+                ;
+                ; This code is written to work especially with NSDOS. As such,
+                ; it references code in the RAM page at 2000h. When booting,
+                ; this RAM page gets overwritten with the bootstrap code.
+                ;
+                ; Assembles with Digital Reasearch's ASM. The resulting assembly
+                ; matches the ROMS found on an MDS-A controller.
+                ;================================================================
+                
+                ;RAM allocation (Set up for NSDOS)
+                
+ 2000 =         RAMBAS	equ	2000h		;RAM base address
+ 2000 =         DRVTAB	equ	RAMBAS		;Current track for each drive (1-3)
+ 2000 =         LODADR	equ	RAMBAS		;Load address
+ 2003 =         LASTDR	equ	RAMBAS+3	;Last used drive
+ 2004 =         EXEADR	equ	RAMBAS+4	;Execution address
+ 2007 =         DOSVER	equ	RAMBAS+7	;DOS verify operation
+ 200A =         DOSWRT	equ	RAMBAS+0Ah	;DOS write operation
+                
+ 2114 =         STACK	equ	RAMBAS+114h	;initial stack
+                
+                ;Disk controller memory space allocation
+                
+ E800 =         CTLBAS	equ	0E800h		;Disk controller base address
+ E900 =         ROMADR	equ	CTLBAS+100h	;Standard ROM address
+ EB00 =         CTLADR	equ	CTLBAS+300h	;Disk Control base address
+                
+                ;Controller commands (are at memory addresses)
+                
+ EB00 =         CTLDS0	equ	CTLADR+00h	;Select drive 0
+ EB01 =         CTLDS1	equ	CTLADR+01h	;Select drive 1
+ EB02 =         CTLDS2	equ	CTLADR+02h	;Select drive 2
+ EB03 =         CTLDS3	equ	CTLADR+03h	;Select drive 3
+ EB04 =         CTLWRT	equ	CTLADR+04h	;Initiate write
+ EB08 =         CTLSTC	equ	CTLADR+08h	;Clear track-step f-f
+ EB09 =         CTLSTS	equ	CTLADR+09h	;Set track-step f-f
+ EB0C =         CTLDI	equ	CTLADR+0Ch	;Disarm interrupts
+ EB0D =         CTLEI	equ	CTLADR+0Dh	;Arm interrupts
+ EB10 =         CTLNOP	equ	CTLADR+10h	;No operation (read A-Status)
+ EB14 =         CTLRSF	equ	CTLADR+14h	;Reset sector flag
+ EB18 =         CTLRES	equ	CTLADR+18h	;Reset controller
+ EB1C =         CTLSTO	equ	CTLADR+1Ch	;select step-out
+ EB1D =         CTLSTI	equ	CTLADR+1Dh	;Select step-in
+ EB20 =         CTLBST	equ	CTLADR+20h	;Read B-status
+ EB40 =         CTLRD	equ	CTLADR+40h	;Read Data
+ EB80 =         CTLMO	equ	CTLADR+80h	;Drive motors-on command
+                
+                ;A-Status Bits
+                
+ 0001 =         SATR0	equ	01h		;Track 0
+ 0002 =         SAWP	equ	02h		;Write protect
+ 0004 =         SABDY	equ	04h		;Sync chr found
+ 0008 =         SAWRT	equ	08h		;Ready for write data
+ 0010 =         SAMO	equ	10h		;Motor is on
+ 0040 =         SAWN	equ	40h		;Status was read during window
+ 0080 =         SASF	equ	80h		;Sector flag
+                
+                ;B-Status Bits
+                
+ 000F =         SBSECT	equ	0Fh		;Sector position mask
+ 0010 =         SBMO	equ	10h		;Motor is on
+ 0040 =         SBWN	equ	40h		;Status was read during window
+ 0080 =         SBSF	equ	80h		;Sector flag
+                
+ 0059 =         UNINIT	equ	59h		;Uinitialized RAM value
+ 000A =         RETRYS	equ	10		;Max retries
+ 0001 =         BDRIVE	equ	1		;Boot drive (Code assumes this is 01)
+ 0000 =         BTRACK	equ	0		;Boot track
+ 0004 =         BSECTR	equ	4		;Boot sector
+                
+                ;**************
+                ;Initialization
+                ;**************
+ E900           	org	ROMADR
+                
+ E900 311421    	lxi	sp,STACK		;Init stack
+ E903 060A      	mvi	b,RETRYS		;Init retry count (10)
+                
+                ;(Re)load the boot sector. This code assumes that BDRIVE=01.
+                ;b = remaining retries. Stack is valid.
+                
+ E905 C5        RETRY:	push	b			;Retry count
+ E906 3E59      	mvi	a,UNINIT		;Invalidate drive 1 track
+ E908 320020    	sta	DRVTAB
+ E90B 320320    	sta	LASTDR			;Invalidate last drive
+ E90E 010100    	lxi	b,BTRACK*256+BDRIVE	;Boot track and drive
+ E911 79        	mov	a,c			;a=1 (sector count)
+ E912 1604      	mvi	d,BSECTR		;Boot sector
+ E914 59        	mov	e,c			;e = 01 (Read operation)
+ E915 210020    	lxi	h,LODADR		;Load address
+ E918 CD1EE9    	call	DISKOP			;Do disk operation now
+                
+                
+ E91B C398E9    	jmp	LAUNCH			;Launch if successful
+                
+                ;***Subroutine*******************************************
+                ; Disk Operation
+                ; On Entry:
+                ;   a = Block count
+                ;   b = track (0-39)
+                ;   c = drive (1-3)
+                ;   d = sector
+                ;   e = 01 Read/00 Write/03 Verify*
+                ;   hl = load address
+                ; [* only Read is native, Write/Verify jump back to NSDOS]
+                ; On Exit:
+                ;   Z set if no errors
+                ;*********************************************************
+ E91E F5        DISKOP:	push	psw			;Block count
+ E91F E5        	push	h			;RAM address
+ E920 D5        	push	d			;Sector & Function
+ E921 C5        	push	b			;Track & drive 
+                
+ E922 06EB      	mvi	b,CTLADR/256		;Controller access
+ E924 CDE0E9    	call	MOTON			;Motors on, select drive in c
+                
+                ;Look up this drive's current track. Restore if uninitialized.
+                
+ E927 21FF34    	lxi	h,RAMBAS - CTLADR - 1	;Drive status table
+ E92A 09        	dad	b			;Drive is in c
+ E92B 7E        	mov	a,m			;Current track
+ E92C EE59      	xri	UNINIT			;Uninitialized?
+ E92E E5        	push	h			;current track
+ E92F CC64E9    	cz	SEEK			;Y: step to track 0 (a=0)
+                
+ E932 E1        	pop	h			;Curent track for this drive
+ E933 F1        	pop	psw			;desired track number (from bc)
+ E934 CD64E9    	call	SEEK			;Step to track
+                
+ E937 C1        	pop	b			;Sector & function (from de)
+                
+                ;Hunt for desired sector
+                
+ E938 CDCEE9    HUNT:	call	W1SECT			;Wait one sector time
+                
+ E93B 3A30EB    	lda	CTLBST OR CTLNOP	;Read B-status
+ E93E E60F      	ani	SBSECT			;Get sector number
+ E940 B8        	cmp	b			;Desired sector?
+ E941 C238E9    	jnz	hunt			;N: wait for it
+                
+ E944 E1        	pop	h			;RAM address
+                
+                ;If the disk operation is anything but read sector then we
+                ;assume that NSDOS is intact - and so we let NSDOS handle it.
+                
+ E945 0D        	dcr	c			;Test disk function
+ E946 FA0A20    	jm	DOSWRT			;disk op 00=Write
+ E949 C20720    	jnz	DOSVER			;disk op <>01=Verify
+                
+                ;Disk operation 01: Read one block of data from drive
+                
+ E94C 068C      GETSEC:	mvi	b,8ch			;Timeout count
+ E94E 1150EB    	lxi	d,CTLRD OR CTLNOP	;Read data
+ E951 0E00      	mvi	c,0			;Read 256 bytes
+                
+                ;Wait for the sector body
+                
+ E953 3A10EB    WATSEC:	lda	CTLNOP			;Get A-status
+ E956 E604      	ani	SABDY			;Wait for body
+ E958 C2AEE9    	jnz	RDDATA			;Body: ready for data
+                
+ E95B 05        	dcr	b			;Timeout?
+ E95C C253E9    	jnz	WATSEC			;n: keep waiting
+                
+                ;Timeout waiting for sector body
+                
+ E95F 3E01      	mvi	a,01h			;Report timeout error
+ E961 C3ABE9    	jmp	EREXIT			;And exit
+                
+                ;***Subroutine**************************
+                ; Step to track
+                ; On Entry:
+                ;   a = desired track
+                ;  (hl) = current track for this drive
+                ; On Exit:
+                ;   a = 1 if on track 0
+                ;  (hl) = new current track
+                ;***************************************
+ E964 57        SEEK:	mov	d,a			;Track
+ E965 96        	sub	m			;Compute difference
+ E966 72        	mov	m,d			;Save new track
+ E967 C8        	rz				;Done if already there
+                
+ E968 211DEB    	lxi	h,CTLSTI		;Assume Step-in
+ E96B 4F        	mov	c,a			;Number of tracks to step
+ E96C F27BE9    	jp	STEP			;positive diff = step in
+                
+ E96F 2F        	cma				;absolute value: step out
+ E970 3C        	inr	a
+ E971 4F        	mov	c,a			;Number of tracks to step
+ E972 3A10EB    	lda	CTLNOP			;Read A-status
+ E975 E601      	ani	SATR0			;At track 0?
+ E977 C0        	rnz				;Can't step out further
+                
+ E978 211CEB    	lxi	h,CTLSTO		;Set Step-out
+                
+                ;Step C tracks. The step direction command is in hl.
+                
+ E97B 7E        STEP:	mov	a,m			;Set step direction
+                
+ E97C 3A09EB    STPLUP:	lda	CTLSTS			;Set track-step flipflop
+ E97F E3        	xthl				;Delay
+ E980 E3        	xthl				;Delay
+ E981 3A08EB    	lda	CTLSTC			;Clear track-step flipflop
+                
+ E984 1602      	mvi	d,2			;Wait 2 sector times
+ E986 CDD0E9    	call	WSECTS
+                
+ E989 3A10EB    	lda	CTLNOP			;Read A-status
+ E98C E601      	ani	SATR0			;At track 0?
+ E98E CA93E9    	jz	STEP1			;N: keep stepping
+                
+ E991 0E01      	mvi	c,1			;Force end
+                
+ E993 0D        STEP1:	dcr	c			;More steps to do?
+ E994 C27CE9    	jnz	STPLUP			;N: step again
+                
+ E997 C9        	ret
+                
+                ;***Subroutine Continuation*****************
+                ; Read complete - launch BOOT if no errors
+                ; On Entry:
+                ;   Z set if no errors
+                ;   top-of-stack = retry count
+                ;*******************************************
+ E998 C1        LAUNCH:	pop	b			;Restore retry count
+ E999 CA0420    	jz	EXEADR			;OK, launch OS
+                
+ E99C 05        	dcr	b			;Reduce retry count
+ E99D C205E9    	jnz	RETRY			;Try again if we can
+                
+ E9A0 C3A0E9    HANG:	jmp	hang			;Give up (Hang)
+                
+ E9A3 00        	nop
+ E9A4 00        	nop
+ E9A5 00        	nop
+ E9A6 00        	nop
+ E9A7 00        	nop
+ E9A8 00        	nop
+ E9A9 00        	nop
+ E9AA 00        	nop
+                
+                ;***Error Exit***************************
+                ; Report failure
+                ; On Entry:
+                ;   a = error code
+                ;      01 = Timeout error
+                ;      02 = CRC error
+                ; On Exit:
+                ;   Z set if no errors
+                ;****************************************
+ E9AB C1        EREXIT:	pop	b			;repair stack
+ E9AC B7        	ora	a			;any errors?
+ E9AD C9        	ret
+                
+                ;***Subroutine Continuation*****************
+                ; Read data sector data from disk
+                ; On Entry:
+                ;    c = 0 (byte count=256)
+                ;   de = CTLRD OR CTLNOP (Read Data command)
+                ;   hl = memory address
+                ;   top-of-stack = sector count
+                ;*******************************************
+ E9AE 41        RDDATA:	mov	b,c			;Zero CRC
+                
+ E9AF 1A        RDLOOP:	ldax	d			;Read disk data byte
+ E9B0 77        	mov	m,a			;Write to RAM
+                
+ E9B1 A8        	xra	b			;Compute CRC
+ E9B2 07        	rlc
+ E9B3 47        	mov	b,a
+                
+ E9B4 23        	inx	h			;Next RAM address
+ E9B5 0D        	dcr	c			;Reduce count
+ E9B6 C2AFE9    	jnz	RDLOOP			;Read them all
+                
+ E9B9 1A        	ldax	d			;Read CRC
+ E9BA A8        	xra	b			;Does it match?
+ E9BB CAC4E9    	jz	SECDON			;Y: sector data ok
+                
+ E9BE 78        	mov	a,b			;??
+ E9BF 3E02      	mvi	a,02			;Report CRC error
+ E9C1 C3ABE9    	jmp	EREXIT			;..and exit
+                
+ E9C4 F1        SECDON:	pop	psw			;Sector count
+ E9C5 3D        	dcr	a			;Reduce count
+ E9C6 C8        	rz				;All done?
+                
+ E9C7 F5        	push	psw			;Re-save sector count
+ E9C8 CDCEE9    	call	W1SECT			;Wait 1 sector time
+ E9CB C34CE9    	jmp	GETSEC			;Go find next sector
+                
+                ;***Subroutine**************************
+                ; Wait 1 sector time
+                ; trashes d
+                ;***************************************
+ E9CE 1601      W1SECT:	mvi	d,1			;Single sector time
+                
+                ;Fall into WSECTS
+                
+                ;***Subroutine**************************
+                ; Wait d sector times
+                ; On Entry:
+                ;   d = number of sector times to wait
+                ;***************************************
+ E9D0 3A14EB    WSECTS:	lda 	CTLRSF			;Reset sector flag
+                WSECT:
+ E9D3 3A90EB    	lda	CTLMO OR CTLNOP		;Read A-status
+ E9D6 E680      	ani	SASF			;Sector pulse?
+ E9D8 CAD3E9    	jz	WSECT			;Wait for it
+ E9DB 15        	dcr	d			;enough sectors?
+ E9DC C8        	rz				;y: done
+                
+ E9DD C3D0E9    	jmp	WSECTS			;n: Keep waiting
+                
+                ;***Subroutine**************************
+                ; Turn drive motors On 
+                ; On Entry:
+                ;   bc = drive select command
+                ;   c = Drive number
+                ;   (LASTDR) = last drive selected
+                ;***************************************
+ E9E0 3A90EB    MOTON:	lda	CTLMO OR CTLNOP		;Motors on & A-status
+ E9E3 E610      	ani	SAMO			;Motor already on?
+ E9E5 C2F0E9    	jnz	MOTON2			;Yes, short wait
+                
+ E9E8 1632      	mvi	d,50			;Wait 50 sector times (1 sec)
+ E9EA CDD0E9    	call	WSECTS			;..for motor to spin up
+ E9ED C3F5E9    	jmp	MOTON3			;Now select drive
+                
+ E9F0 3A0320    MOTON2:	lda	LASTDR			;Get last drive
+ E9F3 B9        	cmp	c			;Same drive?
+ E9F4 C8        	rz				;Yes, no need to wait
+                
+ E9F5 0A        MOTON3:	ldax	b			;Select new drive
+ E9F6 79        	mov	a,c			;Get drive number
+ E9F7 320320    	sta	LASTDR			;Set new-drive flag
+ E9FA 160D      	mvi	d,13			;13 sector times for index sync
+ E9FC C3D0E9    	jmp	WSECTS			;Wait & return
+                
+ E9FF 00        	nop
+                
+ EA00           	end

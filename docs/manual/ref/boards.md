@@ -45,6 +45,8 @@ and within a group the boards are in **alphabetical order**.
 | [`hdsk`](#hdsk) | MITS 88-HDSK Datakeeper: Pertec hard disk controller |
 | [`icom`](#icom) | iCOM FD3712/FD3812: 8" floppy controller with boot PROM |
 | [`mds`](#mds) | MITS 88-MDS: 5.25" minidisk controller |
+| [`mdsa`](#mdsa) | North Star MDS-A: single-density 5.25" floppy controller |
+| [`mdsad`](#mdsad) | North Star MDS-A-D: double-density 5.25" floppy controller |
 | [`tarbell`](#tarbell) | Tarbell #1011: single-density floppy controller |
 | [`tarbelldd`](#tarbelldd) | Tarbell #2022: double-density floppy controller |
 | [`versafloppy`](#versafloppy) | SD Systems VersaFloppy I/II: WD177x floppy controller |
@@ -445,6 +447,58 @@ MITS 88-MDS: 5.25" minidisk, 4 drives. Same three ports as the dcdd -- but 300 R
 | `drives` | int | `4` | `1` .. `4` | Drives on the daisy chain |
 | `interrupt` | enum | `none` | `none` \| `int` \| `vi0` \| `vi1` \| `vi2` \| `vi3` \| `vi4` \| `vi5` \| `vi6` \| `vi7` | Where the card's interrupt is soldered *(interrupt strap)* |
 | `motor` | enum | `free` | `free` \| `real` | free: always at speed (default). real: 1 s spin-up, and it stops after 6.4 s |
+
+
+### `mdsa`
+
+North Star MDS-A: single-density 5.25" hard-sector floppy, up to 3 drives. No ports: a 1 K memory block at BASE (default E800) where a memory READ is the command. Boot PROM on the board -- RUN E900
+
+**Units:** `drive0` (disk, MOUNT), `drive1` (disk, MOUNT), `drive2` (disk, MOUNT)
+
+#### `[[board.drive]]` — a list you may add
+
+| Key | Kind | Legal | Meaning |
+|---|---|---|---|
+| `unit` | int | `0` .. `2` | Which drive. Unit 0 is the drive that North Star calls drive 1 |
+| `mount` | string | text | The disk image to put in it. Relative to THIS FILE. |
+| `readonly` | bool | `on` \| `off` | Write-protect the diskette. The guest sees it in the WP status bit *(also `writeprotect`)* |
+| `media` | enum | `sd` | Force the format instead of probing the image's size |
+| `create` | bool | `on` \| `off` | Make the disk file (empty) if it is not there, then mount it -- a blank diskette for the guest to format |
+
+#### Board properties
+
+| Key | Kind | Default | Legal | Meaning |
+|---|---|---|---|---|
+| `base` | int | `0xE800` | `0x0` .. `0xFC00` | Origin of the 1 K block. The built-in PROM is the standard part and runs only at E800 |
+| `drives` | int | `3` | `1` .. `3` | Drives on the cable |
+| `interrupt` | enum | `none` | `none` \| `int` \| `vi0` \| `vi1` \| `vi2` \| `vi3` \| `vi4` \| `vi5` \| `vi6` \| `vi7` | Where the sector-pulse interrupt is jumpered (lower left of the board) *(interrupt strap)* |
+| `motor` | enum | `free` | `free` \| `real` | free: the motors run until they are stopped (default). real: they stop by themselves after the board's count of revolutions |
+
+
+### `mdsad`
+
+North Star MDS-A-D: double-density 5.25" hard-sector floppy (single, double and two-sided), up to 4 drives. No ports: a 1 K memory block at BASE (default E800) where a memory READ is the command. Boot PROM on the board -- RUN E800
+
+**Units:** `drive0` (disk, MOUNT), `drive1` (disk, MOUNT), `drive2` (disk, MOUNT), `drive3` (disk, MOUNT)
+
+#### `[[board.drive]]` — a list you may add
+
+| Key | Kind | Legal | Meaning |
+|---|---|---|---|
+| `unit` | int | `0` .. `3` | Which drive. Unit 0 is the drive that North Star calls drive 1 |
+| `mount` | string | text | The disk image to put in it. Relative to THIS FILE. |
+| `readonly` | bool | `on` \| `off` | Write-protect the diskette. The guest sees it in the WP status bit *(also `writeprotect`)* |
+| `media` | enum | `sd` \| `dd` \| `quad` | Force the format instead of probing the image's size |
+| `create` | bool | `on` \| `off` | Make the disk file (empty) if it is not there, then mount it -- a blank diskette for the guest to format |
+
+#### Board properties
+
+| Key | Kind | Default | Legal | Meaning |
+|---|---|---|---|---|
+| `base` | int | `0xE800` | `0x0` .. `0xFC00` | Origin of the 1 K block. The built-in PROM is the standard part and runs only at E800 |
+| `drives` | int | `4` | `1` .. `4` | Drives on the cable |
+| `interrupt` | enum | `none` | `none` \| `int` \| `vi0` \| `vi1` \| `vi2` \| `vi3` \| `vi4` \| `vi5` \| `vi6` \| `vi7` | Where the sector-pulse interrupt is jumpered (lower left of the board) *(interrupt strap)* |
+| `motor` | enum | `free` | `free` \| `real` | free: the motors run until they are stopped (default). real: they stop by themselves after the board's count of revolutions |
 
 
 ### `tarbell`

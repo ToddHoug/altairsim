@@ -466,6 +466,11 @@ add_library(altair_core STATIC
   src/boards/mits-hardsector.cpp
   src/boards/mits-88dcdd.cpp
   src/boards/mits-88mds.cpp
+  # The North Star Micro-Disk System: the MDS-A (single density) and the MDS-A-D (double
+  # density). NOT a HardSectorFdc either, though the diskette is hard-sectored: the board
+  # has no ports at all. It is a 1 K block of MEMORY, and a memory read is the command.
+  # See src/boards/northstar-mds.h.
+  src/boards/northstar-mds.cpp
   # The FarmTek FDC+ serial drive (drive types 6 and 7). NOT a HardSectorFdc: no medium turns,
   # a PIC's firmware drives the registers, and a drive server on a serial line fills one track
   # buffer. See src/boards/farmtek-fdcplus.h.
@@ -833,6 +838,7 @@ add_executable(altair_tests
   tests/test_spindle.cpp
   tests/test_dcdd.cpp
   tests/test_mds.cpp
+  tests/test_northstar.cpp
   tests/test_fdcplus.cpp
   tests/test_hdsk.cpp
   tests/test_icom.cpp
@@ -1604,6 +1610,28 @@ if(EXPECT_EXECUTABLE)
                    $<TARGET_FILE:altairsim>)
   set_tests_properties(acceptance-tarbelldd PROPERTIES
                        LABELS acceptance TIMEOUT 90
+                       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+
+  # THE NORTH STAR MDS-A AND MDS-A-D BOOT CP/M AND NORTH STAR DOS (boards `mdsa`, `mdsad`).
+  # Each board carries its own 256-byte boot PROM in a 1 K block of MEMORY at E800 -- the
+  # board has no ports, and a memory read is the command. Expect tests because a command
+  # must be typed at the guest's prompt. The double-density test also boots a TWO-SIDED
+  # diskette and runs a program that is stored on side 2. Every image is mounted
+  # write-protected and hashed.
+  add_test(NAME acceptance-northstar
+           COMMAND ${EXPECT_EXECUTABLE}
+                   -f ${CMAKE_CURRENT_SOURCE_DIR}/tests/acceptance/northstar.exp
+                   $<TARGET_FILE:altairsim>)
+  set_tests_properties(acceptance-northstar PROPERTIES
+                       LABELS acceptance TIMEOUT 150
+                       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+
+  add_test(NAME acceptance-northstardd
+           COMMAND ${EXPECT_EXECUTABLE}
+                   -f ${CMAKE_CURRENT_SOURCE_DIR}/tests/acceptance/northstardd.exp
+                   $<TARGET_FILE:altairsim>)
+  set_tests_properties(acceptance-northstardd PROPERTIES
+                       LABELS acceptance TIMEOUT 220
                        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
   # The same #2022, booting a disk whose CBIOS is assembled DMACNTL=TRUE: post-boot sector

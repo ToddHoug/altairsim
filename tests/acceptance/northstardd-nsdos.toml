@@ -1,0 +1,19 @@
+# North Star acceptance fixture: the MDS-A-D with North Star DOS 5.1 (double density) in drive 1, mounted
+# WRITE-PROTECTED so the test can never change the tracked image (the .exp checks its hash).
+
+[machine]
+name    = "northstardd-nsdos"
+base    = "northstardd"
+startup = ["RUN E800"]
+
+[[board]]
+type = "mdsad"
+id   = "fd0"
+
+  [[board.drive]]
+  unit         = 0
+  mount        = "../media/northstar/NSDOS-51-SSDD.NSI"
+  writeprotect = true
+
+[console]
+bsdel = "bs"

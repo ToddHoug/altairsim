@@ -960,7 +960,8 @@ Why each piece is there — each corresponds to a disk that exists:
 | | `sectorSize` | What the image holds |
 |---|---|---|
 | **88-DCDD** (hard sector) | **137** | The *whole slot*: sync byte, track/sector header, 128-byte payload, checksum, stop byte, trailer. |
-| Tarbell, Disk 1A, North Star… (soft sector) | **128** / 256 | **Payload only.** The header and checksum were in the inter-sector gaps on real media and never made it into the image. |
+| Tarbell, Disk 1A… (soft sector) | **128** / 256 | **Payload only.** The header and checksum were in the inter-sector gaps on real media and never made it into the image. |
+| North Star MDS-A / MDS-A-D (hard sector, payload-only image) | **256** / 512 | **Payload only**, although the diskette is hard-sectored. A North Star sector has no header at all — zeros, a sync character, the data, a check character — and a `.NSI` file keeps the data. The board makes the check character on a read and drops it on a write (`docs/boards/northstar-mds.md`). |
 
 The board still owns what is *inside* the slot — for the DCDD, that the payload starts at offset 7 on a data track and 3 on a system track, and that a checksum sits at [4]. That is the controller's business, exactly as `docs/boards/mits-dcdd.md` says.
 
@@ -1755,7 +1756,7 @@ The intent is real: read and write files in a mounted image **with the guest not
 
 **But `DISK LS` cannot be a generic monitor command, and an earlier draft of this design had it as one. That was wrong.** Reading a file out of an image requires *two* independent facts, and the simulator holds neither in a place a generic command can reach:
 
-1. **The sector layout** — which is a property of the **controller**. The 88-DCDD is **hard-sector**: its images contain the entire 137-byte slot, headers and checksum included, so the payload lives at offset 7 of each slot (3 on a system track). Tarbell, Disk 1A, and North Star are **soft-sector**: their images hold the payload *only*, because the headers lived in the inter-sector gaps and never reached the file. A reader that does not know which kind it is holding reads garbage.
+1. **The sector layout** — which is a property of the **controller**. The 88-DCDD is **hard-sector**: its images contain the entire 137-byte slot, headers and checksum included, so the payload lives at offset 7 of each slot (3 on a system track). Tarbell and Disk 1A are **soft-sector**: their images hold the payload *only*, because the headers lived in the inter-sector gaps and never reached the file. (North Star's diskettes are hard-sector, but its `.NSI` images are also payload only: the sector has no header, and the sync and check characters are not in the file.) A reader that does not know which kind it is holding reads garbage.
 2. **The CP/M filesystem parameters** — the DPB, the reserved-track offset, and the BIOS *software* skew. These belong to the **image's CP/M**, not to the controller, and two images on the same controller can legitimately differ.
 
 So a naive `DISK LS` needs a wrapper per controller **×** per image format. Its apparent genericity would be a lie, and the failure mode is the worst kind: it produces a plausible-looking directory listing off a misparsed image.

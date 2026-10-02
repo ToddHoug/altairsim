@@ -150,6 +150,14 @@ void test_roms() {
         // Built with M80/L80 under CP/M (roms/SSM-8080MON/, docs/devguide/assembling-roms.md);
         // boots to "MONITOR V1.0" with a working prompt. This is the PB1 manual's MONIT.
         {"ssm-8080mon", 0xF000, 0xF7FF, 2048, 0xDEB0D584u, false},
+        // The North Star floppy boot PROMs, one per controller, each a complete 256-byte
+        // part. The MDS-A's is assembled for E900 (the board answers it at E800 too); the
+        // MDS-A-D's is the first page of the window, E800. Both are Martin Eberhard
+        // disassemblies that reassemble to the PROM bytes. The CP/M and North Star DOS disks
+        // CALL the MDS-A PROM's read routine at E91E, so a wrong byte here is a disk that
+        // boots halfway.
+        {"nsboot-sd", 0xE900, 0xE9FF, 256, 0x754E53E5u, true},
+        {"nsboot-dd", 0xE800, 0xE8FF, 256, 0x7AAFA134u, true},
     };
     for (const auto& c : cases) {
         std::string tag = std::string("builtin:") + c.name;

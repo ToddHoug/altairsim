@@ -1,0 +1,19 @@
+# North Star acceptance fixture: the MDS-A-D with Lifeboat CP/M 2.23 (double density, one side) in drive 1, mounted
+# WRITE-PROTECTED so the test can never change the tracked image (the .exp checks its hash).
+
+[machine]
+name    = "northstardd-cpm"
+base    = "northstardd"
+startup = ["RUN E800"]
+
+[[board]]
+type = "mdsad"
+id   = "fd0"
+
+  [[board.drive]]
+  unit         = 0
+  mount        = "../media/northstar/CPM223DQ-48K-SSDD.NSI"
+  writeprotect = true
+
+[console]
+bsdel = "bs"

@@ -275,7 +275,7 @@ disk). Byte offset is `137 * sectorsPerTrack * track + 137 * sector`.
 > minidisk image in the tree to disprove it with. The minidisk now lives on the 88-MDS, and its four
 > real images are all 76,800.
 
-**The 88-DCDD is a HARD-SECTOR controller, and that is the fact everything else follows from.** Its images contain the **entire 137-byte slot** — sync byte, track/sector header, 128-byte payload, checksum, stop byte, trailer — not just the payload. Soft-sector controllers (Tarbell, Disk 1A, North Star) store the **payload only**, because on real media their headers and checksums lived in the inter-sector gaps and never reached the image file. Anything that reads a `.DSK` without knowing which kind of controller wrote it reads garbage.
+**The 88-DCDD is a HARD-SECTOR controller, and that is the fact everything else follows from.** Its images contain the **entire 137-byte slot** — sync byte, track/sector header, 128-byte payload, checksum, stop byte, trailer — not just the payload. Soft-sector controllers (Tarbell, Disk 1A) store the **payload only**, because on real media their headers and checksums lived in the inter-sector gaps and never reached the image file. (The North Star controllers are hard-sector too, but their images are payload only for a different reason: see `docs/boards/northstar-mds.md`.) Anything that reads a `.DSK` without knowing which kind of controller wrote it reads garbage.
 
 In the `DiskImage` service (`DESIGN.md` §7.3) this needs no special flag — it is just `sectorSize = 137` where a soft-sector board would say `128`:
 

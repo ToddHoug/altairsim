@@ -8,6 +8,20 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+### The North Star floppy controllers
+
+Two new boards: `mdsa`, the North Star MDS-A single-density controller, and `mdsad`, the
+MDS-A-D double-density controller. Each one has its own boot PROM, and each one boots CP/M and
+North Star DOS from a 5¼″ North Star disk image (`.NSI`). The `mdsad` reads and writes
+single-density, double-density and two-sided disks.
+
+These boards have no ports. A board decodes a 1 K block of memory at `E800`, and a program
+gives a command when it reads an address in the block.
+
+Two new machines have the boards: `northstar` and `northstardd`. Their drives start empty.
+Mount your image in `fd0:drive0`, then type `RUN E900` on `northstar` or `RUN E800` on
+`northstardd`. The Boards chapter of the *User Manual* describes the boards.
+
 ### `R` no longer puts a space in a CP/M name
 
 `R *.TXT` copied a host file such as `my notes.txt` to a CP/M file with a space in its name.
