@@ -227,10 +227,12 @@ void D7aBoard::pumpSpeaker(Speaker& sp) {
 }
 
 uint8_t D7aBoard::axis8(int16_t a) {
-    // Arithmetic >>9 (well-defined in C++20): center 0 -> 0x00, +full -> +63 (0x3F),
-    // -full -> -64 (0xC0) -- the JS-1's usable window, not the A/D's full -128..+127.
-    // Cromemco's Dazzle-Doodle source discards anything past that window (see applyConsole).
-    return (uint8_t)(int8_t)((int)a >> 9);
+    // Arithmetic >>8 (well-defined in C++20): center 0 -> 0x00, +full -> +127 (0x7F),
+    // -full -> -127 (0x81). The negative end stops one short of the A/D's 0x80 so the range
+    // is the same each way and the byte can be negated (see applyConsole).
+    int v = (int)a >> 8;
+    if (v < -127) v = -127;
+    return (uint8_t)(int8_t)v;
 }
 
 StickState D7aBoard::resolveStick(const std::string& spec, int autoIndex) const {
@@ -249,21 +251,18 @@ StickState D7aBoard::resolveStick(const std::string& spec, int autoIndex) const 
 void D7aBoard::applyConsole(const std::string& spec, int xCh, int yCh,
                             int buttonShift, int autoIndex) {
     StickState s = resolveStick(spec, autoIndex);  // absent -> centered, no buttons
-    // Cromemco's OWN Dazzle-Doodle source (real 8080 listing, reference/JS-1.md 4.1) range-
-    // checks each axis with `ADI 0x40; JP` and draws only for readings in -64..+63
-    // (0xC0..0x3F); a magnitude of 64 or more on the positive side reads as "voltage out of
-    // range" and is discarded. axis8() (a >>9) already lands full deflection on that window's
-    // edges -- +full -> +63 (0x3F), -full -> -64 (0xC0) -- so X needs no further clamp.
-    int x = (int)(int8_t)axis8(s.x);
-    analogIn_[xCh] = (uint8_t)(int8_t)x;
+    // A full deflection is the A/D's full scale, 0x81..0x7F (reference/JS-1.md 4.1). GOTCHA
+    // adds the complement of the rest reading (0x00 -> 0xFF) to each reading and takes a
+    // direction only for a size of 0x40 or more, so a stick that stops at +63 cannot steer
+    // it. 0x80 is kept out: 0x80 + 0xFF is 0x7F, a full move the OPPOSITE way. Dazzle-Doodle
+    // draws only for readings in 0xC0..0x3F and calls the rest "voltage out of range", so it
+    // stops drawing past half deflection.
+    analogIn_[xCh] = axis8(s.x);
     // The period Dazzler games read SDL +Y (stick DOWN) as up, so invert Y: stick up -> a
     // positive byte, stick down -> negative. Shift to the byte FIRST (so a small rest drift
     // near center still floors to 0x00), THEN negate the signed byte -- negating the raw axis
-    // first would floor a resting +drift to 0xFF and slide center off zero. Negating -64
-    // (full up) yields +64, one past the window's +63 edge; clamp it so full-up stays in range.
-    int y = -(int)(int8_t)axis8(s.y);
-    if (y > 63) y = 63;
-    analogIn_[yCh] = (uint8_t)(int8_t)y;
+    // first would floor a resting +drift to 0xFF and slide center off zero.
+    analogIn_[yCh] = (uint8_t)(int8_t)(-(int)(int8_t)axis8(s.y));
     // ACTIVE-LOW buttons: a bit reads 1 when the button is RELEASED and 0 when PRESSED
     // (the JS-1's pulled-up switches). So an idle/absent console reads its nibble all-1s,
     // and a press pulls its bit to 0. Sourced from David Hansel's Arduino Altair 8800
