@@ -111,12 +111,23 @@ DIR  hostbridge          <=  cpm/hostbridge
 # tests/acceptance/docs-package.cmake makes the manual contain, and the reader's manifest
 # should say `skills/`, not `skills/altairsim/references/driving-with-ai.md`.
 #
-# ONE SKILL, NAMED, NOT THE WHOLE FOLDER. .claude/skills/ also holds the release skills
+# EACH SHIPPED SKILL, NAMED, NOT THE WHOLE FOLDER. .claude/skills/ also holds the release skills
 # (release-worker, release-coordinator, release-verify) and the workflow skills (work-task,
 # ship-change, review-pr), which are for whoever BUILDS or CHANGES this package and mean
 # nothing to someone holding it. The map has no exclude, so a DIR of the whole
 # folder would ship every skill added there. Name each shipped skill on its own line instead.
 DIR  skills/altairsim    <=  .claude/skills/altairsim
+
+# THE GUEST-PROGRAM SKILLS (#630). skills/altairsim is about the simulator; the rules of a
+# program that runs IN the guest each get a skill of their own, so a client loads only the one
+# the task needs and the altairsim skill does not grow a section per program. Each is a single
+# SKILL.md with no references/ -- build-package.sh adds the briefing copy to skills/altairsim
+# only. A new guest skill is one more DIR line here and one more row in the two lists that
+# name them (.claude/skills/altairsim/SKILL.md and docs/DRIVING-WITH-AI.md).
+DIR  skills/altairsim-cpm-build   <=  .claude/skills/altairsim-cpm-build
+DIR  skills/altairsim-cpm-text    <=  .claude/skills/altairsim-cpm-text
+DIR  skills/altairsim-hostbridge  <=  .claude/skills/altairsim-hostbridge
+DIR  skills/altairsim-mbasic      <=  .claude/skills/altairsim-mbasic
 
 # ---------------------------------------------------------------------------
 # FILES -- <package path>  <=  <path in this repo>

@@ -953,12 +953,14 @@ The example uses Claude Code. You do these steps one time.
    $ claude mcp list
    ```
 
-4. Copy `DRIVING-WITH-AI.md` from the package into the same directory. This file is for the
-   assistant, not for you. It tells the assistant how to use the tools, and how to boot, build
-   and debug with them.
+4. Copy `DRIVING-WITH-AI.md` and the `skills` folder from the package into the same directory.
+   These files are for the assistant, not for you. `DRIVING-WITH-AI.md` tells the assistant how
+   to use the tools, and how to boot and debug with them. The files in `skills` have the rules
+   for programs that run in the machine, such as the assembler.
 
    ```
    $ cp /path/to/DRIVING-WITH-AI.md .
+   $ cp -R /path/to/skills .
    ```
 
 5. Start `claude` in the directory, and tell the assistant to read the file before you give it

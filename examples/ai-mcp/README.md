@@ -8,10 +8,11 @@ and reassembles, **all through the simulator's MCP tools**. No cutting and pasti
 
 If you have never wired an assistant to altairsim, read `DRIVING-WITH-AI.md` (it ships beside
 this folder) first — it is the briefing you drop in front of the assistant, and it explains the
-MCP server and the one registration step that this walkthrough assumes you have done.
+MCP server and the one registration step that this walkthrough assumes you have done. Give the
+assistant the `skills` folder too: the briefing names files in it for the build steps.
 
-If your assistant reads Agent Skills, install `skills/altairsim/` from the package instead. The
-assistant then loads the same briefing by itself. The manual's package chapter tells you where to
+If your assistant reads Agent Skills, install the folders in `skills/` from the package instead.
+The assistant then loads the same briefing, and the build rules, by itself. The manual's package chapter tells you where to
 copy it.
 
 ## Point your assistant at this machine

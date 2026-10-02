@@ -16,7 +16,7 @@ LICENSE-SDL3             the license of SDL3, which is built into the program.
 LICENSE-MAME-HD63484     the notice for the source of the HD63484 model's structure (MAME).
 examples/                machines that boot, with their media.
 hostbridge/              the file-transfer utilities: source, HEX and COM.
-skills/                  the AI briefing again, packaged for a client that reads skills.
+skills/                  the AI briefing again, and the rules for guest programs, as Agent Skills.
 ```
 
 That is the whole package. You do not install a library or a runtime. You do not have to write
@@ -52,24 +52,27 @@ only if you want to build a board of your own.
 This document is for an **AI assistant**, not for you. It tells the assistant how to control the
 machine through the MCP interface of the program. To use it:
 
-1. Put `DRIVING-WITH-AI.md` in a working folder.
+1. Put `DRIVING-WITH-AI.md` and the `skills` folder in a working folder. The document names
+   files in `skills/`, which have the rules for programs such as `ASM` and MBASIC.
 2. Start an assistant in that folder.
 3. Ask for what you want, for example: *"Using altairsim, boot CP/M and show me what is on the
    disk."*
 
 If you do not use an AI assistant, you can ignore this document. Nothing else needs it.
 
-`skills/altairsim/` contains the same briefing as an **Agent Skill**. Agent Skills come from
-Anthropic, for its Claude assistants. Claude finds a skill from its description, so when you ask
-for a machine, Claude reads the briefing itself. You do not have to tell it which file to open.
-To install the skill for Claude Code, copy the `altairsim` folder to one of these places:
+`skills/` contains **Agent Skills**. Each folder in it is one skill. `skills/altairsim/` is the
+same briefing as `DRIVING-WITH-AI.md`. Each other folder, such as `skills/altairsim-mbasic/`,
+has the rules for one program that runs in the machine. Agent Skills come from Anthropic, for
+its Claude assistants. Claude finds a skill from its description, so when you ask for a machine,
+Claude reads the briefing itself. You do not have to tell it which file to open. To install the
+skills for Claude Code, copy every folder in `skills/` to one of these places:
 
-- `.claude/skills/altairsim/` in your project folder, for that project only
-- `~/.claude/skills/altairsim/` in your home folder, for every project
+- `.claude/skills/` in your project folder, for that project only
+- `~/.claude/skills/` in your home folder, for every project
 
-The folder needs no other files, so it works in either place. Some other assistants can also
+The folders need no other files, so they work in either place. Some other assistants can also
 read skills. Their documentation tells you where to put the folder. If your assistant does not
-read skills, give it `DRIVING-WITH-AI.md` as the steps above show.
+read skills, give it `DRIVING-WITH-AI.md` and the `skills` folder as the steps above show.
 
 The quick reference lists every option, every monitor command, every board and every machine.
 The program generated it, so it matches the program that you have. It ships in two forms with

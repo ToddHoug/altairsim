@@ -8,6 +8,18 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+### Skills for the programs that run in the machine
+
+The package has four new Agent Skills in `skills/`, for an AI assistant. Each one has the rules
+for one subject: `altairsim-mbasic` (typing a program into MBASIC), `altairsim-cpm-build`
+(`ASM` and `LOAD`, `M80` and `L80`), `altairsim-cpm-text` (CR/LF line ends in a file for CP/M)
+and `altairsim-hostbridge` (`R`, `W` and `HDIR`). The assistant loads a skill only when the task
+needs it.
+
+`DRIVING-WITH-AI.md` no longer has the steps to build a CP/M program. It names the skill files
+instead. If your assistant does not read skills, give it the `skills` folder with
+`DRIVING-WITH-AI.md`.
+
 ### The Newtech Model 6 Music Board
 
 A new board, `music6`: the Newtech Model 6 Music Board of 1977. It has one output port, a 6-bit
