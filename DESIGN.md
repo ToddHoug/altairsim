@@ -1034,8 +1034,11 @@ public:
 
 class Audio {
 public:
-    virtual void   push(std::span<const int16_t> samples) = 0;   // clocked from EventQueue
-    virtual size_t queued() const = 0;
+    using Owner = const void*;   // one voice per owner — the service mixes the voices
+    virtual int    rate() const = 0;        // samples per second it takes: mono, signed 16-bit
+    virtual bool   available() const = 0;   // is a sound device behind it? (for SHOW)
+    virtual void   push(Owner, std::span<const int16_t> samples) = 0;   // from Board::pump()
+    virtual size_t queued(Owner) const = 0;   // pushed and not yet played
 };
 ```
 
@@ -1050,6 +1053,14 @@ Two constraints that are painful to retrofit:
 **Keystrokes from an SDL window are an *input*** — they go through the recorded event queue like everything else, or replay breaks the first time a Dazzler game is involved.
 
 **The `Joystick` service — built 2026-07-24.** A Dazzler game's *other* input is a joystick, and it is a host service of its own (`host/joystick.h`), the input analogue of `Display`: a board reads cached stick axes and buttons, and where those come from — a USB gamepad, the keyboard, or nothing — lives behind the seam, so the board (the **Cromemco D+7A**, which reads one or two JS-1 consoles) never touches SDL and a headless build reads every stick centered. It is polled once per slice from `pump()`, never inside a bus cycle, exactly as the `Display` is. It also sharpens the note above: a video window is a *keyboard* only when it ought to be. `[display] keyboard = none` makes a display-only window (a Dazzler) route its keystrokes to the joystick's keyboard fallback rather than the console — so a game's keys drive the stick instead of landing at the CP/M prompt — while `Ctrl-E` still stops the guest and hands back the monitor, like the close box. A Sol-20 window stays a console keyboard (`keyboard = console`, the default).
+
+**The `Audio` service — built 2026-10-01.** The sound half of the seam (`host/audio.h`), with three backends as the joystick has: `SdlAudio` in a windowed build, `NullAudio` headless (a speaker that is not plugged in), a stub in tests. Its first client is the **Cromemco D+7A**, which plays a JS-1 speaker from a D/A latch. Three decisions shape it, and each is the answer to a way it could have gone wrong:
+
+1. **Emulated time is not real time, and the seam does not pretend otherwise.** A device plays `rate()` samples each real second; a board renders `rate()` samples for each *emulated* second. The two agree only when the machine runs at a crystal. **Flat out (`Clock::free()`, the default) a board pushes nothing**, and its `SHOW` says that this is the reason — silence with a stated cause, not a tone at whatever pitch the host's speed happens to give. The run loop is not changed to serve sound: no automatic throttle, no resampling to fit. A board that runs ahead of the device anyway (a crystal, but a host that delivers its slices in bursts) sees it in `queued()` and holds back.
+2. **A board records in the bus cycle and renders in its host turn.** `write()` stays pure: it notes `(clock.now(), level)`. `pump()` turns the notes of one slice into PCM and pushes them. The conversion is shared (`host/level_pcm.h`): each output sample is the *average* of the level over that sample's time, not a point sample, so an edge that falls between two samples does not alias; and the fractional sample position carries from one slice to the next, so slices join with no click and no drift.
+3. **No second thread touches the `Machine`.** `push()` is called on the main thread only. SDL drains its streams on a thread of its own, and that thread sees samples, never a board. `SdlAudio` opens one device on the first `push()` — a guest that makes no sound opens no device — and binds one stream per `Owner`; SDL mixes them. A host with no sound device is not an error: the open is tried once, `available()` goes false, and every later push is dropped.
+
+A chip that makes sound from its own model (a speech or music chip) is a second client of the same service: it renders its own PCM and pushes it, and none of the three rules change.
 
 **Closing the window stops the guest; it does not quit the process** (built 2026-07-18). The window is an operator's control like ATTN, and it lands you in the same place: the run loop asks the display once per slice (`Display::takeQuitRequest()`, consuming exactly like `Console::takeAttn()`), stamps `StopReason::WindowClosed`, and gives back the prompt with the machine untouched. The *display* is asked; the display does not stop the machine — a board's `pump()` must never be able to halt the backplane it sits in, so the only thing that acts on the answer is the run loop, which is the only thing that can stop a machine at all.
 

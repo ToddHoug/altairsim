@@ -8,6 +8,23 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+### The D+7A plays the JS-1 speaker
+
+The Cromemco D+7A board (`d7a`) now plays the speaker of each JS-1 joystick. A guest that writes
+a waveform to the speaker port is heard on the sound output of your computer. This is the first
+sound that the simulator makes.
+
+Sound needs a crystal. At full speed (`clock_hz = 0`, the default), the board plays nothing. Set
+the speed, for example `SET cpu0 clock_hz=4000000`. The `dazzler` machine sets 4 MHz already.
+
+Two new settings, `speaker1` and `speaker2`, give the analog channel of each speaker: `none`, or
+`1` to `7`. The defaults are channel `1` (port `19`) and channel `3` (port `1B`). `SHOW` on the
+board has a line for each speaker. The line tells you if the speaker plays and, if it is silent,
+the reason.
+
+A tone from a tight loop plays at a higher pitch than on a real board, because the board does
+not hold the processor on an analog read or write.
+
 ### A guest at a prompt keeps the time of its crystal
 
 With a crystal set (`SET cpu0 clock_hz=2000000`), a guest that waited at a prompt after `RUN`

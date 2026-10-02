@@ -112,6 +112,7 @@ void test_dazzler();
 void test_multiwindow();
 void test_framedump();
 void test_d7a();
+void test_level_pcm();
 void test_sol();
 void test_turnkey();
 void test_virtc();

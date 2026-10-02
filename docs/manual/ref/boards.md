@@ -940,6 +940,8 @@ Cromemco D+7A: analog + parallel I/O. Eight ports from BASE (default 18): one pa
 | `port` | int | `0x18` | `0x0` .. `0xF8` | Base of the 8-port block (A7..A3 jumpers): parallel at BASE, analog at BASE+1..7. A multiple of 8; default 18 |
 | `joystick1` | string | `auto` | text | Which host controller drives JS-1 console 1: 'none', 'auto' (the matching gamepad -- console 1->pad 0, console 2->pad 1 -- or the keyboard), 'keyboard', or a device index like 0 |
 | `joystick2` | string | `auto` | text | Which host controller drives JS-1 console 2: 'none', 'auto' (the matching gamepad -- console 1->pad 0, console 2->pad 1 -- or the keyboard), 'keyboard', or a device index like 0 |
+| `speaker1` | string | `1` | text | The analog output that JS-1 console 1's speaker is on: 'none', or a channel 1 to 7 (channel n is port BASE+n). Default 1 |
+| `speaker2` | string | `3` | text | The analog output that JS-1 console 2's speaker is on: 'none', or a channel 1 to 7 (channel n is port BASE+n). Default 3 |
 
 
 ### `lpc`

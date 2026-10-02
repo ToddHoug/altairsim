@@ -22,9 +22,11 @@
 #include "boards/sd-sbc.h"
 #include "boards/terminal-font.h"
 #ifdef ALTAIRSIM_ENABLE_SDL
+#include "host/audio_sdl.h"
 #include "host/display_sdl.h"
 #include "host/joystick_sdl.h"
 #else
+#include "host/audio_null.h"
 #include "host/display_null.h"
 #include "host/joystick_null.h"
 #endif
@@ -72,6 +74,18 @@ static NullDisplay g_display;
 static SdlJoystick g_joystick;
 #else
 static NullJoystick g_joystick;
+#endif
+
+// The host sound service for a D+7A's JS-1 speakers (host/audio.h). The host's default
+// sound device where SDL3 was found; samples that go nowhere headless.
+//
+// AFTER g_display for the same reason as g_joystick: it tears down before the display,
+// quits only the SDL_INIT_AUDIO subsystem, and leaves SDL_Quit() to the display
+// (host/audio_sdl.h).
+#ifdef ALTAIRSIM_ENABLE_SDL
+static SdlAudio g_audio;
+#else
+static NullAudio g_audio;
 #endif
 
 // Version AND the commit it was built from (core/version.h). Most binaries in
@@ -289,6 +303,11 @@ int main(int argc, char** argv) {
     // ...and the monitor reads the SAME service for SHOW JOYSTICKS (cli/monitor.h), so the
     // command reports exactly the controllers the card sees.
     Monitor::setJoystick(&g_joystick);
+
+    // ...and for sound (host/audio.h): a D+7A renders its JS-1 speakers to samples and
+    // pushes them here. The host's sound device in the shipping binary; a NullAudio
+    // headless, so the board runs identically and nothing is heard.
+    D7aBoard::setAudio(&g_audio);
 
     // 60 frames a second, and no more. A real VDM-1 scanned at the monitor's rate no
     // matter what the 8080 was doing, and nothing on the S-100 side can read a pixel

@@ -41,8 +41,8 @@ equivalent is `sudo dnf install gcc-c++ cmake git make`.
 
 The line above is right for the ordinary **headless** build, which is what CI's
 Linux leg builds. A build that packages the windowed binary — static SDL3 with a
-real video backend — pulls in a pile of X11/Wayland development headers, and the
-full acceptance suite wants `expect`:
+real video and audio backend — pulls in a pile of X11/Wayland and audio development
+headers, and the full acceptance suite wants `expect`:
 
 ```bash
 sudo apt-get install -y build-essential cmake git ninja-build pkg-config expect \
@@ -51,7 +51,7 @@ sudo apt-get install -y build-essential cmake git ninja-build pkg-config expect 
   libdecor-0-dev libasound2-dev libpulse-dev
 ```
 
-Two of these bite:
+Three of these bite:
 
 - **`libxtst-dev` is a hard requirement.** SDL3 3.4.12 treats XTEST as a mandatory
   X11 dependency; without the header the SDL3 configure fails outright
@@ -63,6 +63,13 @@ Two of these bite:
   silently skips. So a package built on 22.04 is **X11-only** — fine for shipping,
   since it runs through XWayland on Wayland desktops, but the build host's distro
   decides whether native Wayland is even an option.
+
+- **`libasound2-dev` and `libpulse-dev` are what make sound.** Without an audio
+  header SDL3 still configures, with only its dummy audio driver: the device "opens"
+  and nothing is heard. `tools/build-sdl3-static.sh` checks the finished library for a
+  real audio backend (as it does for video) and stops if there is none. For native
+  PipeWire add `libpipewire-0.3-dev`; without it a PipeWire desktop is reached through
+  its PulseAudio or ALSA layer.
 
 `expect` is not a packaging dependency, but eighteen interactive acceptance tests
 are gated on it (`find_program(EXPECT_EXECUTABLE expect)`) and silently unregister

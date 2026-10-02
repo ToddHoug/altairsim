@@ -24,17 +24,23 @@
 // in the shipping binary, the keyboard as a fallback, a NullJoystick (centered, no
 // buttons) headless. The card never touches SDL.
 //
-// SOUND is deliberately NOT produced yet. A JS-1 makes sound by the CPU writing a
-// waveform to a speaker's analog-OUTPUT port (0x19 / 0x1B); reproducing it needs a host
-// audio service and a reconciliation of emulated time with wall-clock audio, which is a
-// separable follow-up (docs/boards/cromemco-d7a.md). The D/A writes are latched here so
-// that path has somewhere to read them; today nothing plays them.
+// THE JS-1 SPEAKER IS A D/A OUTPUT. A JS-1 makes sound by the CPU writing a waveform to
+// the speaker's analog-OUTPUT port in a timed loop (console 1: 0x19; console 2: 0x1B, or
+// 0x1A as the Dazzler II wires it). write() records each change of a speaker channel
+// with the T-state it happened at; pump() turns the slice's changes into PCM (LevelPcm)
+// and hands it to the host Audio service (host/audio.h), injected like the Joystick. The
+// card never touches SDL, and nothing is pushed from inside a bus cycle.
+//
+// SOUND NEEDS A CRYSTAL. The samples are made at one second of sound per EMULATED second.
+// A machine running flat out (clock_hz = 0) has no fixed relation to real time, so the
+// board plays nothing then, and SHOW says why.
 //
 // POLLED, and no interrupts. The parallel port's STB handshake and the analog wait
-// states (reference/D+7A.md 4) are not modeled -- a polling driver is complete, and the
-// wait states matter only for bit-exact sound timing.
+// states (reference/D+7A.md 4) are not modeled. A polling driver is complete without
+// them; a tone loop runs a little fast, and so plays a little sharp.
 
 #include "core/board.h"
+#include "host/level_pcm.h"
 
 #include <cstdint>
 #include <string>
@@ -42,6 +48,7 @@
 
 namespace altair {
 
+class Audio;       // host/audio.h -- injected, as the Joystick is
 class Joystick;    // host/joystick.h -- injected; the board never learns it is SDL
 struct StickState;
 
@@ -61,7 +68,8 @@ public:
 
     // SNAPSHOT/RESTORE (DESIGN.md 13). The software-visible latches: the seven A/D input
     // shadows, the seven D/A output latches, and the two parallel bytes. The port strap,
-    // the joystick assignments and the host Joystick* do not travel (config/host).
+    // the joystick and speaker assignments and the host Joystick*/Audio* do not travel
+    // (config/host); neither does the sound not yet played, which is the host's.
     void serialize(StateWriter& w) const override;
     void deserialize(StateReader& r) override;
 
@@ -73,6 +81,10 @@ public:
     // SdlJoystick in the shipping binary, a NullJoystick headless, a stub in a test.
     // Borrowed; the composition root owns it (like DazzlerBoard::setDisplay).
     static void setJoystick(Joystick* j);
+
+    // The host sound service, wired the same way -- an SdlAudio in the shipping binary, a
+    // NullAudio headless, a stub in a test. Borrowed.
+    static void setAudio(Audio* a);
 
     // ---- For tests, without a controller: the card's software-visible latches. ----
     uint8_t analogIn(int ch) const { return ch >= 0 && ch < 7 ? analogIn_[ch] : 0; }
@@ -101,6 +113,28 @@ private:
     void applyConsole(const std::string& spec, int xCh, int yCh,
                       int buttonShift, int autoIndex);
 
+    // One JS-1 speaker: the analog channel its cable is on, and the sound it has been
+    // sent that is not yet rendered. The ADDRESS of this struct is the voice's
+    // Audio::Owner, so a board with two speakers is two voices.
+    struct Speaker {
+        explicit Speaker(int channel) : ch(channel) {}
+        int      ch;               // analog channel 1..7, or 0 = no speaker (the strap)
+        LevelPcm pcm;              // the channel's D/A level against emulated time
+        bool     heard = false;    // has the level changed since power-on
+        uint64_t lastChange = 0;   // T-state of the last change
+    };
+
+    // The speaker's host turn: render this slice and push it, or drop it (see pump()).
+    void pumpSpeaker(Speaker& sp);
+
+    // Has the guest moved this speaker in the last half second of emulated time? A level
+    // that only sits there is silence, and is not sent to the device.
+    bool driven(const Speaker& sp) const;
+
+    // Start a speaker again from what the channel's D/A latch holds now: after a strap
+    // change, and after a RESTORE moved the clock under it.
+    void resync(Speaker& sp);
+
     // ---- Straps ----
     uint8_t base_ = 0x18;   // the 8-port block: BASE+0 parallel, BASE+1..7 analog
 
@@ -108,6 +142,11 @@ private:
     // sit alongside a numeric index (see properties()).
     std::string js1_ = "auto";   // console 1: gamepad 0 if present, else the keyboard
     std::string js2_ = "auto";   // console 2: gamepad 1 if present, else the keyboard
+
+    // Which analog output each console's speaker is on (reference/JS-1.md 2).
+    Speaker spk1_{1};            // console 1: channel 1, port BASE+1 (0x19)
+    Speaker spk2_{3};            // console 2: channel 3, port BASE+3 (0x1B)
+    std::vector<int16_t> pcmBuf_;  // pump()'s scratch, kept to save the allocation
 
     // ---- Software-visible state ----
     uint8_t analogIn_[7]  = {};  // channel 1..7 A/D shadow (index 0..6), refreshed in pump()

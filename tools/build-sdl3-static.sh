@@ -145,6 +145,23 @@ if ! printf '%s\n' "$boots" | grep -qiE '(x11|wayland|cocoa|kmsdrm|windows|uikit
     exit 1
 fi
 
+# ...and a REAL AUDIO BACKEND, for the same reason and by the same road. With no ALSA,
+# PulseAudio or PipeWire headers SDL3 configures with only its DUMMY and DISK audio
+# drivers: the device "opens", every sample is accepted, and nothing is heard -- a package
+# whose JS-1 speaker is silent with no error anywhere. An audio driver is an AudioBootStrap
+# symbol of the same `<NAME>_bootstrap` shape, so match the drivers that reach a sound
+# device by name.
+if ! printf '%s\n' "$boots" | grep -qiE '(coreaudio|alsa|pulseaudio|pipewire|pipewire_preferred|sndio|jack|wasapi|dsound)_bootstrap'; then
+    echo "build-sdl3-static: libSDL3.a has NO audio backend -- it plays no sound." >&2
+    echo "  The dummy-only build: SDL3 found no audio headers at configure time." >&2
+    echo "  Bootstrap symbols present:" >&2
+    printf '%s\n' "$boots" | sed 's/^/      /' >&2
+    echo "  Install the audio dev headers and rerun this script, e.g. on Debian/Ubuntu:" >&2
+    echo "      sudo apt install libasound2-dev libpulse-dev libpipewire-0.3-dev" >&2
+    keep_work=1
+    exit 1
+fi
+
 echo "$SDL3_VERSION" > "$stamp"
 
 echo

@@ -161,6 +161,7 @@ GATED := \
   src/platform/win32/terminaltest_win32.cpp \
   src/host/display_sdl.cpp \
   src/host/joystick_sdl.cpp \
+  src/host/audio_sdl.cpp \
   src/platform/posix/foreground_posix.cpp \
   src/platform/win32/foreground_win32.cpp \
   src/platform/posix/printer_cups.cpp
@@ -170,7 +171,7 @@ SRCS := $(filter-out $(GATED),$(SRCS))
 MM_SRCS :=
 
 ifeq ($(SDL),1)
-  SRCS += src/host/display_sdl.cpp src/host/joystick_sdl.cpp
+  SRCS += src/host/display_sdl.cpp src/host/joystick_sdl.cpp src/host/audio_sdl.cpp
   ifeq ($(WIN32),1)
     SRCS += src/platform/win32/foreground_win32.cpp
   else ifeq ($(UNAME_S),Darwin)

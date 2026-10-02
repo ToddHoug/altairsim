@@ -167,7 +167,7 @@ The boards are in groups, in the same order as the sections below.
 |---|---|
 | `pio` | MITS 88-PIO: an 8-bit parallel port, in and out |
 | `4pio` | MITS 88-4PIO: up to four programmable parallel ports |
-| `d7a` | Cromemco D+7A: analog and parallel I/O. Reads joysticks |
+| `d7a` | Cromemco D+7A: analog and parallel I/O. Reads joysticks and plays their speakers |
 
 **Floppy and disk controllers**
 
@@ -816,7 +816,7 @@ a block of eight ports (default base `18`). Each analog channel is an **A/D conv
 read it and a D/A converter when you write it**, in 8-bit two's complement: `00` is 0 V, `7F` is
 about +2.5 V, and `80` is about −2.5 V. On a real bench, it read sensors and drove instruments.
 
-Here, it is the input of a **game console**. It reads **one or two JS-1 joysticks**. The X and Y
+Here, it is the input and the sound of a **game console**. It reads **one or two JS-1 joysticks**. The X and Y
 controls go to analog channels. The four buttons of each stick are **active-low** bits in the
 parallel byte: the low four bits for one stick, and the high four bits for the other. The sticks
 come from a **USB gamepad** on your computer, or from the **keyboard** (the arrow keys and a few
@@ -829,8 +829,52 @@ gamepad is not there. `SHOW <id>` shows what each stick uses now (a named contro
 keyboard, or nothing). `SHOW JOYSTICKS` lists the controllers that your computer has.
 
 A machine that uses the sticks can set its video window to be a **display, not a keyboard**
-(`[display] keyboard = none`). Your keys then move the stick and do not go to a prompt. The
-sound output of the JS-1, which is a D/A that the processor writes a waveform to, is not modeled.
+(`[display] keyboard = none`). Your keys then move the stick and do not go to a prompt.
+
+The board also plays the **speaker** of each JS-1. A JS-1 has no sound chip. The guest writes a
+waveform to an analog channel, and the speaker plays the voltage. You hear it on the sound
+output of your computer.
+
+`speaker1` and `speaker2` give the analog channel of each speaker. The value is `none` or a
+channel from `1` to `7`, and channel *n* is port base + *n*. The defaults are channel `1` (port
+`19`) for stick 1 and channel `3` (port `1B`) for stick 2. Some software writes the second
+speaker to port `1A`. For that software, set the channel to `2`:
+
+```
+altairsim> SET d7a0 speaker2=2
+```
+
+In a machine file:
+
+```toml
+[[board]]
+type     = "d7a"
+id       = "d7a0"
+speaker2 = 2
+```
+
+**Sound needs a crystal.** At full speed (`clock_hz = 0`, the default), the guest does not keep
+real time, and the board plays nothing. Set the speed of the machine to hear the sound:
+
+```
+altairsim> SET cpu0 clock_hz=4000000
+```
+
+The `dazzler` machine sets 4 MHz already.
+
+`SHOW <id>` has one line for each speaker. The end of the line tells you the state:
+
+| The line ends with | Meaning |
+|---|---|
+| `-> playing` | The guest changed the speaker output in the last half second of machine time. |
+| `-> silent` | The guest does not drive the speaker now. |
+| `-> silent: the machine has no crystal (clock_hz = 0)` | The machine runs at full speed. Set `clock_hz`. |
+| `-> no sound device` | The program cannot open a sound output on your computer, or this build has no sound. |
+| `-> unwired` | The setting is `none`. |
+
+The timing of the board is not complete. A real D+7A holds the processor for a short time on
+each analog read and write, and the simulated board does not. A guest that makes a tone with a
+tight loop plays it at a higher pitch than on a real board.
 
 ## Floppy and disk controllers
 
