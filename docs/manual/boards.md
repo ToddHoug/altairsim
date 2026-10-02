@@ -182,6 +182,8 @@ The boards are in groups, in the same order as the sections below.
 | `tarbell` | Tarbell #1011: a single-density floppy controller with its own boot PROM. Boots CP/M by itself |
 | `tarbelldd` | Tarbell #2022: the double-density version, for mixed-density disks |
 | `icom` | iCOM FD3712/FD3812: an 8″ floppy controller with its own boot PROM. Boots CP/M and FDOS |
+| `mdsa` | North Star MDS-A: a single-density 5¼″ floppy controller in memory, with its own boot PROM. Boots CP/M and North Star DOS |
+| `mdsad` | North Star MDS-A-D: the double-density version, for one-sided and two-sided disks |
 | `16fdc` | Cromemco 16FDC: a floppy controller with a console UART and the RDOS 2.52 boot PROM. Boots CDOS |
 | `64fdc` | Cromemco 64FDC: a floppy controller with a console UART and the RDOS 3.12 boot PROM. Boots CDOS |
 | `dualsd` | S100Computers Dual SD: two microSD cards as CP/M drives. Boots CP/M 3 |
@@ -1173,6 +1175,80 @@ The `rom` property selects the PROM, and the PROM selects the system that boots:
 
 The `icom` machine boots CP/M 2.2 as soon as you mount a disk. Reads and writes of a formatted
 disk work. Like the other controllers here, it cannot format a **blank** disk from nothing.
+
+### `mdsa` and `mdsad`: North Star MDS-A and MDS-A-D
+
+The **North Star Micro-Disk System** was a 5¼″ hard-sector floppy system for 8080 and Z80
+machines. The `mdsa` is the single-density controller of 1977. The `mdsad` is the
+double-density controller of 1978, which also reads and writes single density.
+
+**These boards have no ports.** Each one decodes a 1 K block of memory, from `E800` to `EBFF`.
+A program gives a command when it reads an address in the block. The low byte of the address is
+the command, or the data byte to write. A read of `EB90` on the `mdsa` starts the drive motors
+and returns a status byte.
+
+**A `DUMP` of the block gives commands to the board.** `DUMP` and `EXAMINE` read memory as the
+processor does, and on this board a read is a command. `DISASM` and the debugger look at
+memory without a read. They show the boot PROM, and `FF` for the other addresses.
+
+Each board has its own **256-byte boot PROM** in the block. The `northstar` machine has an
+`mdsa`, and the `northstardd` machine has an `mdsad`. The drives start empty, and you supply
+the image. To boot a disk:
+
+1. Start the `northstar` machine.
+2. Mount the image in the first drive: `MOUNT fd0:drive0 <file>`.
+3. Start the boot PROM: `RUN E900`.
+
+| | `mdsa` | `mdsad` |
+|---|---|---|
+| Start the boot PROM | `RUN E900` | `RUN E800` |
+| Drives | 3 | 4 |
+| Density | single | single and double |
+| Sides | 1 | 1 or 2 |
+| The motors stop after (`motor = real`) | 3.2 seconds | 9.6 seconds |
+
+**`drive0` is the drive that North Star software calls drive 1.** The units of a board start at
+0, as on every controller. North Star DOS and the boot PROM start at 1.
+
+The board recognizes a disk by the size of its image. An image holds only the data of each
+sector:
+
+| Format | Sectors | Bytes/sector | Sides | File size | Board |
+|---|---|---|---|---|---|
+| `sd` | 35 × 10 | 256 | 1 | **89,600** | `mdsa`, `mdsad` |
+| `dd` | 35 × 10 | 512 | 1 | **179,200** | `mdsad` |
+| `quad` | 35 × 10 | 512 | 2 | **358,400** | `mdsad` |
+
+The boot PROM of the `mdsad` boots a double-density disk. To boot a single-density disk, use
+the `mdsa`. The `mdsad` reads and writes a single-density disk in a drive that it does not
+boot from.
+
+An empty file is a blank disk. On the `mdsa`, a blank disk is single density. On the `mdsad`,
+a blank disk gets its density from the first sector that the guest writes, which is what the
+format command of the guest decides. On the `mdsad`, a file of any other size does not mount.
+Set `media` on the drive to give the format.
+
+One image has one density. The `mdsad` does not write a single-density sector to a
+double-density image, and the monitor tells you when the guest tries. A write-protected disk
+shows in the status byte of the board, so the guest knows before it writes.
+
+`motor` works as it does on the `mds`. With `free`, the default, the motors run until the guest
+stops them. With `real`, they stop after the time in the table, and the guest starts them again.
+`interrupt` sets where the interrupt of the board goes. The board makes an interrupt at each
+sector, 50 times a second, only when the guest arms it. North Star DOS and CP/M do not arm it.
+`base` moves the block, but the boot PROM in the board is the standard part, which runs only at
+`E800`.
+
+#### Double-density North Star DOS and the memory at `2000`
+
+Double-density North Star DOS keeps the track of drive 1 in the byte at `2000`. It reads that
+byte before it writes it, and the boot PROM does not write it. If the byte is `80` or more, the
+DOS moves the head to a wrong track, and the boot fails. A second `RUN E800` then boots,
+because the DOS wrote the byte during the first boot.
+
+The `northstardd` machine starts with all its memory at zero, so the first boot works. If you
+add an `mdsad` to a different machine, set `fill = "zero"` on the memory board, or start the
+boot two times. CP/M and single-density North Star DOS do not have this problem.
 
 ### `16fdc` and `64fdc`: Cromemco 16FDC and 64FDC
 

@@ -1,0 +1,19 @@
+# North Star acceptance fixture: the MDS-A with CP/M 2.2b (single density) in drive 1, mounted
+# WRITE-PROTECTED so the test can never change the tracked image (the .exp checks its hash).
+
+[machine]
+name    = "northstar-cpm"
+base    = "northstar"
+startup = ["RUN E900"]
+
+[[board]]
+type = "mdsa"
+id   = "fd0"
+
+  [[board.drive]]
+  unit         = 0
+  mount        = "../media/northstar/CPM22b14-48K-SDC-ALTAIR.NSI"
+  writeprotect = true
+
+[console]
+bsdel = "bs"

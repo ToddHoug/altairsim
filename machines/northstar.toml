@@ -1,0 +1,39 @@
+# North Star MDS-A single-density floppy: the controller at E800 and its boot PROM. You supply the disk.
+#
+#     altairsim northstar
+#     MOUNT fd0:drive0 "CPM22b14-48K-SDC-ALTAIR.NSI"
+#     RUN E900
+#     -> 48K CP/M 2.2b
+#        A>
+#
+# THE BOOT PROM IS ON THE CONTROLLER, at E900. It reads track 0, sector 4 into 2000 and
+# jumps to 2004. It is not only a bootstrap: North Star DOS and the CP/M loader CALL its
+# disk routine at E91E for every read, so the PROM stays in the machine after the boot.
+#
+# THE DRIVES ARE EMPTY HERE, as in every built-in machine: the file is compiled into the
+# program and may not name a file outside itself. With no diskette the PROM tries ten times
+# and then stops in a loop, so this file has no `startup` -- mount a disk, then RUN E900.
+#
+# `drive0` IS THE DRIVE THAT NORTH STAR CALLS DRIVE 1. The units count from zero, as on
+# every other controller here.
+#
+# THE REST IS THE DEFAULT MACHINE: an 8080, a 2SIO console at port 10, 56K of RAM. The
+# period disk images for this controller on an Altair are built for exactly that console.
+# The 88-DCDD comes out -- this machine has one disk controller, and it is not that one.
+# The RAM stops at DFFF, which leaves E800-EBFF for the controller: the board is a block
+# of MEMORY, not a set of ports.
+
+[machine]
+name = "northstar"
+base = "default"
+
+[[board]]
+id     = "dsk0"
+remove = true
+
+# Up to three drives: the MDS-A has three drive-select lines.
+[[board]]
+type   = "mdsa"
+id     = "fd0"
+base   = E800
+drives = 3

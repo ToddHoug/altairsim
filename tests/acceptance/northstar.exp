@@ -1,0 +1,69 @@
+#!/usr/bin/expect -f
+#
+# THE NORTH STAR MDS-A BOOTS CP/M AND NORTH STAR DOS off its own boot PROM at E900.
+#
+# The board has no ports: it is a 1 K block of memory at E800, and every command is a
+# memory READ. The PROM reads track 0 sector 4 into 2000 and jumps to 2004 -- and both
+# systems then CALL the PROM's disk routine at E91E for their own reads, so a boot that
+# reaches a prompt and lists the disk has been through the PROM many times over.
+#
+# IT HAS TO BE AN EXPECT TEST: a command must be typed at the guest's prompt, which a
+# pipe cannot do (see the [[altairsim-pipe-cannot-type-at-a-guest]] rule).
+#
+# THE DISKS MUST NOT MOVE. Each fixture mounts its image write-protected, and the image
+# is hashed before and after.
+#
+# usage: expect -f northstar.exp <altairsim>
+#
+set timeout 60
+log_user 0
+
+set exe [lindex $argv 0]
+
+proc want {text what} {
+    expect {
+        -ex $text {}
+        eof     { puts "FAIL: the machine died before: $what"; exit 1 }
+        timeout { puts "FAIL: never saw: $what"; exit 1 }
+    }
+}
+
+# ---- CP/M 2.2b ---------------------------------------------------------------------------
+set dsk "tests/media/northstar/CPM22b14-48K-SDC-ALTAIR.NSI"
+set before [exec shasum $dsk]
+
+spawn $exe tests/acceptance/northstar-cpm.toml
+want "Single Density North Star FDC" "the CP/M sign-on"
+want "A>" "the A> prompt"
+send "DIR\r"
+want "MOVCPM" "DIR listing the tracked disk (MOVCPM COM)"
+want "A>" "the prompt after DIR"
+close
+wait
+
+if {$before ne [exec shasum $dsk]} { puts "FAIL: the CP/M image changed"; exit 1 }
+
+# ---- North Star DOS 5.1 ------------------------------------------------------------------
+set dsk "tests/media/northstar/NSDOS-51-SDC-ALTAIR.NSI"
+set before [exec shasum $dsk]
+
+spawn $exe tests/acceptance/northstar-nsdos.toml
+want "NORTH STAR DOS 5.1S" "the DOS sign-on"
+want "*" "the * prompt"
+send "LI\r"
+want "FPBASIC" "LI listing the tracked disk (FPBASIC)"
+want "*" "the prompt after LI"
+# BASIC is 51 blocks on tracks 1 to 6: loading it steps the head and reads 13 K.
+send "GO BASIC\r"
+want "READY" "North Star BASIC's READY"
+send "PRINT 6*7\r"
+want "42" "BASIC answering PRINT 6*7"
+close
+wait
+
+if {$before ne [exec shasum $dsk]} { puts "FAIL: the North Star DOS image changed"; exit 1 }
+
+puts "OK: the MDS-A booted CP/M 2.2b to A> and North Star DOS 5.1 to *, off its PROM at\
+      E900; DIR and LI read the disks, BASIC loaded and ran, and both images are\
+      byte-identical."
+exit 0

@@ -1,0 +1,87 @@
+#!/usr/bin/expect -f
+#
+# THE NORTH STAR MDS-A-D BOOTS CP/M AND NORTH STAR DOS off its own boot PROM at E800.
+#
+# Three disks, because the double-density board has three things to prove:
+#
+#   - a double-density diskette: 512-byte sectors, two sync characters;
+#   - the SECOND SIDE. In the two-sided CP/M image FINDBAD.COM is stored on side 2, which
+#     is recorded from the inside out -- so FINDBAD running at all proves the side map,
+#     and it then reads every block on both sides;
+#   - North Star DOS, whose own driver (not the PROM's) steps the head with the order
+#     register and checks the density bit before every read.
+#
+# IT HAS TO BE AN EXPECT TEST: a command must be typed at the guest's prompt, which a
+# pipe cannot do (see the [[altairsim-pipe-cannot-type-at-a-guest]] rule).
+#
+# THE DISKS MUST NOT MOVE. Each fixture mounts its image write-protected, and the image
+# is hashed before and after.
+#
+# usage: expect -f northstardd.exp <altairsim>
+#
+set timeout 60
+log_user 0
+
+set exe [lindex $argv 0]
+
+proc want {text what} {
+    expect {
+        -ex $text {}
+        eof     { puts "FAIL: the machine died before: $what"; exit 1 }
+        timeout { puts "FAIL: never saw: $what"; exit 1 }
+    }
+}
+
+# ---- Lifeboat CP/M 2.23, one side --------------------------------------------------------
+set dsk "tests/media/northstar/CPM223DQ-48K-SSDD.NSI"
+set before [exec shasum $dsk]
+
+spawn $exe tests/acceptance/northstardd-cpm.toml
+want "CP/M2 on North Star" "the CP/M sign-on"
+want "A>" "the A> prompt"
+send "DIR\r"
+want "FILECOPY" "DIR listing the tracked disk (FILECOPY COM)"
+want "A>" "the prompt after DIR"
+close
+wait
+
+if {$before ne [exec shasum $dsk]} { puts "FAIL: the one-sided CP/M image changed"; exit 1 }
+
+# ---- Lifeboat CP/M 2.23, two sides -------------------------------------------------------
+set dsk "tests/media/northstar/CPM223DQ-48K-DSDD.NSI"
+set before [exec shasum $dsk]
+
+spawn $exe tests/acceptance/northstardd-cpm2.toml
+want "CP/M2 on North Star" "the CP/M sign-on (two-sided disk)"
+want "A>" "the A> prompt (two-sided disk)"
+send "FINDBAD\r"
+want "FBAD V6.0" "FINDBAD loading from side 2"
+want "No bad blocks found" "FINDBAD reading every block on both sides"
+close
+wait
+
+if {$before ne [exec shasum $dsk]} { puts "FAIL: the two-sided CP/M image changed"; exit 1 }
+
+# ---- North Star DOS 5.1 ------------------------------------------------------------------
+set dsk "tests/media/northstar/NSDOS-51-SSDD.NSI"
+set before [exec shasum $dsk]
+
+spawn $exe tests/acceptance/northstardd-nsdos.toml
+want "NORTH STAR DOS 5.1DQ" "the DOS sign-on"
+want "+" "the + prompt"
+send "LI\r"
+want "FPBASIC" "LI listing the tracked disk (FPBASIC)"
+want "+" "the prompt after LI"
+send "GO BASIC\r"
+want "READY" "North Star BASIC's READY"
+send "PRINT 6*7\r"
+want "42" "BASIC answering PRINT 6*7"
+close
+wait
+
+if {$before ne [exec shasum $dsk]} { puts "FAIL: the North Star DOS image changed"; exit 1 }
+
+puts "OK: the MDS-A-D booted Lifeboat CP/M 2.23 to A> off a one-sided and a two-sided\
+      diskette and North Star DOS 5.1 to +, off its PROM at E800; FINDBAD ran from side 2\
+      and read both sides, BASIC loaded and ran, and all three images are byte-identical."
+exit 0

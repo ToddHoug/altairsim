@@ -37,6 +37,8 @@ what is actually in one.
 | `lineprinter-lpc` | The `default` machine with an 88-LPC line printer at port 02; CONNECT `lpt0:prn` to a file or the console. |
 | `lineprinter` | The `default` machine with an 88-C700 line printer at port 02; CONNECT `lpt0:prn` to a file or the console. |
 | `minidisk` | The Altair Minidisk: an 88-MDS at 08 and the MDBL boot PROM. You supply the 5.25" disk. |
+| `northstar` | North Star MDS-A single-density floppy: the controller at E800 and its boot PROM. You supply the disk. |
+| `northstardd` | North Star MDS-A-D double-density floppy: the controller at E800 and its boot PROM. You supply the disk. |
 | `original` | The Altair as it actually left Albuquerque. |
 | `parallel` | The `default` machine with two MITS parallel boards: an 88-PIO and an 88-4PIO. |
 | `ps2` | The machine MITS Programming System II ran on: basic8k's cards, but not basic8k's bootstrap. |
