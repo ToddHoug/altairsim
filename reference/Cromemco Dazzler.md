@@ -29,8 +29,9 @@ board rides.
 | On/off | `OUT 0x0E` **D7**: 1 = Dazzler on, 0 = off (front-panel CLEAR also forces off) |
 | Resolution | `0x0F` D6: 0 = normal (32×32 / 64×64), 1 = **X4** (64×64 / 128×128) |
 | Color/mono | `0x0F` D4: 1 = color, 0 = black-and-white (16 greys) |
-| Status D7 | ODD/EVEN line: 0 during odd lines, 1 during even |
+| Status D7 | ODD/EVEN line: 0 during odd lines, 1 during even; **0 while D6 is 0** |
 | Status D6 | END OF FRAME: goes **0 for ~4 ms** between frames |
+| Status D5–D0 | Not driven: read **1** (the port reads `3F` for the whole vertical blank) |
 | Subcarrier | 3.579545 MHz crystal; 1 V neg-sync composite into 52 Ω |
 
 Two cards can be synced (SYNC IN/OUT strap) to drive two TVs; not modeled.
@@ -89,6 +90,20 @@ ODD/EVEN LINE      END OF FRAME
 
 - **D7** = 0 during odd scan lines, 1 during even.
 - **D6** = 0 for ~4 ms between frames (vertical blank), else 1.
+
+**Two facts the manual's prose does not give.** Both are from David Hansel's Altair 8800
+simulator firmware (`dazzler.cpp`, `dazzler_in`, github.com/dhansel/Altair8800), which
+gives the Dazzler schematic as its source for the second:
+
+- **D5–D0 are not driven.** The card drives only DI6 and DI7, so the other six bits read 1.
+- **D7 is 0 while D6 is 0.** The 7493 counter that makes the D7 output is held in reset
+  while D6 is low. So D7 does not toggle in the vertical blank, and the line count starts
+  again with each frame.
+
+Together: the port reads `3F` for the whole ~4 ms vertical blank, one time each frame, and
+`FF` or `7F` during the picture. Cromemco's GOTCHA times itself on this. Its delay waits
+for `3F` ("the end of frame"), then for a value that is not `3F` ("the start of frame"),
+30 times for each move: 0.5 s.
 
 **Emulation:** derive both from the `Clock` (frame ≈ 1/60 s), never from a
 poll-driven counter — a spin loop on END-OF-FRAME must see it fall because

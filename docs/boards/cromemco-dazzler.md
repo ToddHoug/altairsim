@@ -25,6 +25,7 @@ where the whole picture takes one color from the format nibble).
 | Source | Path | Authority |
 |---|---|---|
 | *Cromemco Dazzler Instruction Manual*, Part No. 023-0003, Nov 1978 | `reference/Cromemco Dazzler.md` (distilled from `Cromemco_Dazzler_Instruction_Manual.pdf`) | **Authoritative.** The two output ports and one input port (§2), the DMA framebuffer layout and quadrant scan order (§3), and the byte→pixel encoding for all four modes (§4). |
+| David Hansel, *Altair 8800 simulator* firmware, `dazzler.cpp` (`dazzler_in`) | `reference/Cromemco Dazzler.md` §2.3 | The two facts about the status port that the manual's prose does not give: the six unused bits read 1, and D7 is low while D6 is low. The firmware gives the schematic as its source for the second. |
 
 ## Register reference
 
@@ -51,8 +52,12 @@ Two ports at `port` (default `0x0E`): control/status at `BASE`, format at `BASE+
 
 | Bit | Meaning |
 |---|---|
-| D7 | ODD/EVEN scan line: 0 during odd lines, 1 during even |
+| D7 | ODD/EVEN scan line: 0 during odd lines, 1 during even. 0 for the whole vertical blank |
 | D6 | END OF FRAME: 0 for the ~4 ms vertical blank between frames, else 1 |
+| D5–D0 | Not driven. They read 1 |
+
+The port therefore reads `FF` or `7F` during the picture and `3F` for the whole vertical
+blank, one time each frame.
 
 **Byte → pixels.** In **normal** mode each byte is two adjacent nibble-elements — low
 nibble the left element, high nibble the right — and each nibble is `HI/LO(D3)
@@ -88,7 +93,9 @@ right); every lit bit takes the format-nibble color.
   (`DazzlerBoard::setDisplay`) — an `SdlDisplay` in the shipping binary, a
   `NullDisplay` headless. The card never `#include`s SDL.
 - **Status** (D6/D7) is derived from the `Clock`, never a poll-driven counter, so a
-  spin loop pacing to the frame sees it move because emulated time advanced.
+  spin loop pacing to the frame sees it move because emulated time advanced. The line
+  count for D7 starts at the start of each frame, because the counter behind D7 is held
+  in reset during the vertical blank.
 - **`properties()`**: `port` (the even I/O base; the card owns `BASE` and `BASE+1`).
 
 ### Reset
@@ -107,6 +114,7 @@ right); every lit bit takes the format-nibble color.
 | Normal byte = **two nibble-elements**, low nibble on the **left** | Every pair of elements is swapped left-for-right |
 | X4 byte = **eight on/off bits** in two 2×2 cells; color comes from the format nibble | High-res pictures are scrambled, or monochrome pictures come out one flat color |
 | Format **D4** picks color vs 16 greys; **D3–D0** matter **only** in X4 | A B&W picture comes out colored, or an X4 picture ignores its color |
+| Status **D5–D0 read 1**, and **D7 stays 0 while D6 is 0**, so the vertical blank reads `3F` | A game that times itself on `IN 0E` / `CP 3F` (Cromemco's GOTCHA) never starts if the low bits read 0, and runs 30 times too fast if D7 toggles in the blank |
 
 ## Limitations and deliberate departures
 
@@ -129,7 +137,8 @@ right); every lit bit takes the format-nibble color.
 - `tests/test_dazzler.cpp` (headless, `NullDisplay`): port decode; the control/format
   latches; normal-mode nibble-elements (low-left / high-right, 16 bytes per row);
   the 2×2 quadrant tiling of a 2 KB picture; X4 mode's 4×2 on/off cell and its exact
-  bit→position map; the color-vs-grey palette; the Clock-derived status bits; the
+  bit→position map; the color-vs-grey palette; the Clock-derived status byte (`FF`, `7F`,
+  and `3F` for the whole vertical blank); the
   poll-based dirty economy (an unchanged framebuffer is not repainted); off blanks the
   screen; and `port` strap validation. It reads the rendered pixels straight back out
   of the `NullDisplay` surface.

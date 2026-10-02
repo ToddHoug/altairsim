@@ -193,15 +193,26 @@ void test_dazzler() {
     SECTION("Dazzler -- status (IN): ODD/EVEN line (D7) and END OF FRAME (D6), off the Clock");
     {
         Rig g;
-        uint8_t s0 = g.status();  // emulated time = 0
-        CHECK((s0 & 0x80) != 0, "line 0 is even -- D7 set");
-        CHECK((s0 & 0x40) != 0, "the start of a frame is not vblank -- D6 set");
+        // Whole bytes, not masks: the card drives only D7 and D6, so D5-D0 float to 1.
+        CHECK(g.status() == 0xFF, "time 0: line 0 is even (D7), not vblank (D6), D5-D0 float high");
 
         g.m.clock.advance(128);  // one scan line
-        CHECK((g.status() & 0x80) == 0, "the next scan line is odd -- D7 clears");
+        CHECK(g.status() == 0x7F, "the next scan line is odd -- D7 clears, nothing else moves");
 
         g.m.clock.advance(25333 - 128);  // into the ~4 ms end-of-frame window
-        CHECK((g.status() & 0x40) == 0, "during vblank D6 is 0");
+        CHECK(g.status() == 0x3F, "during vblank D6 is 0, and D7 with it");
+
+        // The line counter is held in reset while D6 is low, so D7 does not toggle in the
+        // vblank. A guest that waits for 0x3F and then for not-0x3F sees one period a frame.
+        g.m.clock.advance(128);
+        CHECK(g.status() == 0x3F, "one scan line later, still in vblank: D7 stays low");
+        g.m.clock.advance(128);
+        CHECK(g.status() == 0x3F, "and the line after that");
+
+        g.m.clock.advance(33333 - 25333 - 256);  // the start of the next frame
+        CHECK(g.status() == 0xFF, "the next frame starts on line 0 again -- the count restarts");
+        g.m.clock.advance(128);
+        CHECK(g.status() == 0x7F, "and its second line is odd");
     }
 
     SECTION("Dazzler -- an unchanged framebuffer is not repainted");

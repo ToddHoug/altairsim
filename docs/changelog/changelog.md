@@ -25,6 +25,23 @@ the reason.
 A tone from a tight loop plays at a higher pitch than on a real board, because the board does
 not hold the processor on an analog read or write.
 
+### Cromemco's GOTCHA runs: the Dazzler status port and the joystick range
+
+Two corrections let GOTCHA, from the Cromemco Dazzler Games disk, run as it did on the
+hardware.
+
+The status port of the Dazzler (`dazzler`, `IN 0E`) read 0 on its six unused bits. They now read
+1, as on the board. The odd/even line bit (D7) also stays 0 during the vertical blank. The port
+reads `3F` for the full 4 ms between frames. GOTCHA times each move on that value: before, it
+drew its picture and then stopped.
+
+A joystick on the D+7A (`d7a`) pushed all the way gave half of the range of the A/D converter
+(`3F` and `C0`). It now gives the full range (`7F` and `81`). GOTCHA accepts only a large
+movement, so before it could not be steered right or up.
+
+**Dazzle Doodle changes.** Doodle draws only when the stick is in the middle half of its range.
+Push the stick more than half and Doodle stops the line until the stick comes back.
+
 ### A guest at a prompt keeps the time of its crystal
 
 With a crystal set (`SET cpu0 clock_hz=2000000`), a guest that waited at a prompt after `RUN`

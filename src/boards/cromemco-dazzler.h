@@ -10,7 +10,8 @@
 //              begins on a 512-byte boundary (base = (v & 0x7F) << 9). OUT BASE+1
 //              (0x0F) is format: resolution (D6), size (D5), color (D4), and in X4
 //              mode the whole-picture color/grey nibble (D3-D0). IN BASE returns the
-//              status two bits: D7 ODD/EVEN scan line, D6 END-OF-FRAME (vblank).
+//              status two bits: D7 ODD/EVEN scan line, D6 END-OF-FRAME (vblank). D5-D0
+//              are not driven and read 1; D7 is held low while D6 is low.
 //   MEMORY  -- NONE decoded. The framebuffer is ordinary system RAM owned by a memory
 //              board; the real card DMA'd it, we read it. So the Dazzler decodes no
 //              address and never collides with the RAM under it.

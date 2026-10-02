@@ -70,8 +70,10 @@ SW1–SW4 → **D4–D7**.
   tests. **The board never touches SDL.**
 - **Axis mapping.** A host stick axis (SDL range −32768…32767) is arithmetic-shifted
   `>>8` to the two's-complement A/D byte: center 0 → `0x00`, full positive → `0x7F`,
-  full negative → `0x80`. `js1_invert_y` / `js2_invert_y` flip a console's Y sense
-  first, for a stick whose pot orientation opposes SDL's up = negative.
+  full negative → `0x81`. The negative end is held at −127, one short of the A/D's
+  `0x80`, so the range is the same each way; `reference/JS-1.md` §4.1 gives the reason
+  (GOTCHA reads `0x80` as a move the opposite way). **Y is always inverted** after the
+  shift: SDL's +Y is stick *down*, and the games read a positive byte as up.
 - **Which controller drives which console.** `joystick1` / `joystick2` accept `none`,
   `auto`, `keyboard`, or a device index (`0`, `1`, …). Both default to `auto`, and `auto`
   is **per-console**: console 1 prefers gamepad 0, console 2 gamepad 1, each falling back
@@ -79,8 +81,7 @@ SW1–SW4 → **D4–D7**.
   two `auto` consoles never fight over one stick (`resolveStick(spec, autoIndex)`). Not
   `CONNECT` — a game controller is an enumerated host device, not a `ByteStream` endpoint,
   so it is a strap like `port`, set from TOML or `SET`.
-- **`properties()`:** `port`, `joystick1`, `joystick2`, `js1_invert_y`, `js2_invert_y`,
-  `speaker1`, `speaker2`.
+- **`properties()`:** `port`, `joystick1`, `joystick2`, `speaker1`, `speaker2`.
 - **`statusLines()`:** the live resolution for `SHOW <id>` — what each console's strap
   currently points at (a named gamepad, the keyboard, or nothing). Keyed on `count()`, the
   same test `resolveStick` uses to pick a source, so the report can't contradict the A/D.
@@ -174,6 +175,11 @@ restart both speakers at the restored level.
   device. The host's own volume control serves.
 - **The sound is late by the queue.** On the development Mac the device takes about 110 ms
   to start, and the queue then holds 135–200 ms. The 250 ms cap bounds it.
+- **Dazzle Doodle draws only to half deflection.** Its listing draws for readings in
+  `0xC0`…`0x3F` and treats the rest as "voltage out of range" (`reference/JS-1.md` §4.1).
+  A stick pushed past half gives a reading outside that window, and Doodle stops drawing
+  until the stick comes back. No one scale serves both Doodle and GOTCHA at full
+  deflection: GOTCHA needs `0x40` or more.
 - **The parallel port is joystick-buttons-in only.** Its general digital use (a byte
   `OUT`, arbitrary digital `IN`) latches and snapshots correctly, but the output byte is
   not wired to a host `ByteStream` — no `CONNECT`. Adding that (the 88-PIO pattern) is a
@@ -192,9 +198,11 @@ restart both speakers at the restored level.
 
 - **`tests/test_d7a.cpp`** (headless, with a `StubJoystick`): port decode and the
   8-aligned strap; parallel latch/read; analog D/A round-trip and A/D independence; the
-  axis → two's-complement mapping for both consoles (0x19/0x1A and 0x1B/0x1C); button
+  axis → two's-complement mapping for both consoles (0x19/0x1A and 0x1B/0x1C), with
+  full scale at `0x7F` and `0x81` and the always-inverted Y; that a full deflection each
+  way passes GOTCHA's large-move test and keeps its sign; button
   bits in the correct nibbles; per-console `auto` resolution (console 2 takes gamepad 1,
-  falls back to the keyboard) and its `statusLines()` report; `js_invert_y`; that the host
+  falls back to the keyboard) and its `statusLines()` report; that the host
   is polled in `pump()` and not in a bus cycle; and a snapshot round-trip. For the
   speakers (with a `StubAudio` that records every push): a tone loop on port `19` at a
   crystal reaches the stub at the right frequency; flat out pushes nothing and

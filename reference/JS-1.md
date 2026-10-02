@@ -92,20 +92,44 @@ Settled from three independent sources (Patrick, 2026-07-23), all agreeing:
 
 The [D+7A board](../docs/boards/cromemco-d7a.md) maps a host stick onto these ports:
 a gamepad's left-stick X/Y (SDL range −32768…32767) is arithmetic-shifted to the
-two's-complement byte the A/D returns (`>>9`: center→0x00, extremes→**+63 (0x3F)** and
-**−64 (0xC0)** — the usable window in §4.1, *not* the A/D's full ±127), and up to four
-face buttons become the four parallel-input bits. Y is **inverted** (SDL +Y is stick
-*down*, which the games read as up). The D/A speaker output is captured for the (future)
-SDL audio path — see the sound-feasibility section of the board doc. A JS-1's own
+two's-complement byte the A/D returns (`>>8`: center→0x00, extremes→**+127 (0x7F)** and
+**−127 (0x81)** — the A/D's full scale, with `0x80` kept out for the reason in §4.1),
+and up to four face buttons become the four parallel-input bits. Y is **inverted** (SDL
++Y is stick *down*, which the games read as up). The D/A speaker output is played through
+the host's sound device — see the speaker section of the board doc. A JS-1's own
 oscillator-free design means everything here is a value a guest reads back, which is
 exactly what makes it emulable from a USB controller.
 
-### 4.1 The usable analog window is −64…+63 — from Cromemco's own Doodle source
+### 4.1 What each game accepts — from the games' own code
 
-The Cromemco *Dazzler Games* manual prints the **full 8080 source listing** of the
-**Dazzle-Doodle** program (pp. 5–7; a real Cromemco artifact, not a third-party
-disassembly). Its joystick read is the authoritative statement of what range the games
-actually use, and it is **narrower than the A/D's full ±127**:
+Two Cromemco programs test the reading, and they do not agree. A real stick clearly goes
+past ±64: one program needs it to, and the other has a test for when it does.
+
+**GOTCHA needs a size of `40` or more, and cannot take `80`.** At start it reads each
+axis at rest and stores the complement as an adjustment (`INTJOY`: `IN` / `CPL`), so a
+rest reading of `00` gives `FF` (−1). For each move it adds the adjustment to the reading
+and tests the result (`FNDDIR`). The code below is in `GOTCHA.COM` on the Dazzler Games
+disk, at `026E` after the program moves itself to address 0 (`INTJOY` is at `01FD`); the
+labels are from a source listing of the game:
+
+```
+LD   A,B        ; the adjusted up/down reading
+AND  A
+JP   M,FDR300   ; negative -> down: CPL, then the same test
+LD   D,1        ; positive -> up
+CP   40H
+JP   NC,FDR330  ; "LARGE MOVEMENT" -- only then is it a direction
+LD   D,0        ; else no change
+```
+
+So a stick that stops at +63 (`3F`) gives `3F` + `FF` = `3E`, which is not a move: it
+cannot steer GOTCHA right or up at all. And a reading of `80` gives `80` + `FF` = `7F`,
+which is a large move the **opposite** way. That is why the emulator's negative end is
+`81`, not `80`.
+
+**Dazzle-Doodle draws only for −64…+63.** The Cromemco *Dazzler Games* manual prints the
+**full 8080 source listing** of the program (pp. 5–7; a real Cromemco artifact, not a
+third-party disassembly):
 
 ```
 IN   031      ; read X-axis A/D   (port 0x19 = console-1 X)
@@ -127,12 +151,14 @@ every byte value, a pixel is written **only** when the raw A/D reading is in:
 | `0x80`…`0xBF`  (−128 … −65) | no — suppressed |
 | `0xC0`…`0xFF`  (−64 … −1)   | **yes — draws** |
 
-So the JS-1's usable full-scale, as Cromemco's own game software defines it, is
-**−64 … +63 (`0xC0` … `0x3F`)**. `RAR` then halves the survivors into the ±31/32
-displacement a 64×64 Dazzler grid needs. This is why the emulator maps SDL full
-deflection to exactly +63 / −64 (a `>>9`, §4) rather than the A/D rails ±127: a
-fully-deflected host stick must land *inside* this window, or Doodle treats it as
-out-of-range and refuses to draw. See `docs/sources.md` for the *Dazzler Games* manual.
+`RAR` then halves the survivors into the ±31/32 displacement a 64×64 Dazzler grid needs.
+With the emulator's full-scale mapping, Doodle draws while the stick is inside half
+deflection and stops when it is pushed past that. See `docs/sources.md` for the *Dazzler
+Games* manual.
+
+**History.** The emulator mapped full deflection to +63 / −64 (a `>>9`) for a time, so
+that a stick pushed all the way still drew in Doodle. That made GOTCHA impossible to
+steer, and it was taken back (issue #620).
 
 ## 5. Parts (informative)
 

@@ -91,14 +91,22 @@ void DazzlerBoard::write(const BusCycle& c) {
 // Status (IN BASE): D7 = ODD/EVEN scan line, D6 = END OF FRAME (0 during vblank).
 // Both read off the Clock so a spin loop pacing to the frame sees them move because
 // emulated time advanced.
+//
+// The card drives only DI6 and DI7, so D5-D0 float and read 1. The 7493 counter behind D7
+// is held in reset while D6 is low, so D7 is low for the whole vblank and the line count
+// starts again with each frame: the port reads 0x3F for ~4 ms, once a frame. A game times
+// itself on exactly that (Cromemco's GOTCHA: `IN 0E / CP 3F`). Sourced from the schematic
+// by way of David Hansel's Altair 8800 simulator firmware (reference/Cromemco Dazzler.md
+// 2.3); the manual's prose names only the two bits.
 // ---------------------------------------------------------------------------
 uint8_t DazzlerBoard::statusByte() const {
-    uint8_t s = 0;
+    uint8_t s = 0x3F;
     if (clock_) {
-        uint64_t now = clock_->now();
-        if ((now / kLineTStates) % 2 == 0) s |= 0x80;                 // D7: 1 on even lines
-        if (now % kFrameTStates < kFrameTStates - kVblankTStates)     // D6: 1 outside vblank
+        uint64_t pos = clock_->now() % kFrameTStates;
+        if (pos < kFrameTStates - kVblankTStates) {                   // D6: 1 outside vblank
             s |= 0x40;
+            if ((pos / kLineTStates) % 2 == 0) s |= 0x80;             // D7: 1 on even lines
+        }
     }
     return s;
 }
