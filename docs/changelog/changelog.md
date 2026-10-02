@@ -90,6 +90,18 @@ gives the key for each part of a `MOUNT` command.
 The samples in the configuring chapter that change a board of the base now leave the `type` out.
 A `[[board]]` with a `type` replaces the board, and it loses the settings of the base.
 
+### `TYPE` sends a quote and a control key
+
+`TYPE "PRINT \"HI\"\r"` typed only `PRINT \`, because the text stopped at the first `\"`.
+`TYPE` now sends the full line.
+
+`TYPE` also has two new escapes. `\^X` is the key Ctrl-X: `\^C` is Ctrl-C, `\^Z` is Ctrl-Z
+and `\^[` is ESC. `\xHH` is the byte with the hex value `HH`. Thus `TYPE` can send each key
+that a keyboard can. This helps an AI client that cannot put a carriage return or a control
+byte in the `input` of an MCP `run`: it can send them with `TYPE`.
+
+If your text had `\x` and two hex digits, or `\^` and a letter, write the backslash as `\\`.
+
 ### Paste a file into the guest
 
 A new monitor command, `PASTE <file>`, sends a host file to the keyboard of the guest, as if you

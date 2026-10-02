@@ -187,6 +187,15 @@ they wait in the buffer and are not forced on a program that is not reading.
 Escapes: \r carriage return, \n line feed, \t tab, \\ backslash, \" quote.
 ENTER sends a carriage return, so a command line for the guest ends in \r.
 
+Two more escapes send a key that you cannot put in the text. \^X is Ctrl-X:
+\^C is Ctrl-C, \^Z is Ctrl-Z, \^[ is ESC and \^? is DEL. \xHH is the byte
+with the hex value HH, and it must have two digits.
+
+```
+TYPE "PRINT \"HI\"\r"   ; a line with quotes in it
+TYPE "\^C"               ; Ctrl-C, to stop a BASIC program
+```
+
 This is how a machine file starts a program the monitor cannot reach. `startup`
 runs MONITOR commands; `XE TRK80` is input to SOLOS, a program INSIDE the machine.
 Put TYPE before the RUN that starts the guest and the guest reads it at its first

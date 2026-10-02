@@ -1802,6 +1802,38 @@ void test_cli() {
         got.clear();
         while (con.read(&b, 1)) got += (char)b;
         CHECK(got == "a\tb\\zc", "a tab, and an unknown escape left as written");
+
+        auto typed = [&](const std::string& cmd) {
+            mont.exec(cmd, ts);
+            std::string s;
+            while (con.read(&b, 1)) s += (char)b;
+            return s;
+        };
+
+        // A QUOTE INSIDE THE TEXT (issue #624). tokenize() ends a quoted token at the first
+        // `"`, so `\"` stopped the text there and the guest got `PRINT \`. TYPE reads its
+        // own argument from the raw line; a backslash takes the next character with it.
+        CHECK(typed(R"(TYPE "PRINT \"HI\"\r")") == "PRINT \"HI\"\r",
+              "\\\" is a quote, and the text goes on past it");
+        CHECK(typed(R"(TYPE "a\\")") == "a\\", "\\\\ before the closing quote is one backslash");
+        CHECK(typed(R"(TYPE "a\\\"b")") == "a\\\"b", "\\\\ then \\\" is a backslash and a quote");
+        CHECK(typed(R"(TYPE "X"  ; said the comment)") == "X",
+              "text after the closing quote is not typed");
+        CHECK(typed(R"(TYPE "a;b#c")") == "a;b#c", "; and # inside the quotes are text");
+        CHECK(typed(R"(TYPE "no end)") == "no end", "no closing quote: the text runs to the end");
+        CHECK(typed(R"(TYPE DIR\r)") == "DIR\r", "an unquoted word is still typed, escapes decoded");
+
+        // CONTROL BYTES. \^X is the key Ctrl-X; \xHH is any byte.
+        CHECK(typed(R"(TYPE "\^C\^Z\^[\^?\^@\^a")") == std::string("\x03\x1a\x1b\x7f\x00\x01", 6),
+              "\\^X is Ctrl-X: ^C, ^Z, ESC, DEL, NUL, and a lowercase letter");
+        CHECK(typed(R"(TYPE "\x00\xFF\x1b\x41")") == std::string("\x00\xff\x1b\x41", 4),
+              "\\xHH is the byte HH, in upper or lower case hex");
+        CHECK(typed(R"(TYPE "\xZ1|\x4")") == "\\xZ1|\\x4",
+              "\\x without two hex digits is left as written");
+        CHECK(typed(R"(TYPE "\^1|\^")") == "\\^1|\\^",
+              "\\^ without a control key after it is left as written");
+        CHECK(typed(R"(TYPE "\^\")") == "\x1c", "\\^\\ is Ctrl-\\, and the quote after it closes");
+        CHECK(!mont.failed(), "none of these is an error");
     }
 
     // PASTE sends a FILE to the same keyboard. TYPE is for a line; a file does not fit

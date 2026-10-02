@@ -188,6 +188,17 @@ send {text: "\u0003"}                        # break a running MBASIC program
 run  {input: "\u001a", until: "A>"}          # ^Z ends a PIP copy from the console
 ```
 
+**If your client sends the argument text as written**, a `\r` or a `\u0003` in `input` reaches
+the guest as those characters, not as one byte. Use the `TYPE` command through `monitor`
+instead. `TYPE` decodes its own escapes: `\r`, `\"` for a quote, `\^C` for Ctrl-C (`\^Z`,
+`\^[` for ESC), and `\xHH` for any byte. Then a bare `run` lets the guest read the keys.
+
+```
+monitor {command: 'TYPE "PRINT \"HI\"\r"'}   # a line with quotes, ended by a CR
+monitor {command: 'TYPE "\^C"'}               # Ctrl-C
+run     {until: "Ok"}
+```
+
 `\x03` is **not** JSON — there is no `\x` escape in the format — and it is not rejected
 either: it reaches the guest as the three ordinary characters `x03`. If a control byte seems
 to vanish while printable text gets through, that is the reason.

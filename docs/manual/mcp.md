@@ -213,3 +213,6 @@ are the most important:
 - JSON has no hex form, so `from` is a decimal number: `65280` is `FF00`. If you send a string
   such as `"0xFF00"`, the server refuses the call and tells you the number to send.
 - A control byte is a JSON `\uXXXX` escape: `\u0003` is `Ctrl-C`. `\x03` is not JSON.
+- Some clients send the text as you write it, and do not make a JSON escape from it. With such
+  a client, use the `TYPE` command through the `monitor` tool. `TYPE` has its own escapes:
+  `\r`, `\"`, `\^C` for `Ctrl-C` and `\xHH` for a byte. `HELP TYPE` gives the full list.
