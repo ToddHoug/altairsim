@@ -1338,6 +1338,16 @@ if(EXPECT_EXECUTABLE)
                    $<TARGET_FILE:altairsim>)
   set_tests_properties(acceptance-cli PROPERTIES LABELS acceptance TIMEOUT 60)
 
+  # A guest at a prompt keeps its crystal's time (#606). It is an EXPECT test because the idle
+  # nap and the throttle are both gated on a real terminal; a piped run does neither. The
+  # bound has one side -- the guest gains no more than 1.1 times the wall time -- so a loaded
+  # runner, which only makes a paced guest slower, cannot fail it.
+  add_test(NAME acceptance-clock-idle-pace
+           COMMAND ${EXPECT_EXECUTABLE}
+                   -f ${CMAKE_CURRENT_SOURCE_DIR}/tests/acceptance/clock-idle-pace.exp
+                   $<TARGET_FILE:altairsim>)
+  set_tests_properties(acceptance-clock-idle-pace PROPERTIES LABELS acceptance TIMEOUT 60)
+
   # Altair BASIC 1.0 booted off a cassette THE TWO-MOVE WAY: RUN the primitive loader, ^E when
   # the tape is done, RUN what it loaded from 0. ^E only exists on a tty, so this is an expect
   # test where basic4k.cmake is a piped one -- the 4K loader jumps on its own; the 1.0 one does

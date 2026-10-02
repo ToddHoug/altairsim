@@ -1008,11 +1008,11 @@ void freeRunSlice(Machine& m, McpSession& sess) {
     // not hold a whole core. The wait ends early for a request, and a typed key is read
     // within one nap.
     //
-    // FLAT OUT ONLY, which is where this differs from runMachine. With a crystal set, the
-    // pacing wait below already leaves the host idle. A nap in place of it, as runMachine
-    // takes, leaves the slice before it unpaced: measured at clock_hz=2000000, the guest at a
-    // prompt ran 1.5x its crystal, and a guest timing a reply while it polls the console
-    // would time it short (#606 is the same fault in the monitor's RUN).
+    // FLAT OUT ONLY, as in runMachine (mayNap, monitor.h). With a crystal set, the pacing
+    // wait below already leaves the host idle. A nap in place of it leaves the slice before
+    // it unpaced: measured at clock_hz=2000000, the guest at a prompt ran 1.5x its crystal,
+    // and a guest timing a reply while it polls the console would time it short (#606 was
+    // the same fault in the monitor's RUN).
     static constexpr uint64_t kIdleRatio  = 32;
     static constexpr auto     kIdleWarmup = std::chrono::milliseconds(20);
     static constexpr auto     kIdleNap    = std::chrono::milliseconds(4);

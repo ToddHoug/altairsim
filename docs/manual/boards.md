@@ -461,6 +461,9 @@ the guest reads an empty keyboard.** It is on by default. The busy core then use
 **The guest cannot see the difference**, because the processor starts again as soon as a byte
 arrives, before the next read. An XMODEM transfer is correct with `idle` on.
 
+`idle` has an effect only at full speed. When you set a crystal with `clock_hz`, the program
+already rests to keep the crystal's time, and the guest's time at a prompt stays correct.
+
 ### `8080`: the MITS 88-CPU
 
 The original processor board. The Altair shipped with it, and the other two processor boards

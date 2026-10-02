@@ -2141,6 +2141,31 @@ void test_should_pace() {
           "a tty but no line at all -- nothing real-time to keep step with");
 }
 
+// ---------------------------------------------------------------------------
+// THE NAP DECISION (cli/monitor.h, mayNap).
+//
+// Whether the run loop may nap at an idle prompt at all this run. The nap is for a machine
+// that runs flat out. It used to be taken on a paced run too, in place of the throttle, and
+// a guest at a prompt then ran 1.3 times its crystal (#606).
+// ---------------------------------------------------------------------------
+void test_may_nap() {
+    SECTION("mayNap: a flat-out prompt naps, a paced run never does");
+
+    // The nap's own job: flat out, an interactive console, `idle` on.
+    CHECK(mayNap(/*idle=*/true, true, true, /*paced=*/false), "flat out at a tty console -> may nap");
+
+    // THE BUG. The throttle is the sleep of a paced run, and it keeps the crystal's time.
+    CHECK(!mayNap(/*idle=*/true, true, true, /*paced=*/true),
+          "a paced run never naps -- the nap replaced the throttle and the guest outran its crystal");
+
+    // `SET cpu0 idle=off` ends the argument.
+    CHECK(!mayNap(/*idle=*/false, true, true, /*paced=*/false), "idle=off -> never");
+
+    // Only an interactive console: a line wired to the console AND a host tty.
+    CHECK(!mayNap(/*idle=*/true, false, true, /*paced=*/false), "no console line -> never");
+    CHECK(!mayNap(/*idle=*/true, true, false, /*paced=*/false), "a piped console is a script -> never");
+}
+
 // The achieved crystal, as the reflection layer sees it: read-only, and the run loop's
 // measurement reaches it through the CpuCard seam -- not the wall-clock timing itself
 // (that needs a run loop and a real clock), but the plumbing SHOW depends on.

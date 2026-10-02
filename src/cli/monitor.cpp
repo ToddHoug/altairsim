@@ -71,6 +71,11 @@ bool shouldPace(bool anyConsole, bool tty, bool anyRemoteLine, bool free) {
     return (anyConsole && tty) || anyRemoteLine;
 }
 
+bool mayNap(bool idle, bool anyConsole, bool tty, bool paced) {
+    if (paced) return false;  // the throttle is this run's sleep, and it keeps the time (#606)
+    return idle && anyConsole && tty;
+}
+
 // SET MACHINE's table: the settings that belong to the machine as a whole rather than to
 // any board in it. Today that is only the name -- what SHOW MACHINE prints, the video
 // window's title, and what CONFIG SAVE writes as `[machine] name`. Before this it was set only by the
@@ -1625,8 +1630,8 @@ void Monitor::runMachine(std::ostream& out, bool stepOver) {
 
     using clk = std::chrono::steady_clock;
     const long long hz     = m_.clock.hz();
-    uint64_t        startT = m_.clock.now();  // the throttle's baseline -- and an idle
-    auto            start  = clk::now();      // nap RE-BASES it. See the nap, below.
+    const uint64_t  startT = m_.clock.now();  // the throttle's baseline
+    const auto      start  = clk::now();
     const bool      tty    = con.isTty();
     const char      attn   = (char)('A' + con.attn() - 1);
 
@@ -1895,6 +1900,13 @@ void Monitor::runMachine(std::ostream& out, bool stepOver) {
         // real work resets it.
         //
         // Measured on 8 MB CP/M at `A0>`: 100% of a core before this, ~3.5% after.
+        //
+        // A PACED RUN NEVER NAPS (#606, mayNap in monitor.h). The nap is for a machine
+        // that runs flat out. With a crystal set, the throttle below already sleeps for
+        // most of every slice, and it is the sleep that keeps the time. The nap used to
+        // be taken in place of it: a 2 MHz slice is about 8 ms of guest time and it got
+        // 4 ms, so a guest at a prompt ran 1.3 times its crystal, and one that counted a
+        // timeout while it polled the console counted it short.
         static constexpr uint64_t kIdleRatio  = 32;  // an empty poll every 32 instructions
         static constexpr auto     kIdleWarmup = std::chrono::milliseconds(20);
         static constexpr auto     kIdleNap    = std::chrono::milliseconds(4);
@@ -1902,8 +1914,11 @@ void Monitor::runMachine(std::ostream& out, bool stepOver) {
         const SliceWork work{r.steps, con.written() - wasWritten, m_.rxBytes() - wasReceived,
                              con.hungry() - wasHungry};
 
-        const bool idling =
-            m_.clock.idle() && anyConsole && tty && guestIsWaiting(work, kIdleRatio);
+        // Does the throttle pace this run? The reasoning is at the throttle, below.
+        const bool pace = shouldPace(anyConsole, tty, anyRemoteLine, m_.clock.free());
+
+        const bool idling = mayNap(m_.clock.idle(), anyConsole, tty, pace) &&
+                            guestIsWaiting(work, kIdleRatio);
 
         if (!idling) {
             idleSince = clk::time_point{};  // it did something. The clock starts over.
@@ -1911,14 +1926,6 @@ void Monitor::runMachine(std::ostream& out, bool stepOver) {
             idleSince = clk::now();         // the first quiet slice. Now we watch.
         } else if (clk::now() - idleSince >= kIdleWarmup) {
             std::this_thread::sleep_for(kIdleNap);
-
-            // AND THE THROTTLE MUST NOT TRY TO WIN THAT TIME BACK. It paces emulated
-            // time against a baseline taken at RUN, so a nap leaves emulated time
-            // behind -- and a 2 MHz machine would then sprint flat out the instant you
-            // typed a key, for as long as you had been sitting at the prompt. Re-basing
-            // says what is true: the idle time never happened.
-            startT = m_.clock.now();
-            start  = clk::now();
             continue;
         }
 
@@ -1942,7 +1949,6 @@ void Monitor::runMachine(std::ostream& out, bool stepOver) {
         // the wire, or (with a fixed-rate peer) simply lied about the speed. A PIPED console
         // -- state "console" but no tty -- is deliberately still NOT paced: a script has no
         // wall clock to keep in step with, which is what a `-c` run and a CPU test want.
-        const bool pace = shouldPace(anyConsole, tty, anyRemoteLine, m_.clock.free());
         if (pace) {
             double want = (double)(m_.clock.now() - startT) / (double)hz;
             double got  = std::chrono::duration<double>(clk::now() - start).count();

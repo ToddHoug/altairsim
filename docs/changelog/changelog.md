@@ -8,6 +8,13 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+### A guest at a prompt keeps the time of its crystal
+
+With a crystal set (`SET cpu0 clock_hz=2000000`), a guest that waited at a prompt after `RUN`
+ran at about 1.3 times its crystal. A guest that counted a timeout while it waited for a key
+counted it too fast. The guest now keeps the time of its crystal at a prompt. At full speed
+(`clock_hz = 0`, the default), nothing changes: `idle` still lets the processor rest at a prompt.
+
 ### Machine-file errors give the line, and a table written two times is an error
 
 Each error in a machine file now gives the line number: `mine.toml: line 7: ...`.
