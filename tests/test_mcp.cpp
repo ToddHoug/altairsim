@@ -492,6 +492,37 @@ void test_mcp() {
               "the guest executed the TYPEd command -- its dump reached the scripted console");
     }
 
+    SECTION("MCP: TYPE sends a quote and a control byte through the monitor tool (issue #624)");
+    {
+        // A client that cannot put a JSON escape in `input` sends its keys with TYPE. The
+        // text used to stop at `\"`, so the guest got half a line. ALTMON does not echo a
+        // key that is not a command; it gives a new prompt. So the quote shows as a second
+        // `*` before the dump, and the dump shows the text after the quote arrived too.
+        // (The bytes themselves are checked one by one in test_cli.)
+        Machine m;
+        if (!loadAltmon(m)) return;
+
+        std::ostringstream s;
+        int id = 0;
+        auto req = [&](const char* method, const std::string& params) {
+            s << R"({"jsonrpc":"2.0","id":)" << ++id << R"(,"method":")" << method
+              << R"(","params":)" << params << "}\n";
+        };
+        req("initialize", "{}");
+        req("tools/call", R"({"name":"run","arguments":{"from":63488,"until":"ALTMON","timeout_ms":4000}})");
+        req("tools/call", R"({"name":"monitor","arguments":{"command":"TYPE \"\\\"\\x44F800F80F\\^M\""}})");
+        req("tools/call", R"({"name":"run","arguments":{"timeout_ms":4000}})");
+
+        auto rep = runScript(m, s.str());
+
+        CHECK(!rep[3].at("result").has("isError"), "the TYPE command did not error");
+        const std::string out = rep[4].at("result").at("structuredContent").at("output").str();
+        CHECK(out.find("*\r\n*DUMP") != std::string::npos,
+              "the quote reached the guest: a new prompt for a key ALTMON does not know");
+        CHECK(out.find("3E 03 D3 10") != std::string::npos,
+              "and so did the text after it: \\x44 is D, \\^M is the carriage return");
+    }
+
     SECTION("MCP: --mirror wraps the console so a socket client watches and takes over");
     {
         const BuiltinMachine* altmon = nullptr;

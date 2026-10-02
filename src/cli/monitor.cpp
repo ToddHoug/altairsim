@@ -155,6 +155,71 @@ static std::string restOfLine(const std::string& line, int skip) {
     return line.substr(i, end - i);
 }
 
+// TYPE's quoted text, taken from the raw command line. tokenize() ends a quoted token at
+// the first `"`, which is right for a path (a Windows directory may end in a backslash)
+// and wrong for text that has a quote in it: `TYPE "PRINT \"HI\"\r"` stopped at `PRINT \`
+// (issue #624). So TYPE reads its own argument. `arg` starts at the opening quote. A
+// backslash takes the next character with it, so `\"` does not end the text and `\\`
+// does not hide the quote that does. The escapes come back still encoded, for
+// decodeTypeEscapes(); what follows the closing quote (a comment) is dropped.
+static bool isCtrlKey(char k) { return k == '?' || (k >= '@' && k <= '_') || (k >= 'a' && k <= 'z'); }
+
+static std::string typeQuotedText(const std::string& arg) {
+    std::string s;
+    for (size_t i = 1; i < arg.size() && arg[i] != '"'; ++i) {
+        s += arg[i];
+        if (arg[i] != '\\' || i + 1 >= arg.size()) continue;
+        s += arg[++i];
+        // `\^\` is Ctrl-\: its second backslash is the key, not the start of an escape.
+        if (arg[i] == '^' && i + 1 < arg.size() && isCtrlKey(arg[i + 1])) s += arg[++i];
+    }
+    return s;
+}
+
+static int hexDigit(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+// The escapes TYPE knows (see its HELP). \^X is the key Ctrl-X and \xHH is the byte HH,
+// so a keyboard that has no way to send ^C, ^Z or ESC can still type one. An escape TYPE
+// does not know keeps its backslash -- it is typed as written, never dropped.
+static std::string decodeTypeEscapes(const std::string& s) {
+    std::string keys;
+    for (size_t i = 0; i < s.size(); ++i) {
+        if (s[i] != '\\' || i + 1 >= s.size()) {
+            keys += s[i];
+            continue;
+        }
+        const char e = s[i + 1];
+        switch (e) {
+            case 'r': keys += '\r'; ++i; continue;
+            case 'n': keys += '\n'; ++i; continue;
+            case 't': keys += '\t'; ++i; continue;
+            case '\\': keys += '\\'; ++i; continue;
+            case '"': keys += '"'; ++i; continue;
+            default: break;
+        }
+        if (e == 'x' && i + 3 < s.size() && hexDigit(s[i + 2]) >= 0 && hexDigit(s[i + 3]) >= 0) {
+            keys += (char)(hexDigit(s[i + 2]) * 16 + hexDigit(s[i + 3]));
+            i += 3;
+            continue;
+        }
+        if (e == '^' && i + 2 < s.size()) {
+            const char k = s[i + 2];
+            if (isCtrlKey(k)) {
+                keys += k == '?' ? (char)0x7F : (char)(k & 0x1F);
+                i += 2;
+                continue;
+            }
+        }
+        keys += '\\';  // an unknown escape: the backslash, then the character on the next pass
+    }
+    return keys;
+}
+
 static std::string upper(std::string s) {
     for (auto& c : s) c = (char)std::toupper((unsigned char)c);
     return s;
@@ -5238,22 +5303,10 @@ bool Monitor::exec(const std::string& line, std::ostream& out) {
         // BEFORE the RUN that boots the guest, which is how a machine file launches a
         // program the monitor cannot reach (e.g. SOLOS `XE`). See the command's HELP.
         if (!need(2, "TYPE \"text\"")) return true;
-        const std::string s = unquote(a[1]);
-        std::string keys;
-        for (size_t i = 0; i < s.size(); ++i) {
-            if (s[i] == '\\' && i + 1 < s.size()) {
-                switch (s[++i]) {
-                    case 'r': keys += '\r'; break;
-                    case 'n': keys += '\n'; break;
-                    case 't': keys += '\t'; break;
-                    case '\\': keys += '\\'; break;
-                    case '"': keys += '"'; break;
-                    default: keys += '\\'; keys += s[i]; break;  // leave an unknown escape as written
-                }
-            } else {
-                keys += s[i];
-            }
-        }
+        // Quoted text comes from the raw line, not from `a`: tokenize() would end it at
+        // the first `"`, escaped or not (issue #624). An unquoted word is `a[1]`, as ever.
+        const std::string raw  = restOfLine(line, 1);
+        const std::string keys = decodeTypeEscapes(raw[0] == '"' ? typeQuotedText(raw) : a[1]);
         // Under --mcp Console::instance() is not wired to the guest -- its console line was
         // rebound to a ScriptedStream (mcp/server.cpp), so a plain inject() would vanish
         // and TYPE would silently do nothing (issue #427). Feed the scripted line the guest

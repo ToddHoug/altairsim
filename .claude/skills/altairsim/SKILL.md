@@ -37,6 +37,9 @@ run {input: "ASM FOO\r", until: "A>", timeout_ms: 120000}
 - **Control bytes are JSON escapes:** `\u0003` for ^C, `\u001a` for ^Z, `\u001b` for ESC.
   `\x03` is not JSON — it reaches the guest as the three characters `x03`, which is why a
   control byte can seem to vanish while printable text gets through.
+- **If your client sends the text as written** — a `\r` arrives as the two characters `\`
+  and `r` — type with `monitor {command: 'TYPE "DIR\r"'}` and then a bare `run`. `TYPE`
+  decodes `\r`, `\"`, `\^C` (Ctrl-C; `\^Z`, `\^[` for ESC) and `\xHH` itself.
 
 `send {text}` types without running, `recv {}` drains output without running, `regs {}` reads
 the CPU. `monitor {command}` runs any one monitor command (`MOUNT`, `SET`, `DISASM`, `IN`,
