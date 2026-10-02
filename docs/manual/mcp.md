@@ -123,8 +123,10 @@ you keep the copy in the package unchanged, you always have a clean one to start
 Also keep a spare copy of the machine and its new disk, so that "start again" gives you a known
 state, not what the guest last wrote.
 
-**Give it local information to read.** Put `DRIVING-WITH-AI.md` in the folder. It is the
-briefing for the assistant itself, with the steps for booting, building and debugging over MCP.
+**Give it local information to read.** Put `DRIVING-WITH-AI.md` and the `skills` folder in the
+folder. `DRIVING-WITH-AI.md` is the briefing for the assistant itself, with the steps for booting
+and debugging over MCP. The files in `skills` have the rules for programs that run in the
+machine, such as the assembler and MBASIC.
 Keep a second folder, for example `Reference`, for anything else that you want the assistant to
 use: the parts of this manual that are important to your project, and your own source material,
 converted to plain Markdown. An assistant reads Markdown most reliably. These copies go out of
@@ -139,8 +141,8 @@ a common one, such as booting CP/M, assembling a file or copying something to a 
 assistant first tries the way that it has seen most often, even when the files in your folder
 say something else. For example, when you ask it to get a program onto a disk, it tries a host
 tool such as `cpmtools`. That tool does not understand the hard-sectored disks of the Altair.
-The way that works is to build inside the machine over the host bridge, as `DRIVING-WITH-AI.md`
-says. The longer a session runs, the more the assistant goes back to the common way.
+The way that works is to build inside the machine over the host bridge, as
+`skills/altairsim-cpm-build/SKILL.md` says. The longer a session runs, the more the assistant goes back to the common way.
 
 For this reason:
 

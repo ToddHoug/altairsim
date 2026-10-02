@@ -1,6 +1,6 @@
 ---
 name: altairsim
-description: Drive the altairsim MITS Altair 8800 / S-100 simulator over its built-in MCP server — boot a machine, type at a guest's console and read what it prints, assemble and run a CP/M program, single-step and debug one, or talk to a real serial device. Use this whenever a task involves altairsim, an Altair 8800, CP/M 2.2, MBASIC, 8080/Z80 assembly on a period machine, or a `.toml` machine file — and whenever you would otherwise reach for expect or a pty to poke a running guest.
+description: Drive the altairsim MITS Altair 8800 / S-100 simulator over its built-in MCP server — boot a machine, type at a guest's console and read what it prints, single-step and debug a program, or talk to a real serial device. Use this whenever a task involves altairsim, an Altair 8800, CP/M 2.2, 8080/Z80 assembly on a period machine, or a `.toml` machine file — and whenever you would otherwise reach for expect or a pty to poke a running guest.
 ---
 
 # Driving altairsim
@@ -64,13 +64,22 @@ Driving a guest with `expect` or a bare pty fights console pacing and recurring 
 - `cheatsheet.md`, beside this skill, is the whole command surface as plain text — generated
   from the program, so it matches the binary you have.
 
+## Rules for a guest program
+
+This skill is about the simulator. The rules of a program that runs in the guest are in
+separate skills, beside this one. Load the skill for the program that the task uses:
+
+- `altairsim-cpm-build` — build a CP/M program: `ASM` and `LOAD`, or `M80` and `L80`.
+- `altairsim-hostbridge` — move a file into or out of the guest: `R`, `W`, `HDIR`.
+- `altairsim-cpm-text` — make or edit a text file for CP/M: CR/LF line ends, the 8.3 name.
+- `altairsim-mbasic` — type at MBASIC, or enter a BASIC program.
+
 ## The full briefing
 
 `references/driving-with-ai.md` is the long form and the place to look before anything past a
-boot-and-type: registering the server with a client, the host bridge (`R`/`W`/`HDIR`) and a
-complete assemble-extract-fix round trip, building a machine from a bare disk image, the
-debugger commands worth reaching for, attaching a real serial port, and the gotchas that cost
-an hour each — CR/LF source files, a BIOS that trashes registers, card base versus channel
+boot-and-type: registering the server with a client, building a machine from a bare disk
+image, the debugger commands worth reaching for, attaching a real serial port, and the
+gotchas that cost an hour each — a BIOS that trashes registers, card base versus channel
 register. Read it when the task goes past typing at a prompt.
 
 (In a clone of the repository rather than a release package, that file is

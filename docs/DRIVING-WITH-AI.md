@@ -10,8 +10,7 @@ This works with **any MCP-capable assistant**. The examples below use **Claude**
 client, but the server speaks the open Model Context Protocol and the same steps apply elsewhere.
 
 Every recipe below was **verified end to end** against the CP/M machine that ships in this
-package (`examples/cpm/cpm22-buffered.toml`): the assemble-and-extract build and the serial attach both run
-green. Point at the `altairsim` you were given.
+package (`examples/cpm/cpm22-buffered.toml`). Point at the `altairsim` you were given.
 
 **New to this?** The `examples/ai-mcp/` folder is a ready-made working directory: register the
 server there (below) and ask your assistant to build and fix the little program waiting in it —
@@ -311,65 +310,42 @@ line keeps running and is serviced on every `run` slice: a second serial board o
 socket. A program that moves bytes between the console and a modem port works as it would at a real
 terminal.
 
-## Recipe: build a CP/M program end to end
+## Rules for a guest program
 
-Machine: the CP/M config (`examples/cpm/cpm22-buffered.toml`). Its disk already carries `ASM.COM`, `LOAD.COM`
-and the host-bridge `R/W/HDIR.COM`. Launch altairsim **from the directory holding your
-source**, or aim the sandbox elsewhere: `monitor {command: "SET hb0 HOSTDIR=/path"}`.
+This document is about the simulator. The rules of a program that runs in the guest are in
+separate skills. Each skill is one short Markdown file. In the package, each one is a folder
+in `skills/`. Read the file for the program that the task uses:
 
-```
-run {from: 65280, until: "A>"}                           # boot (65280 = FF00)
-run {input: "R FOO.ASM\r",  until: "A>"}                 # host -> CP/M (host-bridge)
-run {input: "ASM FOO\r",    until: "A>", timeout_ms: 20000}   # -> FOO.HEX + FOO.PRN
-run {input: "LOAD FOO\r",   until: "A>"}                 # -> FOO.COM
-run {input: "W FOO.COM\r",  until: "A>"}                 # CP/M -> host (binary, default)
-run {input: "W FOO.HEX FOO.HEX T\r", until: "A>"}        # T = text (trims trailing ^Z)
-run {input: "W FOO.PRN FOO.PRN T\r", until: "A>"}
-```
+| Skill | Read it when the task… |
+|---|---|
+| `skills/altairsim-cpm-build/SKILL.md` | builds a CP/M program: `ASM` and `LOAD`, or `M80` and `L80` |
+| `skills/altairsim-hostbridge/SKILL.md` | moves a file into or out of the guest: `R`, `W`, `HDIR` |
+| `skills/altairsim-cpm-text/SKILL.md` | makes or edits a text file for CP/M: CR/LF line ends, the 8.3 name |
+| `skills/altairsim-mbasic/SKILL.md` | types at MBASIC, or enters a BASIC program |
 
-A clean assembly prints `END OF ASSEMBLY` (and a `USE FACTOR`); `LOAD` reports the load
-address range. The host bridge:
-
-- `R <hostfile> [cpmfile]` — host → CP/M. `W <cpmfile> [hostfile] [B|T]` — CP/M → host.
-- **`B` (binary) is the default and is what a `.COM` needs**; use **`T`** for text
-  (`.PRN`/`.HEX`/`.TXT`) so the trailing `^Z` padding is trimmed. Never `T` a `.COM`.
-- `HDIR [pattern]` lists the host side. Before any utility exists on a fresh disk, paste a
-  source in with `PIP FOO.ASM=CON:` (end with `^Z`).
-
-**Source files must be CR/LF.** `R` copies bytes verbatim; DR `ASM.COM` needs CR/LF line
-endings, and an LF-only file assembles to nothing (`000H USE FACTOR`). `ASM.COM` also has **no
-`INCLUDE`** directive (that is M80's `MACLIB`) — each `.ASM` carries its own equates.
-
-**`ASM.COM`'s own symbol rules fail *quietly*** — these are Digital Research's, not the
-simulator's, but you meet them the instant you assemble period source, and each one assembles a
-wrong byte instead of an error you can see:
-
-- A symbol name is **letters, digits, `?` and `@` only — no underscore.** An underscore throws
-  an `S` error, the symbol resolves to `0`, and every later use silently assembles `00`.
-- A **reserved mnemonic cannot be a symbol.** `JMP EQU 0C3H` is read as a `JMP` *instruction*,
-  so the name is never defined.
-- `ASM.COM` is **case-insensitive**, so a label equal to an `EQU` under case folding collides:
-  `fujiRd` and `FUJIRD EQU 52H` are one name (a phase error `P`, and `MVI A,FUJIRD` assembles
-  the wrong byte).
-
-When a constant matters, read the `.PRN` back and check the object bytes — `00` where a value
-belongs is the tell that a symbol went unresolved or was defined twice.
+`ASM.COM` has **no `INCLUDE`** directive (that is M80's `MACLIB`) — each `.ASM` carries its
+own equates.
 
 **Work on a copy of the disk.** CP/M writes to the mounted image; the `.dsk` files are not
 redistributable and there is no undo — copy the machine directory first if you are about to
-write in anger. This is a **track-buffered** BIOS: it holds the current track in RAM and
-commits it when CP/M changes track or warm-boots. Getting back to a live `A>` prompt is a warm
-boot, so end every session at `A>` before you unmount or snapshot, or the last write is lost.
+write in anger.
 
-**Two flushes stand between a guest write and the bytes on your host disk.** The BIOS commits
-its track buffer on console input or a warm boot; altairsim commits the host `.dsk` on
-**`UNMOUNT`** (or `QUIT`). So to read a freshly written image back on the host, first get to the
-`A>` prompt *and* `UNMOUNT` — and release the file from any other altairsim still holding it, or
-a stale write clobbers what you just made.
+**One buffer can stand between a guest write and the bytes on your host disk, and it is the
+guest's.** The BIOS of this machine is **track-buffered**: it holds the current track in RAM,
+and writes it to the disk when CP/M asks for another track or drive, or waits for a key. Not
+every CP/M BIOS buffers, and you cannot tell from the prompt which kind you have. **Assume that
+the BIOS buffers.** A guest at the `A>` prompt is waiting for a key, so end at `A>` before you
+read the image on the host, unmount it or take a snapshot; a guest stopped in the middle of a
+program can still hold the last track. altairsim adds no buffer of its own: each sector the
+guest writes goes into the host `.dsk` at once, so no `UNMOUNT` is needed first.
+
+**One altairsim per image.** Each process reads the image into memory when it mounts it, so a
+second altairsim on the same `.dsk` does not see what the first one wrote, and its own writes
+go on top of them.
 
 ## From a bare disk image to a booting machine
 
-The recipe above starts from a machine that already has its disk wired in. When all you have
+The build skill starts from a machine that already has its disk wired in. When all you have
 is a **bare image** — a `.dsk` or a `.imd` off a real machine — and no machine file, three
 things trip up a cold start:
 
@@ -675,7 +651,6 @@ it there, and when they disagree you have a known-good side to compare against.
 
 ## Gotchas
 
-- **CR/LF sources** — the single most common assemble-to-nothing cause (see above).
 - **The CP/M BIOS trashes registers.** `CONST`/`CONIN`/`CONOUT` may clobber any register. Keep
   loop state in **memory**, not a register (this BIOS preserves `HL` but not `B`).
 - **Card base vs. channel register.** `board_set … port` is the card's **hex** base (`0x14`),

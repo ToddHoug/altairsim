@@ -66,6 +66,7 @@ LICENSE                               ours (MIT)
 LICENSE-SDL3                          SDL3's zlib licence
 hostbridge/                           file-transfer utilities: source, HEX, COM
 skills/altairsim/                     the MCP briefing as an Agent Skill
+skills/altairsim-*/                   the rules for one guest program each, as Agent Skills
 examples/...                          the shipped example machines, with their media
 ```
 
@@ -75,8 +76,9 @@ because SDL3 is linked into the binary (§3.2): its code ships, so its licence d
 **The contents change in `docs/package.map`, never in `tools/build-package.sh`.** A new shipped
 path must also be named in `docs/manual/package.md`; `docs-package` fails the build otherwise.
 
-Only `skills/altairsim/` ships from `.claude/skills/`. The release skills are for whoever builds
-the package, and the map names each shipped skill on its own line for that reason.
+Only `altairsim` and the `altairsim-*` skills ship from `.claude/skills/`. The release skills
+are for whoever builds the package, and the map names each shipped skill on its own line for
+that reason.
 
 The Developer Guide is not in the package. It is about the source, which is not in there either.
 
