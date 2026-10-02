@@ -88,6 +88,12 @@ Absolute paths and the `builtin:` scheme are never re-based: `mount = "builtin:d
 
 The two are independent and share no mechanism. They get confused because both end in the words "which directory?" — but one decides where a path **points**, and the other decides how far a guest may **reach**. Moving one would not move the other.
 
+## Errors name the line, and a table is written once
+
+Every error from the loader reads `<file>: line N: <what is wrong>`. `N` is the line of the key at fault, or of the table header when the fault is the table (a sub-unit table that its board refused, an unknown table, a `[[board]]` with no `id`). A fault inside a `base` file names both links: `mine.toml: line 3: base.toml: line 9: ...`.
+
+**`[machine]`, `[console]`, `[display]` and `[terminal]` appear once per file; `[board.unit.<name>]` once per `[[board]]`; a key once per table.** A second one is refused and the error gives both lines — it is almost always two files pasted together, and before this check the second `[machine]` was reported as whatever its `base` tripped over. The scope is the *file*: a `base` is a separate file, so restating a table the base wrote is the ordinary delta. Two `[[board]]` blocks that MODIFY the same id stay legal. A key above the first table is an error, as is text after a table header and a `startup = [` that never closes.
+
 ## Verbs
 
 - **`MOUNT`** refers to **host files** (disk and tape images).

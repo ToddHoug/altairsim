@@ -8,6 +8,17 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+### Machine-file errors give the line, and a table written two times is an error
+
+Each error in a machine file now gives the line number: `mine.toml: line 7: ...`.
+
+A file that has `[machine]`, `[console]`, `[display]` or `[terminal]` two times does not load.
+The same is true for a `[board.unit.<name>]` written two times below one `[[board]]`, and for a
+key written two times in one table. The error gives both lines. Before, the second copy won
+silently, or the program reported a different problem. A key above the first table, text after
+a table header, and a `startup` list with no closing `]` are also errors now. **A machine file
+that loaded before can be refused now**; the error tells you which line to remove.
+
 ### The manual shows the machine-file form of `CONNECT` and `MOUNT`
 
 The serial and disks chapters of the User Manual showed monitor commands only. They now show the

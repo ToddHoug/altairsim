@@ -42,8 +42,14 @@ startup = ["RUN FF00"]
 # of a real monitor, with the raster softened so the text reads as phosphor rather than a
 # crisp pixel grid. A host preference, answerable before any window exists (host/display.h);
 # flip it live with `SET DISPLAY crt=off` / `SHOW DISPLAY`.
+#
+# THE WINDOW TAKES FOCUS. `focus = true` lets the terminal window grab keyboard focus the
+# moment it opens, so you can start typing at CP/M without clicking it first -- the friendly
+# default when the window IS your console. Off (the session default) opens it unfocused,
+# leaving the launching terminal in front. Session-wide: `SET DISPLAY focus=on` / `SHOW DISPLAY`.
 [display]
-crt = true
+crt   = true
+focus = true
 
 # THE CONSOLE CABLE. `id = "sio0"` with no `type` reaches the 2SIO the base already put in
 # the machine at port 0x10, and re-plugs its channel A from `console` into a built-in VT100.
@@ -62,13 +68,6 @@ id = "dsk0"
   [[board.drive]]
   unit  = 0
   mount = "cpm22b23-56k.dsk"
-
-# THE WINDOW TAKES FOCUS. `focus = true` lets the terminal window grab keyboard focus the
-# moment it opens, so you can start typing at CP/M without clicking it first -- the friendly
-# default when the window IS your console. Off (the session default) opens it unfocused,
-# leaving the launching terminal in front. Session-wide: `SET DISPLAY focus=on` / `SHOW DISPLAY`.
-[display]
-focus = true
 
 # THE TERMINAL'S TRANSFORM CHAIN. `[terminal]` is to a `connect = "terminal"` window what
 # `[console]` is to stdio: the handful of fold-the-bytes fixes a real terminal-with-a-human

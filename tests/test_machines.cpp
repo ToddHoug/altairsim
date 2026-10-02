@@ -775,3 +775,146 @@ void test_toml_notes() {
     CHECK(loadTomlText(saved, "noted (saved)", reload, er2, &rnotes), "...and the saved file reloads");
     CHECK(rnotes.empty(), "...with no notes, because none were written");
 }
+
+// ---------------------------------------------------------------------------
+// A machine-file error says WHICH LINE, and a table written twice is refused as that --
+// not as whatever the second copy happened to trip over.
+// ---------------------------------------------------------------------------
+namespace {
+
+// The load must FAIL, and the message must hold every one of `wants`.
+bool refusedWith(const std::string& text, std::initializer_list<const char*> wants,
+                 std::string* shown = nullptr) {
+    Machine     m;
+    std::string err;
+    bool        ok = loadTomlText(text, "t.toml", m, err);
+    if (shown) *shown = err;
+    if (ok) return false;
+    for (const char* w : wants)
+        if (err.find(w) == std::string::npos) return false;
+    return true;
+}
+
+} // namespace
+
+void test_toml_errors() {
+    SECTION("a table written twice is refused, and both lines are named");
+
+    // Two machine files pasted together, cut down from the file that was reported.
+    CHECK(refusedWith("# a comment\n"              // 1
+                      "[machine]\n"                // 2
+                      "name = \"one\"\n"           // 3
+                      "base = \"default\"\n"       // 4
+                      "\n"                         // 5
+                      "[machine]\n"                // 6
+                      "name = \"one\"\n"
+                      "base = \"default\"\n",
+                      {"t.toml: line 6: [machine] is already at line 2"}),
+          "a second [machine] is named as that, with both lines");
+
+    for (const char* tbl : {"console", "display", "terminal"}) {
+        std::string text = "[machine]\nbase = \"default\"\n[" + std::string(tbl) + "]\n\n[" +
+                           std::string(tbl) + "]\n";
+        std::string want = "line 5: [" + std::string(tbl) + "] is already at line 3";
+        CHECK(refusedWith(text, {want.c_str()}), "...and so is a second host table");
+    }
+
+    CHECK(refusedWith("[machine]\n"
+                      "base = \"default\"\n"
+                      "[[board]]\n"
+                      "id = \"sio0\"\n"
+                      "  [board.unit.a]\n"         // 5
+                      "  baud = 9600\n"
+                      "  [board.unit.A]\n"         // 7 -- the same unit, in another case
+                      "  baud = 300\n",
+                      {"line 7: [board.unit.a] is already at line 5"}),
+          "a unit table written twice under one [[board]] is refused");
+
+    {
+        Machine     m;
+        std::string err;
+        CHECK(loadTomlText("[machine]\n"
+                           "base = \"default\"\n"
+                           "[[board]]\n"
+                           "id = \"sio0\"\n"
+                           "  [board.unit.a]\n"
+                           "  baud = 9600\n"
+                           "[[board]]\n"
+                           "id = \"sio0\"\n"
+                           "  [board.unit.a]\n"
+                           "  baud = 300\n",
+                           "t.toml", m, err),
+              "...but a new [[board]] starts its unit tables over");
+        if (!err.empty()) std::printf("      %s\n", err.c_str());
+
+        // The base has a [console] of its own. A `base` is another file, so this is not twice.
+        Machine m2;
+        err.clear();
+        CHECK(loadTomlText("[machine]\nbase = \"default\"\n[console]\nbsdel = \"bs\"\n", "t.toml",
+                           m2, err),
+              "a file may restate a table its base wrote");
+        if (!err.empty()) std::printf("      %s\n", err.c_str());
+    }
+
+    SECTION("the syntax checks: a key twice, a key in no table, a header with a tail");
+
+    CHECK(refusedWith("[machine]\n"
+                      "name = \"a\"\n"
+                      "base = \"default\"\n"
+                      "name = \"b\"\n",
+                      {"line 4: 'name' is already set at line 2"}),
+          "a key written twice in one table is refused, with both lines");
+    CHECK(refusedWith("nmae = \"x\"\n[machine]\nbase = \"default\"\n",
+                      {"line 1: 'nmae' is not in a table"}),
+          "a key above the first table is refused, not dropped");
+    CHECK(refusedWith("[machine] name = \"x\"\n",
+                      {"line 1: unexpected text after the table header"}),
+          "text after a table header is refused");
+    CHECK(refusedWith("[machine]\n= 5\n", {"line 2: expected key = value"}),
+          "a line with no key is refused");
+    CHECK(refusedWith("[machine]\n"
+                      "base = \"default\"\n"
+                      "startup = [\"RUN FF00\",\n"
+                      "\n",
+                      {"line 3: unterminated array"}),
+          "a startup list that never closes is refused, at the line it opened");
+
+    SECTION("every loader error carries the line of the key or the table at fault");
+
+    CHECK(refusedWith("[machine]\nbase = \"default\"\n\nwidget = 1\n",
+                      {"t.toml: line 4: unknown [machine] key 'widget'"}),
+          "an unknown [machine] key");
+    CHECK(refusedWith("[machine]\nbase = \"default\"\n[[board]]\nid = \"cpu0\"\n\nfrobnicate = 1\n",
+                      {"line 6: [[board]] cpu0:", "frobnicate"}),
+          "an unknown board property");
+    CHECK(refusedWith("[machine]\nbase = \"default\"\n\n[widgets]\n",
+                      {"line 4: unknown table [widgets]"}),
+          "an unknown table");
+    CHECK(refusedWith("[machine]\nbase = \"default\"\n[[board]]\nid = \"dsk0\"\n"
+                      "  [[board.drive]]\n"        // 5
+                      "  unit = 0\n"
+                      "  readnoly = true\n",
+                      {"line 5: dsk0:", "readnoly"}),
+          "a bad sub-unit key, at the sub-unit's table");
+    CHECK(refusedWith("[machine]\nbase = \"default\"\n[[board]]\nid = \"sio0\"\n"
+                      "  [board.unit.a]\n"
+                      "  buad = 9600\n",
+                      {"line 6: [board.unit.a] on sio0:", "buad"}),
+          "a bad unit property");
+    CHECK(refusedWith("[machine]\nbase = \"default\"\n[console]\nbsdle = \"bs\"\n",
+                      {"line 4: [console]:", "bsdle"}),
+          "a bad [console] key");
+    CHECK(refusedWith("[machine]\nbase = \"default\"\n[[board]]\nid = \"nope\"\n",
+                      {"line 3: [[board]] nope: no board with that id"}),
+          "a MODIFY of a board that is not there, at its [[board]]");
+    CHECK(refusedWith("[machine]\nbase = \"no-such-machine\"\n",
+                      {"line 2: base: no built-in machine"}),
+          "a base that does not exist");
+    CHECK(refusedWith("[[board]]\n"
+                      "type = \"memory\"\n"
+                      "id = \"mem0\"\n"
+                      "[machine]\n"
+                      "base = \"default\"\n",
+                      {"line 5: `base` must come before the first [[board]]"}),
+          "`base` below a [[board]] still gets its own message, now with its line");
+}

@@ -12,6 +12,7 @@
 #include <cctype>
 #include <cstdio>
 #include <fstream>
+#include <map>
 #include <set>
 #include <sstream>
 
@@ -45,6 +46,11 @@ struct Table {
     KeyValues kv;
     std::vector<std::string> list;  // for `startup = [...]`
     bool hasList = false;
+    // WHERE IT WAS WRITTEN, for the error message: the header's line, and one line per
+    // entry of `kv`. A parallel vector and not a third member of the pair, because
+    // KeyValues is what every board's loadSubUnit() takes and a board has no use for it.
+    int line = 0;
+    std::vector<int> kvLine;
 };
 
 // Drop a trailing `# comment`, honoring quotes so a path with a '#' survives -- and
@@ -100,7 +106,7 @@ bool parse(const std::string& text, std::vector<Table>& out, std::string& err,
     std::string line;
     int lineNo = 0;
     Table* cur = nullptr;
-    out.push_back({"", false, {}, {}, false});  // the root table
+    out.push_back({"", false, {}, {}, false, 0, {}});  // the root table
     cur = &out.back();
 
     while (std::getline(in, line)) {
@@ -116,18 +122,33 @@ bool parse(const std::string& text, std::vector<Table>& out, std::string& err,
                 return false;
             }
             std::string nm = trim(s.substr(arr ? 2 : 1, close - (arr ? 2 : 1)));
-            out.push_back({nm, arr, {}, {}, false});
+            if (!trim(s.substr(close + (arr ? 2 : 1))).empty()) {
+                err = "line " + std::to_string(lineNo) + ": unexpected text after the table header";
+                return false;
+            }
+            out.push_back({nm, arr, {}, {}, false, lineNo, {}});
             cur = &out.back();
             continue;
         }
 
         size_t eq = s.find('=');
-        if (eq == std::string::npos) {
+        std::string k = eq == std::string::npos ? std::string() : trim(s.substr(0, eq));
+        if (k.empty()) {
             err = "line " + std::to_string(lineNo) + ": expected key = value";
             return false;
         }
-        std::string k = trim(s.substr(0, eq));
         std::string v = trim(s.substr(eq + 1));
+
+        // A KEY WRITTEN TWICE IN ONE TABLE is a block that was pasted and not cleaned up.
+        // The second one used to win silently, which is the one thing a machine file must
+        // never do: look as if a setting took when a later line undid it.
+        for (size_t i = 0; i < cur->kv.size(); ++i)
+            if (cur->kv[i].first == k) {
+                err = "line " + std::to_string(lineNo) + ": '" + k + "' is already set at line " +
+                      std::to_string(cur->kvLine[i]);
+                return false;
+            }
+        const int keyLine = lineNo;
 
         if (!v.empty() && v.front() == '[') {
             // An inline array. We only use it for `startup`, and multi-line
@@ -138,6 +159,10 @@ bool parse(const std::string& text, std::vector<Table>& out, std::string& err,
                 acc += " " + trim(stripComment(line, &notes));
             }
             size_t lb = acc.find('['), rb = acc.rfind(']');
+            if (rb == std::string::npos) {
+                err = "line " + std::to_string(keyLine) + ": unterminated array";
+                return false;
+            }
             std::string body = acc.substr(lb + 1, rb - lb - 1);
 
             // ---- A STARTUP ENTRY IS A COMMAND LINE, AND A COMMAND LINE QUOTES ITS
@@ -187,10 +212,12 @@ bool parse(const std::string& text, std::vector<Table>& out, std::string& err,
             }
             cur->hasList = true;
             cur->kv.push_back({k, "[]"});
+            cur->kvLine.push_back(keyLine);
             continue;
         }
 
         cur->kv.push_back({k, unquote(v)});
+        cur->kvLine.push_back(keyLine);
     }
     return true;
 }
@@ -305,32 +332,70 @@ bool loadInto(const std::string& text, const std::string& source, Machine& m,
         }
     } clearOnExit{m};
 
+    // EVERY ERROR BELOW SAYS WHICH LINE, in the form parse() already used. A machine file
+    // is mostly comment, and "unknown key" with no line sends the reader hunting.
+    auto at = [&path](int line) { return path + ": line " + std::to_string(line) + ": "; };
+
     Board* current = nullptr;
+
+    // A TABLE THAT IS WRITTEN ONE TIME: [machine], [console], [display], [terminal], and
+    // each [board.unit.<name>] under one [[board]]. A second one is two files pasted
+    // together, and it used to be reported as whatever the second copy tripped over --
+    // a second `base` said "must come before the first [[board]]" in a file with no board
+    // above it. THIS FILE only: a `base` is its own frame, so a file may restate its base.
+    std::map<std::string, int> onceTables, unitTables;
+    auto once = [&](std::map<std::string, int>& seen, const std::string& key,
+                    const std::string& shown, int line) {
+        auto [it, fresh] = seen.emplace(key, line);
+        if (fresh) return true;
+        err = at(line) + "[" + shown + "] is already at line " + std::to_string(it->second) +
+              " -- a table is written one time";
+        return false;
+    };
 
     // WHICH CARDS CAME FROM THE BASE, and which this file created itself. The whole
     // delta grammar turns on that difference -- see the [[board]] branch below.
     std::set<std::string> fromBase, declared;
 
     for (auto& t : tabs) {
-        if (t.name == "machine" || t.name.empty()) {
+        // A KEY ABOVE THE FIRST TABLE belongs to nothing. It used to be read as a
+        // [machine] key when it was one and DROPPED when it was not, so a misspelled
+        // setting up there loaded clean and did nothing.
+        if (t.name.empty()) {
+            if (!t.kv.empty()) {
+                err = at(t.kvLine[0]) + "'" + t.kv[0].first + "' is not in a table";
+                return false;
+            }
+            continue;
+        }
+
+        if (t.name == "machine" || t.name == "console" || t.name == "display" ||
+            t.name == "terminal") {
+            if (!once(onceTables, t.name, t.name, t.line)) return false;
+        }
+
+        if (t.name == "machine") {
             // BASE FIRST, whatever order the keys are written in. It builds the machine
             // that every other line in this file is a change TO, so it cannot run after
             // the `name` it would otherwise overwrite.
-            for (auto& [k, v] : t.kv) {
+            for (size_t i = 0; i < t.kv.size(); ++i) {
+                const auto& [k, v] = t.kv[i];
                 if (k != "base") continue;
                 if (!m.boards().empty()) {
-                    err = path + ": `base` must come before the first [[board]] -- it is "
-                                 "what the boards are a change TO";
+                    err = at(t.kvLine[i]) + "`base` must come before the first [[board]] -- "
+                                            "it is what the boards are a change TO";
                     return false;
                 }
                 if (!loadBase(v, dir, m, err, depth)) {
-                    err = path + ": " + err;
+                    err = at(t.kvLine[i]) + err;
                     return false;
                 }
                 for (const auto& b : m.boards()) fromBase.insert(b->id);
             }
 
-            for (auto& [k, v] : t.kv) {
+            for (size_t i = 0; i < t.kv.size(); ++i) {
+                const auto& [k, v] = t.kv[i];
+                const int   ln = t.kvLine[i];
                 if (k == "base") continue;
                 if (k == "name") m.name = v;
                 else if (k == "clock_hz") {
@@ -343,7 +408,7 @@ bool loadInto(const std::string& text, const std::string& source, Machine& m,
                     // So it is an ERROR, not an ignored key. A setting that is quietly
                     // dropped is worse than one that is refused: the config LOOKS like
                     // it slowed the machine down, and it did not.
-                    err = path + ": clock_hz belongs to the CPU BOARD, not to [machine] --\n"
+                    err = at(ln) + "clock_hz belongs to the CPU BOARD, not to [machine] --\n"
                           "  the crystal is on the board. Put it in the CPU's [[board]]:\n"
                           "      [[board]]\n"
                           "      type     = \"8080\"\n"
@@ -359,7 +424,7 @@ bool loadInto(const std::string& text, const std::string& source, Machine& m,
                     // written here. A config that LOOKED like it set the switches and
                     // did not is precisely the failure the clock_hz error exists to
                     // prevent, so this key gets the same refusal and the same sentence.
-                    err = path + ": sense belongs to the FRONT PANEL, not to [machine] --\n"
+                    err = at(ln) + "sense belongs to the FRONT PANEL, not to [machine] --\n"
                           "  the switches are on the Display/Control board. Add the board:\n"
                           "      [[board]]\n"
                           "      type  = \"fp\"\n"
@@ -368,8 +433,8 @@ bool loadInto(const std::string& text, const std::string& source, Machine& m,
                     return false;
                 } else if (k == "startup") {
                     m.startup = t.list;
-                } else if (!t.name.empty()) {
-                    err = path + ": unknown [machine] key '" + k + "'";
+                } else {
+                    err = at(ln) + "unknown [machine] key '" + k + "'";
                     return false;
                 }
             }
@@ -405,29 +470,30 @@ bool loadInto(const std::string& text, const std::string& source, Machine& m,
                 else if (k == "id") id = v;
                 else if (k == "remove") wantRemove = (v == "true" || v == "1" || v == "yes");
             }
+            unitTables.clear();  // a new board: its unit tables start over
             if (id.empty()) {
-                err = path + ": every [[board]] needs an `id`";
+                err = at(t.line) + "every [[board]] needs an `id`";
                 return false;
             }
 
             if (wantRemove) {
                 if (!type.empty()) {
-                    err = path + ": [[board]] " + id +
+                    err = at(t.line) + "[[board]] " + id +
                           ": `remove` and `type` contradict each other -- one takes the "
                           "board out, the other fits a new one";
                     return false;
                 }
-                for (auto& [k, v] : t.kv) {
-                    (void)v;
+                for (size_t i = 0; i < t.kv.size(); ++i) {
+                    const std::string& k = t.kv[i].first;
                     if (k != "id" && k != "remove") {
-                        err = path + ": [[board]] " + id + ": `" + k +
+                        err = at(t.kvLine[i]) + "[[board]] " + id + ": `" + k +
                               "` on a board that is being removed -- it would set a "
                               "property on a board that is about to leave the machine";
                         return false;
                     }
                 }
                 if (!m.remove(id, err)) {
-                    err = path + ": [[board]] " + id + ": " + err;
+                    err = at(t.line) + "[[board]] " + id + ": " + err;
                     return false;
                 }
                 fromBase.erase(id);
@@ -438,7 +504,7 @@ bool loadInto(const std::string& text, const std::string& source, Machine& m,
             if (type.empty()) {
                 current = m.find(id);
                 if (!current) {
-                    err = path + ": [[board]] " + id + ": no board with that id" +
+                    err = at(t.line) + "[[board]] " + id + ": no board with that id" +
                           (fromBase.empty()
                                ? " -- this file has no `base`, so there is nothing to "
                                  "modify. Give it a `type` to fit the board."
@@ -449,14 +515,14 @@ bool loadInto(const std::string& text, const std::string& source, Machine& m,
             } else {
                 if (fromBase.count(id) && !declared.count(id)) {
                     if (!m.remove(id, err)) {  // REPLACE: out with the base's, in with ours
-                        err = path + ": [[board]] " + id + ": " + err;
+                        err = at(t.line) + "[[board]] " + id + ": " + err;
                         return false;
                     }
                     fromBase.erase(id);
                 }
                 current = m.add(type, id, err);  // a dup WITHIN this file still lands here
                 if (!current) {
-                    err = path + ": " + err;
+                    err = at(t.line) + err;
                     return false;
                 }
                 declared.insert(id);
@@ -473,10 +539,11 @@ bool loadInto(const std::string& text, const std::string& source, Machine& m,
             // Everything else is a PROPERTY, resolved against the board's own
             // properties(). The loader knows nothing about phantom straps or
             // baud rates and never will.
-            for (auto& [k, v] : t.kv) {
+            for (size_t i = 0; i < t.kv.size(); ++i) {
+                const auto& [k, v] = t.kv[i];
                 if (k == "type" || k == "id" || k == "remove") continue;
                 if (!setProperty(*current, k, v, err)) {
-                    err = path + ": [[board]] " + id + ": " + err;
+                    err = at(t.kvLine[i]) + "[[board]] " + id + ": " + err;
                     return false;
                 }
             }
@@ -486,7 +553,7 @@ bool loadInto(const std::string& text, const std::string& source, Machine& m,
         // A sub-unit table: [[board.region]], [[board.drive]], [board.unit.a].
         if (t.name.rfind("board.", 0) == 0) {
             if (!current) {
-                err = path + ": [[" + t.name + "]] before any [[board]]";
+                err = at(t.line) + "[[" + t.name + "]] before any [[board]]";
                 return false;
             }
             std::string sub = t.name.substr(6);
@@ -511,16 +578,17 @@ bool loadInto(const std::string& text, const std::string& source, Machine& m,
             // LISTS of things the board owns, and they keep addSubUnit().)
             if (table == "unit") {
                 if (dot == std::string::npos) {
-                    err = path + ": [board.unit] needs a unit name -- [board.unit.a]";
+                    err = at(t.line) + "[board.unit] needs a unit name -- [board.unit.a]";
                     return false;
                 }
                 std::string unit = sub.substr(dot + 1);
                 UnitDef     ud;
                 if (!current->findUnit(unit, ud)) {
-                    err = path + ": board '" + current->id + "' (" + current->type() +
+                    err = at(t.line) + "board '" + current->id + "' (" + current->type() +
                           ") has no unit '" + unit + "'";
                     return false;
                 }
+                if (!once(unitTables, ud.name, "board.unit." + ud.name, t.line)) return false;
                 // The ONE property path -- same parser, same radix rule, same
                 // validation as `SET acr0:tape MODE=play` types at the monitor. A
                 // config file cannot set something the monitor would refuse.
@@ -531,9 +599,10 @@ bool loadInto(const std::string& text, const std::string& source, Machine& m,
                 // Sio2Board::channel(), which is not, and the file was refused with
                 // "has no property 'baud'". The board's own name is the canonical one;
                 // this is the same thing the monitor does with u.name.
-                for (const auto& [k, v] : t.kv)
-                    if (!setUnitProperty(*current, ud.name, k, v, err)) {
-                        err = path + ": [board.unit." + unit + "] on " + current->id + ": " + err;
+                for (size_t i = 0; i < t.kv.size(); ++i)
+                    if (!setUnitProperty(*current, ud.name, t.kv[i].first, t.kv[i].second, err)) {
+                        err = at(t.kvLine[i]) + "[board.unit." + unit + "] on " + current->id +
+                              ": " + err;
                         return false;
                     }
                 continue;
@@ -551,7 +620,7 @@ bool loadInto(const std::string& text, const std::string& source, Machine& m,
             // so all this needs to add is the file and the id. Prefixing the table again
             // here read `[[board.drive]] on dsk0: dcdd: [[board.drive]] has no ...`.
             if (!current->loadSubUnit(table, kv, err)) {
-                err = path + ": " + current->id + ": " + err;
+                err = at(t.line) + current->id + ": " + err;
                 return false;
             }
             continue;
@@ -561,9 +630,9 @@ bool loadInto(const std::string& text, const std::string& source, Machine& m,
         // go through the same one path as everything else (DESIGN.md 7.2), which
         // is why a config file cannot set something the monitor would refuse.
         if (t.name == "console") {
-            for (const auto& [k, v] : t.kv) {
-                if (!setPropertyIn(Console::instance().properties(), "console", k, v, err)) {
-                    err = path + ": [console]: " + err;
+            for (size_t i = 0; i < t.kv.size(); ++i) {
+                if (!setPropertyIn(Console::instance().properties(), "console", t.kv[i].first, t.kv[i].second, err)) {
+                    err = at(t.kvLine[i]) + "[console]: " + err;
                     return false;
                 }
             }
@@ -580,9 +649,9 @@ bool loadInto(const std::string& text, const std::string& source, Machine& m,
         // that failed to load on a no-SDL build would make the file unportable for a
         // preference that changes no emulated behavior at all.
         if (t.name == "display") {
-            for (const auto& [k, v] : t.kv) {
-                if (!setPropertyIn(Display::properties(), "display", k, v, err)) {
-                    err = path + ": [display]: " + err;
+            for (size_t i = 0; i < t.kv.size(); ++i) {
+                if (!setPropertyIn(Display::properties(), "display", t.kv[i].first, t.kv[i].second, err)) {
+                    err = at(t.kvLine[i]) + "[display]: " + err;
                     return false;
                 }
             }
@@ -595,16 +664,16 @@ bool loadInto(const std::string& text, const std::string& source, Machine& m,
         // the same reason as [display]: the setting is about what the machine WANTS, and
         // a build with no window simply has nothing to apply it to.
         if (t.name == "terminal") {
-            for (const auto& [k, v] : t.kv) {
-                if (!setPropertyIn(TerminalStream::properties(), "terminal", k, v, err)) {
-                    err = path + ": [terminal]: " + err;
+            for (size_t i = 0; i < t.kv.size(); ++i) {
+                if (!setPropertyIn(TerminalStream::properties(), "terminal", t.kv[i].first, t.kv[i].second, err)) {
+                    err = at(t.kvLine[i]) + "[terminal]: " + err;
                     return false;
                 }
             }
             continue;
         }
 
-        err = path + ": unknown table [" + t.name + "]";
+        err = at(t.line) + "unknown table [" + t.name + "]";
         return false;
     }
 

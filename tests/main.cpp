@@ -82,6 +82,7 @@ const struct {
     {"clock_survives_load", test_clock_survives_load},
     {"subunit_schema", test_subunit_schema},
     {"toml_notes", test_toml_notes},
+    {"toml_errors", test_toml_errors},
     {"isa", test_isa},
     {"z80_isa", test_z80_isa},
     {"8085_isa", test_8085_isa},
