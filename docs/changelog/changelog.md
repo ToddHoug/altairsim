@@ -8,6 +8,19 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+### The Newtech Model 6 Music Board
+
+A new board, `music6`: the Newtech Model 6 Music Board of 1977. It has one output port, a 6-bit
+D/A converter and a speaker. A program makes the sound: it writes the port in a timed loop, and
+you hear the result on the sound output of your computer.
+
+The default port is `24`, and the board also answers at `25`, `26` and `27`, as the real board
+does. The `port` setting takes `04`, `14`, `24` and so on to `F4`.
+
+Sound needs a crystal. At full speed (`clock_hz = 0`, the default), the board plays nothing.
+Newtech's programs are timed for 2 MHz: `SET cpu0 clock_hz=2000000`. `SHOW` on the board tells
+you if the speaker plays and, if it is silent, the reason.
+
 ### The manual shows a machine file that starts from a machine file
 
 The configuration chapter has a new example: one machine file that uses a second machine file

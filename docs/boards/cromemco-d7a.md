@@ -93,7 +93,8 @@ SW1–SW4 → **D4–D7**.
 
 A JS-1 makes sound with no sound chip: the CPU writes a waveform to the speaker's D/A
 channel in a timed loop, and the amplifier plays the voltage. So the sound is the latch's
-level over time, and the simulation is three steps.
+level over time, and the simulation is three steps. The first two are the shared `Speaker`
+(`src/host/speaker.h`), which the Newtech Model 6 (`docs/boards/newtech-music.md`) uses too.
 
 - **`write()` records.** A write that *changes* the level of a speaker's channel is noted
   as `(clock_->now(), level)`. Nothing else happens in the bus cycle.
@@ -235,5 +236,5 @@ restart both speakers at the restored level.
 - `src/boards/cromemco-d7a.{h,cpp}`, `src/host/joystick.h`, `src/host/joystick_null.h`,
   `src/host/joystick_sdl.{h,cpp}`.
 - `src/host/audio.h`, `src/host/audio_null.h`, `src/host/audio_sdl.{h,cpp}`,
-  `src/host/level_pcm.{h,cpp}`.
+  `src/host/speaker.{h,cpp}`, `src/host/level_pcm.{h,cpp}`.
 - `docs/boards/cromemco-dazzler.md` — the picture half of a Dazzler game console.

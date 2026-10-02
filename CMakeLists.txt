@@ -405,6 +405,9 @@ add_library(altair_core STATIC
   # D/A-driven speaker needs between the board and the host Audio service (host/audio.h).
   # No SDL and no board in it, so it is in every build and it is tested by itself.
   src/host/level_pcm.cpp
+  # One voice: a LevelPcm and the rules for when a slice of emulated time becomes sound.
+  # Every board with a D/A-driven speaker holds one (the D+7A, the Newtech Model 6).
+  src/host/speaker.cpp
   # ...and the seam that joins them to a mount. A decorator over MediaFile, so a WAV
   # decodes ONCE at MOUNT and everything above it -- TapeImage, TapeStream, the UART --
   # sees the bytes a .TAP would have given it (host/tapecodec.h).
@@ -558,6 +561,9 @@ add_library(altair_core STATIC
   # JS-1 joysticks from an injected host Joystick service (src/host/joystick.h), like
   # the Dazzler reads a Display. See cromemco-d7a.h.
   src/boards/cromemco-d7a.cpp
+  # The Newtech Model 6 Music Board: one write-only port into a 6-bit D/A, an amplifier
+  # and a speaker. Plays through the same Speaker as the D+7A. See newtech-music.h.
+  src/boards/newtech-music.cpp
   # The Processor Technology Sol-PC's integrated I/O as one composite card (serial,
   # keyboard, parallel, CUTS tape) -- reuses the vdm1 card for video. See proctech-sol.h.
   src/boards/pmmi-mm103.cpp
@@ -809,6 +815,7 @@ add_executable(altair_tests
   tests/framecheck.cpp
   tests/test_framedump.cpp
   tests/test_d7a.cpp
+  tests/test_music6.cpp
   tests/test_level_pcm.cpp
   tests/test_sol.cpp
   tests/test_tapemount.cpp

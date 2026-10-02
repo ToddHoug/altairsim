@@ -17,7 +17,7 @@ The manual has no printed page numbers, so the page numbers here are **PDF pages
 article is cited by its printed pages. This file omits the marketing sheet, the warranty and
 the speaker-safety advice.
 
-**Not emulated.**
+**Emulated** as the `music6` board (`docs/boards/newtech-music.md`).
 
 ---
 
@@ -285,7 +285,8 @@ counts): `MVI D` 7 + `OUT` 10 + six `INR/DCR M` 60 + N × (`DCR D` 5 + `JNZ` 10)
 
 North Star BASIC (Rev. 6). It reads note strings from `DATA` statements and writes the
 MICROPLAY score into memory with `FILL`, starting at `U` = 256 (`100H`). The sample score is
-"The Entertainer" by Scott Joplin: 119 notes and the end mark.
+"The Entertainer" by Scott Joplin: 120 notes and the end mark (the printed run counts
+1 to 120, and the `DATA` lines hold 120 note strings before the `X`).
 
 **Note string — 4 or 5 characters:**
 

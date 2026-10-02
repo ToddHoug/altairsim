@@ -406,6 +406,28 @@ If you are not just consuming endpoints but adding one (a new `something:` schem
 nothing, and the explanation is a hand-copy that rotted once (it promised `socket:` "was coming" long
 after it shipped). The test is what keeps the two honest.
 
+### A board with a speaker holds a `Speaker`
+
+A board whose sound is a latch into a D/A — the guest writes a level in a timed loop — does
+not render PCM itself. It holds one `Speaker` (`src/host/speaker.h`) for each voice and calls
+it in two places:
+
+```cpp
+void write(const BusCycle& c) override {          // the bus cycle only records
+    if (c.data != latch_ && clock_) spk_.edge(clock_->now(), (int8_t)c.data);
+    latch_ = c.data;
+}
+void pump() override {                             // the host turn makes the sound
+    if (clock_) spk_.pump(*clock_, true);
+}
+```
+
+Also call `spk_.clear()` in `power()`, `spk_.resync(now, level)` in `deserialize()`, and put
+`spk_.status(clock_)` in `statusLines()`. The host `Audio` service is already wired for every
+`Speaker` (`Speaker::setAudio` in both composition roots), so there is nothing to add there.
+The Cromemco D+7A and the Newtech Model 6 are the two examples; DESIGN.md §7.4 has the rules,
+and the first is that **a machine with no crystal plays nothing**.
+
 ### Regenerate the reference, ship a machine, and mind the two unguarded docs
 
 Three loose ends after the board itself compiles:

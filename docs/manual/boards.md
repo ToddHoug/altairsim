@@ -168,6 +168,7 @@ The boards are in groups, in the same order as the sections below.
 | `pio` | MITS 88-PIO: an 8-bit parallel port, in and out |
 | `4pio` | MITS 88-4PIO: up to four programmable parallel ports |
 | `d7a` | Cromemco D+7A: analog and parallel I/O. Reads joysticks and plays their speakers |
+| `music6` | Newtech Model 6 Music Board: a 6-bit D/A converter and a speaker |
 
 **Floppy and disk controllers**
 
@@ -788,7 +789,7 @@ queue. The **`lineprinter-lpc`** machine has one at `02`, with its output on `nu
 
 ## Parallel and analog I/O
 
-Parallel ports, and one board that also reads analog inputs.
+Parallel ports, one board that also reads analog inputs, and a music board.
 
 ### `pio`: MITS 88-PIO
 
@@ -875,6 +876,65 @@ The `dazzler` machine sets 4 MHz already.
 The timing of the board is not complete. A real D+7A holds the processor for a short time on
 each analog read and write, and the simulated board does not. A guest that makes a tone with a
 tight loop plays it at a higher pitch than on a real board.
+
+### `music6`: Newtech Model 6 Music Board
+
+A **music board**: one output port, a **6-bit D/A converter**, an amplifier and a speaker. The
+board has no sound chip and no timer. A program makes the sound. It writes a value to the port,
+waits, writes the next value, and the speaker plays the voltage. The time of the loop is the
+pitch. You hear it on the sound output of your computer.
+
+The default port is `24`. The board answers at **four addresses**, the port and the next three
+(`24` to `27`), because the real board does not decode the low two address lines. The `port`
+setting takes the sixteen addresses that the jumpers of the board can select: `04`, `14`, `24`
+and so on to `F4`.
+
+```
+altairsim> BOARDS ADD music6 music0
+altairsim> SET music0 port=44
+```
+
+In a machine file:
+
+```toml
+[[board]]
+type = "music6"
+id   = "music0"
+port = 0x44
+```
+
+The board uses the **top six bits** of the byte. The low two bits do nothing, so a program that
+changes only bit 0 or bit 1 is silent. The board has no input port: you cannot read the value
+back. A reset does not clear the value. Only the power switch does.
+
+**Sound needs a crystal.** At full speed (`clock_hz = 0`, the default), the guest does not keep
+real time, and the board plays nothing. The programs that Newtech supplied with the board are
+timed for an 8080 at 2 MHz:
+
+```
+altairsim> SET cpu0 clock_hz=2000000
+```
+
+This short program is the test routine from the manual of the board. It plays a steady tone of
+about 1009 Hz:
+
+```
+altairsim> DEPOSIT 0 97 06 40 05 C2 03 00 2F D3 24 C3 01 00
+altairsim> RUN 0
+```
+
+`SHOW <id>` gives the value in the latch and a line for the speaker. The end of the speaker line
+tells you the state:
+
+| The line ends with | Meaning |
+|---|---|
+| `-> playing` | The guest changed the output in the last half second of machine time. |
+| `-> silent` | The guest does not drive the board now. |
+| `-> silent: the machine has no crystal (clock_hz = 0)` | The machine runs at full speed. Set `clock_hz`. |
+| `-> no sound device` | The program cannot open a sound output on your computer, or this build has no sound. |
+
+The amplifier and the volume control of the real board are not modeled. Set the volume on your
+computer.
 
 ## Floppy and disk controllers
 

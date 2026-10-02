@@ -160,6 +160,7 @@ Type the part before the bracket.
 | `c700` | MITS 88-C700: Centronics line-printer controller |
 | `d7a` | Cromemco D+7A: analog + parallel I/O, joysticks |
 | `lpc` | MITS 88-LPC: 88-LP line-printer controller |
+| `music6` | Newtech Model 6 Music Board: 6-bit D/A and speaker |
 | `pio` | MITS 88-PIO: 8-bit parallel port |
 
 **Video**
