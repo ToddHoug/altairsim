@@ -2,7 +2,6 @@
 
 #include "core/clock.h"
 #include "core/statefile.h"
-#include "host/audio.h"
 #include "host/joystick.h"
 
 namespace altair {
@@ -12,10 +11,6 @@ namespace {
 // a NullJoystick headless -- pump() then reads every stick as centered with no buttons,
 // which is a D+7A with no JS-1 plugged in.
 Joystick* g_joystick = nullptr;
-
-// The injected host sound service (setAudio), borrowed. Null on the bench; a NullAudio
-// headless, which takes the samples and plays nothing.
-Audio* g_audio = nullptr;
 
 // Is `s` a well-formed non-negative decimal index? (The joystick straps accept a number
 // or a keyword; this tells the two apart, at set-time and again when resolving.)
@@ -57,7 +52,6 @@ bool parseSpeaker(const std::string& lowered, int& ch) {
 } // namespace
 
 void D7aBoard::setJoystick(Joystick* j) { g_joystick = j; }
-void D7aBoard::setAudio(Audio* a) { g_audio = a; }
 
 // ---------------------------------------------------------------------------
 // Bus: eight consecutive I/O ports, no memory.
@@ -85,12 +79,8 @@ void D7aBoard::write(const BusCycle& c) {
     // a CHANGE on a speaker's channel is recorded with the time it happened. That is all
     // a bus cycle does; pump() makes the sound.
     if (c.data != analogOut_[off - 1] && clock_) {
-        for (Speaker* sp : {&spk1_, &spk2_}) {
-            if (sp->ch != off) continue;
-            sp->pcm.edge(clock_->now(), (int8_t)c.data);
-            sp->heard      = true;
-            sp->lastChange = clock_->now();
-        }
+        for (Jack* sp : {&spk1_, &spk2_})
+            if (sp->ch == off) sp->spk.edge(clock_->now(), (int8_t)c.data);
     }
     analogOut_[off - 1] = c.data;
 }
@@ -103,8 +93,8 @@ void D7aBoard::reset(Reset) {
     // re-read from the host on the next pump(). Straps and stick assignments stay.
     // A speaker hears its output go to 0 V, at the moment of the reset.
     if (clock_)
-        for (Speaker* sp : {&spk1_, &spk2_})
-            if (sp->ch) sp->pcm.edge(clock_->now(), 0);
+        for (Jack* sp : {&spk1_, &spk2_})
+            if (sp->ch) sp->spk.drop(clock_->now(), 0);
     for (auto& v : analogOut_) v = 0;
     parOut_ = 0;
 }
@@ -115,11 +105,7 @@ void D7aBoard::power() {
     parIn_  = 0xFF;   // active-low buttons idle high (released); refreshed each pump()
     parOut_ = 0;
     // The clock starts again at zero, so the sound not yet rendered belongs to no time.
-    for (Speaker* sp : {&spk1_, &spk2_}) {
-        sp->pcm.clear();
-        sp->heard      = false;
-        sp->lastChange = 0;
-    }
+    for (Jack* sp : {&spk1_, &spk2_}) sp->spk.clear();
 }
 
 // ---------------------------------------------------------------------------
@@ -150,8 +136,10 @@ void D7aBoard::deserialize(StateReader& r) {
 // cycle.
 // ---------------------------------------------------------------------------
 void D7aBoard::pump() {
-    pumpSpeaker(spk1_);
-    pumpSpeaker(spk2_);
+    if (clock_) {
+        spk1_.spk.pump(*clock_, spk1_.ch != 0);
+        spk2_.spk.pump(*clock_, spk2_.ch != 0);
+    }
 
     if (!g_joystick) return;
     g_joystick->poll();
@@ -163,67 +151,9 @@ void D7aBoard::pump() {
     applyConsole(js2_, 2, 3, 4, 1);
 }
 
-// ---------------------------------------------------------------------------
-// The speaker. One slice of emulated time becomes the same length of sound, or nothing.
-//
-// A device plays rate() samples each REAL second and this renders rate() samples each
-// EMULATED second, so the two must run at the same speed for the sound to be right.
-// Each rule below is one way they do not:
-//
-//   flat out        no crystal: emulated time has no fixed relation to real time, and
-//                   the slice is dropped. Nothing is played, at any pitch.
-//   not driven      a level that does not move is silence. Nothing is pushed, so a guest
-//                   that never touches the speaker never opens a sound device.
-//   queue empty     the device has caught up (or has not started). A short cushion goes
-//                   in first, or the device would run dry between this slice and the
-//                   next and every slice would start with a gap.
-//   queue deep      the machine is ahead of the device -- a run that nothing paces, with
-//                   a crystal set. The slice is dropped, so the delay cannot grow.
-// ---------------------------------------------------------------------------
-bool D7aBoard::driven(const Speaker& sp) const {
-    if (!clock_ || !sp.heard) return false;
-    const uint64_t now = clock_->now();
-    return now >= sp.lastChange && now - sp.lastChange <= (uint64_t)clock_->hz() / 2;
-}
-
-void D7aBoard::resync(Speaker& sp) {
-    sp.pcm.clear();
-    if (sp.ch) sp.pcm.edge(0, (int8_t)analogOut_[sp.ch - 1]);
-    sp.pcm.skipTo(clock_ ? clock_->now() : 0);
-    sp.heard      = false;
-    sp.lastChange = 0;
-}
-
-void D7aBoard::pumpSpeaker(Speaker& sp) {
-    if (!clock_) return;
-    const uint64_t now = clock_->now();
-    const uint64_t hz  = (uint64_t)clock_->hz();
-
-    // More than a second since the last render is not a slice: the clock was moved under
-    // the board. Never render it -- it could be hours of samples.
-    const uint64_t from  = sp.pcm.renderedTo();
-    const bool     moved = now < from || now - from > hz;
-
-    if (!g_audio || sp.ch == 0 || clock_->free() || moved || !driven(sp)) {
-        sp.pcm.skipTo(now);
-        return;
-    }
-    // No time has gone by: the machine is stopped at the prompt, and a stopped machine
-    // makes no sound. (Without this, an empty queue would get a cushion at every call.)
-    if (now == from) return;
-
-    const size_t rate   = (size_t)g_audio->rate();
-    const size_t queued = g_audio->queued(&sp);
-    if (queued > rate / 4) {  // a quarter second waiting to play
-        sp.pcm.skipTo(now);
-        return;
-    }
-
-    pcmBuf_.clear();
-    if (queued == 0)          // 50 ms at the level the slice starts from
-        pcmBuf_.assign(rate / 20, (int16_t)(sp.pcm.held() * LevelPcm::kGain));
-    sp.pcm.render(now, (long long)hz, (int)rate, pcmBuf_);
-    if (!pcmBuf_.empty()) g_audio->push(&sp, pcmBuf_);
+void D7aBoard::resync(Jack& sp) {
+    sp.spk.resync(clock_ ? clock_->now() : 0,
+                  sp.ch ? (int8_t)analogOut_[sp.ch - 1] : (int8_t)0);
 }
 
 uint8_t D7aBoard::axis8(int16_t a) {
@@ -322,7 +252,7 @@ std::vector<Property> D7aBoard::properties() {
     p.push_back(joyProp("joystick2", "2", js2_));
 
     auto spkProp = [this](const char* name, const char* console, const char* dflt,
-                          Speaker& sp) {
+                          Jack& sp) {
         Property x;
         x.name = name;
         x.help = std::string("The analog output that JS-1 console ") + console +
@@ -392,16 +322,12 @@ std::vector<std::string> D7aBoard::statusLines() const {
     };
 
     // The speakers: is the guest driving one, and if nothing plays, the reason.
-    auto speaker = [&](const char* console, const Speaker& sp) {
+    auto speaker = [&](const char* console, const Jack& sp) {
         std::string s = "speaker " + std::string(console) + "  (" +
                         (sp.ch ? "channel " + std::to_string(sp.ch) : std::string("none")) + ")";
         while (s.size() < 24) s += ' ';
         if (sp.ch == 0) return s + "-> unwired";
-        if (!g_audio) return s + "-> (no audio service in this build)";
-        if (!g_audio->available()) return s + "-> no sound device";
-        if (clock_ && clock_->free())
-            return s + "-> silent: the machine has no crystal (clock_hz = 0)";
-        return s + (driven(sp) ? "-> playing" : "-> silent");
+        return s + sp.spk.status(clock_);
     };
 
     return {line("1", js1_, 0), line("2", js2_, 1), speaker("1", spk1_), speaker("2", spk2_)};

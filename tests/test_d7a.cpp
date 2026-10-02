@@ -37,7 +37,7 @@ struct StubJoystick : public Joystick {
 
 // An Audio that keeps what it is given, one list of samples for each voice, and reports
 // whatever queue depth the test sets. The same injection main() does
-// (D7aBoard::setAudio), so the board renders and pushes as it would to a sound device.
+// (Speaker::setAudio), so the board renders and pushes as it would to a sound device.
 struct StubAudio : public Audio {
     std::map<Owner, std::vector<int16_t>> voices;
     int    pushes = 0;      // how many times push() was called
@@ -92,10 +92,15 @@ struct Rig {
 
         d7a = dynamic_cast<D7aBoard*>(m.add("d7a", "d7a0", err));
         D7aBoard::setJoystick(&joy);
-        D7aBoard::setAudio(&aud);
+        Speaker::setAudio(&aud);
         m.power();
     }
-    ~Rig() { D7aBoard::setAudio(nullptr); }
+    // Both stubs die with the rig, so neither may stay installed: a D+7A in a later
+    // suite would poll a joystick that is gone.
+    ~Rig() {
+        Speaker::setAudio(nullptr);
+        D7aBoard::setJoystick(nullptr);
+    }
 
     // A square wave on `port` for `tStates`: the level flips every `half` T-states, and
     // the board gets its host turn every `slice` T-states, as the run loop gives it.

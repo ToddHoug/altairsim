@@ -26,6 +26,7 @@
 #include "host/display_null.h"
 #include "host/endpoint.h"
 #include "host/audio_null.h"
+#include "host/speaker.h"
 #include "host/joystick_null.h"
 #include "host/cardimg.h"
 #include "host/media.h"
@@ -143,6 +144,7 @@ const struct {
     {"multiwindow", test_multiwindow},
     {"framedump", test_framedump},
     {"d7a", test_d7a},
+    {"music6", test_music6},
     {"levelpcm", test_level_pcm},
     {"sol", test_sol},
     {"tapemount", test_tapemount},
@@ -216,11 +218,11 @@ int main(int argc, char** argv) {
     static altair::NullJoystick g_joystick;
     altair::D7aBoard::setJoystick(&g_joystick);
 
-    // The sound service, the same again: a D+7A plays its JS-1 speakers through it.
+    // The sound service, the same again: every board with a speaker plays through it.
     // Headless tests give it a NullAudio (a speaker that is not plugged in); test_d7a.cpp
     // installs a stub that keeps the samples.
     static altair::NullAudio g_audio;
-    altair::D7aBoard::setAudio(&g_audio);
+    altair::Speaker::setAudio(&g_audio);
 
     // The REAL media resolver, for the same reason -- and the SAME one the CLI
     // installs: openHostMedia routes an image with a `.geo` sidecar to a CardImage and a

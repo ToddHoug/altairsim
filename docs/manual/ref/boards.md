@@ -77,6 +77,7 @@ and within a group the boards are in **alphabetical order**.
 | [`c700`](#c700) | MITS 88-C700: Centronics line-printer controller |
 | [`d7a`](#d7a) | Cromemco D+7A: analog + parallel I/O, joysticks |
 | [`lpc`](#lpc) | MITS 88-LPC: 88-LP line-printer controller |
+| [`music6`](#music6) | Newtech Model 6 Music Board: 6-bit D/A and speaker |
 | [`pio`](#pio) | MITS 88-PIO: 8-bit parallel port |
 
 **Video**
@@ -956,6 +957,17 @@ MITS 88-LPC: 88-LP line-printer controller, unit 'prn'. Two ports at BASE+0..1 (
 |---|---|---|---|---|
 | `port` | int | `0x2` | `0x0` .. `0xFE` | Base address -- MUST BE EVEN. Control/status at BASE, data at BASE+1 |
 | `connect` | string | `null` | text | The endpoint on the other end of the line (CONNECT sets this) |
+
+
+### `music6`
+
+Newtech Model 6 Music Board: one write-only port into a 6-bit D/A, an amplifier and a speaker. Answers at four addresses from BASE (default 24); DO7..DO2 are latched. A program makes the sound by writing the port in a timed loop. Needs a crystal (clock_hz) to play
+
+#### Board properties
+
+| Key | Kind | Default | Legal | Meaning |
+|---|---|---|---|---|
+| `port` | int | `0x24` | `0x0` .. `0xF4` | The output port (jumpers J1..J8 set A7..A4): 04, 14, 24 ... F4. The board answers at this address and the next three. Default 24 |
 
 
 ### `pio`
