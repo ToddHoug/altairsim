@@ -8,6 +8,17 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+### `R` no longer puts a space in a CP/M name
+
+`R *.TXT` copied a host file such as `my notes.txt` to a CP/M file with a space in its name.
+You cannot type that name at `A>`, so `TYPE`, `ERA` and `REN` could not find the file. `R` now
+removes a space, as it removes the other characters that CP/M cannot have in a name. The disks
+in `examples` have the new `R`, which shows `(1.2)` in its help.
+
+The manual gave a wrong example of this change of name, and the steps in the wrong sequence.
+*Moving files in and out* now has the correct steps and the list of the characters that `R`
+removes.
+
 ### Skills for the programs that run in the machine
 
 The package has four new Agent Skills in `skills/`, for an AI assistant. Each one has the rules

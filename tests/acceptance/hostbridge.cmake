@@ -66,6 +66,13 @@ file(MAKE_DIRECTORY "${work}/host/SRC")
 file(WRITE "${work}/host/HELLO.TXT" "HELLO FROM THE HOST.${CRLF}LINE TWO.${CRLF}")
 file(WRITE "${work}/host/SRC/DEEP.TXT" "IN A SUBDIRECTORY OF HOSTDIR.${CRLF}")
 
+# TWO NAMES THAT ARE ORDINARY ON A HOST AND ARE NOT 8.3 (issue #633). The first has a space,
+# a comma and brackets, none of which the CCP can take in a name; the second has `-`, `(`
+# and `)`, which are all legal in one. They are upper case because the CCP folds what is
+# typed and a Linux host matches a name exactly.
+file(WRITE "${work}/host/SP ACE,D[1].TXT" "A NAME THAT HAD A SPACE IN IT.${CRLF}")
+file(WRITE "${work}/host/MY-NOTES(2).TXT" "NOTES.${CRLF}")
+
 # THE BINARY ONE, AND IT IS THE ONE THAT MATTERS: 256 bytes, every value from 00 to FF. It
 # is a committed fixture and not generated here because CMake cannot write a NUL.
 #
@@ -153,6 +160,9 @@ cmd("R SRC/DEEP.TXT")                   # out of a subdirectory: the CP/M name d
 cmd("W BIN.DAT BACKBIN.DAT")            # THE ROUND TRIP. B (the default) = every byte
 cmd("W HELLO.TXT TRIM.TXT T")           # T = stop at the first ^Z, so no padding comes back
 cmd("R ../SECRET.TXT")                  # THE SANDBOX, through the whole stack
+cmd("R SP*.TXT")                        # a wildcard: the ONLY way a space reaches R
+cmd("W SPACED1.TXT SPBACK.TXT T")       # ...and the CCP can name what R stored
+cmd("R MY-NOTES(2).TXT")                # `-` stays; `(2)` is legal too, but past the 8
 cmd("HDIR *.TXT")
 
 # The .COM of each, byte for byte, to hold up against what is checked in. In `fast` mode
@@ -311,6 +321,29 @@ want_ran("R: HELLO.TXT -> HELLO.TXT"   "R did not copy the text file in")
 want_ran("R: BIN.DAT -> BIN.DAT"       "R did not copy the binary file in")
 want_ran("R: SRC/DEEP.TXT -> DEEP.TXT" "R did not reach into a subdirectory of hostdir")
 want_ran("W: BIN.DAT -> BACKBIN.DAT"   "W did not copy the binary file back out")
+
+# A HOST NAME BECOMES A NAME THE CCP CAN TYPE. R drops what CP/M cannot store BEFORE it
+# counts to eight, and a space is one of those: stored, it would end the name for the CCP,
+# and the file could be reached only through a wildcard. What R prints is not the proof --
+# it printed `ZQAB1.TXT` for a file it had stored as `ZQ AB1.TXT`. The proof is that W,
+# given the name with no space in it, finds the file and brings it back.
+want_ran("R: SP ACE,D[1].TXT -> SPACED1.TXT" "R did not map a host name with a space in it")
+want_ran("R: MY-NOTES(2).TXT -> MY-NOTES.TXT"
+         "R did not keep the legal `-` and cut the name at eight")
+if(NOT EXISTS "${work}/host/SPBACK.TXT")
+  message(FATAL_ERROR
+    "hostbridge(${MODE}): R STORED A NAME THE CCP CANNOT TYPE.\n"
+    "  `SP ACE,D[1].TXT` came in through a wildcard, and `W SPACED1.TXT` did not find it --\n"
+    "  a space, or another character the CCP stops at, is in the directory entry.\n"
+    "--- what ran ---\n${ran}")
+endif()
+file(READ "${work}/host/SP ACE,D[1].TXT" spsent HEX)
+file(READ "${work}/host/SPBACK.TXT"      spback HEX)
+if(NOT spback STREQUAL spsent)
+  message(FATAL_ERROR
+    "hostbridge(${MODE}): the file with a space in its host name came back different.\n"
+    "  sent: ${spsent}\n  got : ${spback}")
+endif()
 
 # THE SANDBOX, PROVED THROUGH THE WHOLE STACK -- the CCP, R.COM, the card, HostDir. The unit
 # tests prove HostDir refuses `..`; only this proves that a program running inside CP/M

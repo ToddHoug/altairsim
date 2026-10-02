@@ -209,17 +209,29 @@ is one command.
 
 ## Names: 8.3, and how a host name becomes one
 
-CP/M names have eight characters and an extension of three, and host names do not. The board
+CP/M names have eight characters and an extension of three, and host names do not. `R`
 changes a host name in these steps:
 
 1. It changes the host name to **upper case**.
-2. It cuts the name to **8** characters.
-3. It cuts the extension to **3** characters.
-4. It **removes characters that CP/M does not allow.**
+2. It **removes the characters that CP/M cannot have in a name.**
+3. It cuts the name to **8** characters.
+4. It cuts the extension to **3** characters.
+
+`R` removes these characters:
+
+- a space
+- `< > . , ; : = ? * [ ] | \ /`
+- a control character, and a character that is not ASCII
+
+All other characters stay. For example, `-`, `(` and `)` are legal in a CP/M name:
 
 ```
-my-notes(2).txt   →   MYNOTES2.TXT
+notes[old].txt    →   NOTESOLD.TXT
+my-notes(2).txt   →   MY-NOTES.TXT
 ```
+
+In the second name, `R` removes nothing. `MY-NOTES` is the first eight characters, and the
+`(2)` comes after them.
 
 **A second argument sets the whole name.** Use it when you do not like the result of the steps:
 
