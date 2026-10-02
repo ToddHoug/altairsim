@@ -98,15 +98,16 @@ The configure step reports which backend it chose:
 -- SDL3 not found -- video boards build headless (null display). Install SDL3 (see docs/devguide) for a window.
 ```
 
-CMake auto-detects with `find_package(SDL3 CONFIG)`; found → it compiles `src/host/display_sdl.cpp`,
+CMake auto-detects with `find_package(SDL3 CONFIG)`; found → it compiles the `src/host/*_sdl.cpp` files,
 links `SDL3::SDL3`, and defines `ALTAIRSIM_ENABLE_SDL`. Force a headless build even where SDL3 is
 installed with **`-DALTAIRSIM_ENABLE_SDL=OFF`**. That flag is what a macOS *universal* build
 needs, because a Homebrew SDL3 is single-arch and cannot link into an `x86_64;arm64` fat binary.
 **CI passes it nowhere. One leg — macOS — installs SDL3 from Homebrew and builds native
-`arm64`, so it is the only place `display_sdl.cpp` is compiled at all**, and the workflow fails
+`arm64`, so it is the only place the `*_sdl.cpp` files are compiled at all**, and the workflow fails
 that leg if it comes up headless. Linux and Windows take the not-found path above and build
 against the null display. Only
-`display_sdl.cpp` and the composition root (`src/main.cpp`) are macro-gated; the boards themselves
+the `src/host/*_sdl.cpp` files (display, joystick, audio) and the composition root
+(`src/main.cpp`) are macro-gated; the boards themselves
 `#include` no SDL and compile in every configuration. Then:
 
 ```sh

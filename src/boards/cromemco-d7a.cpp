@@ -1,6 +1,8 @@
 #include "boards/cromemco-d7a.h"
 
+#include "core/clock.h"
 #include "core/statefile.h"
+#include "host/audio.h"
 #include "host/joystick.h"
 
 namespace altair {
@@ -10,6 +12,10 @@ namespace {
 // a NullJoystick headless -- pump() then reads every stick as centered with no buttons,
 // which is a D+7A with no JS-1 plugged in.
 Joystick* g_joystick = nullptr;
+
+// The injected host sound service (setAudio), borrowed. Null on the bench; a NullAudio
+// headless, which takes the samples and plays nothing.
+Audio* g_audio = nullptr;
 
 // Is `s` a well-formed non-negative decimal index? (The joystick straps accept a number
 // or a keyword; this tells the two apart, at set-time and again when resolving.)
@@ -34,9 +40,24 @@ bool validJoySpec(const std::string& lowered) {
     return parseIndex(lowered, idx);
 }
 
+// A `speaker1`/`speaker2` strap is 'none' or one analog channel, 1..7. Gives the channel
+// (0 for none); false when it is neither.
+bool parseSpeaker(const std::string& lowered, int& ch) {
+    if (lowered == "none") {
+        ch = 0;
+        return true;
+    }
+    if (lowered.size() == 1 && lowered[0] >= '1' && lowered[0] <= '7') {
+        ch = lowered[0] - '0';
+        return true;
+    }
+    return false;
+}
+
 } // namespace
 
 void D7aBoard::setJoystick(Joystick* j) { g_joystick = j; }
+void D7aBoard::setAudio(Audio* a) { g_audio = a; }
 
 // ---------------------------------------------------------------------------
 // Bus: eight consecutive I/O ports, no memory.
@@ -60,8 +81,17 @@ void D7aBoard::write(const BusCycle& c) {
         parOut_ = c.data;             // parallel output latch
         return;
     }
-    // Analog channel D/A latch. A JS-1 speaker port is written here in a timed loop;
-    // the value is latched for a future audio path but nothing plays it yet.
+    // Analog channel D/A latch. A JS-1 speaker port is written here in a timed loop, so
+    // a CHANGE on a speaker's channel is recorded with the time it happened. That is all
+    // a bus cycle does; pump() makes the sound.
+    if (c.data != analogOut_[off - 1] && clock_) {
+        for (Speaker* sp : {&spk1_, &spk2_}) {
+            if (sp->ch != off) continue;
+            sp->pcm.edge(clock_->now(), (int8_t)c.data);
+            sp->heard      = true;
+            sp->lastChange = clock_->now();
+        }
+    }
     analogOut_[off - 1] = c.data;
 }
 
@@ -71,6 +101,10 @@ void D7aBoard::write(const BusCycle& c) {
 void D7aBoard::reset(Reset) {
     // Clear the D/A outputs to 0 V and the parallel output latch; the A/D shadows are
     // re-read from the host on the next pump(). Straps and stick assignments stay.
+    // A speaker hears its output go to 0 V, at the moment of the reset.
+    if (clock_)
+        for (Speaker* sp : {&spk1_, &spk2_})
+            if (sp->ch) sp->pcm.edge(clock_->now(), 0);
     for (auto& v : analogOut_) v = 0;
     parOut_ = 0;
 }
@@ -80,6 +114,12 @@ void D7aBoard::power() {
     for (auto& v : analogOut_) v = 0;
     parIn_  = 0xFF;   // active-low buttons idle high (released); refreshed each pump()
     parOut_ = 0;
+    // The clock starts again at zero, so the sound not yet rendered belongs to no time.
+    for (Speaker* sp : {&spk1_, &spk2_}) {
+        sp->pcm.clear();
+        sp->heard      = false;
+        sp->lastChange = 0;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -99,13 +139,20 @@ void D7aBoard::deserialize(StateReader& r) {
     for (uint8_t& v : analogOut_) v = r.u8();
     parIn_  = r.u8();
     parOut_ = r.u8();
+    // The clock and the latches are another moment's now.
+    resync(spk1_);
+    resync(spk2_);
 }
 
 // ---------------------------------------------------------------------------
-// The host turn: read the joysticks and fold them into the A/D and parallel-input
-// latches. Once per slice, on the main thread -- never inside a bus cycle.
+// The host turn: play the speakers, then read the joysticks and fold them into the A/D
+// and parallel-input latches. Once per slice, on the main thread -- never inside a bus
+// cycle.
 // ---------------------------------------------------------------------------
 void D7aBoard::pump() {
+    pumpSpeaker(spk1_);
+    pumpSpeaker(spk2_);
+
     if (!g_joystick) return;
     g_joystick->poll();
     // Console 1: X/Y -> analog channels 1/2 (0x19/0x1A), buttons -> parallel bits D0-D3;
@@ -114,6 +161,69 @@ void D7aBoard::pump() {
     // Console 2: X/Y -> analog channels 3/4 (0x1B/0x1C), buttons -> parallel bits D4-D7;
     // `auto` prefers gamepad 1, so two `auto` consoles drive two different sticks.
     applyConsole(js2_, 2, 3, 4, 1);
+}
+
+// ---------------------------------------------------------------------------
+// The speaker. One slice of emulated time becomes the same length of sound, or nothing.
+//
+// A device plays rate() samples each REAL second and this renders rate() samples each
+// EMULATED second, so the two must run at the same speed for the sound to be right.
+// Each rule below is one way they do not:
+//
+//   flat out        no crystal: emulated time has no fixed relation to real time, and
+//                   the slice is dropped. Nothing is played, at any pitch.
+//   not driven      a level that does not move is silence. Nothing is pushed, so a guest
+//                   that never touches the speaker never opens a sound device.
+//   queue empty     the device has caught up (or has not started). A short cushion goes
+//                   in first, or the device would run dry between this slice and the
+//                   next and every slice would start with a gap.
+//   queue deep      the machine is ahead of the device -- a run that nothing paces, with
+//                   a crystal set. The slice is dropped, so the delay cannot grow.
+// ---------------------------------------------------------------------------
+bool D7aBoard::driven(const Speaker& sp) const {
+    if (!clock_ || !sp.heard) return false;
+    const uint64_t now = clock_->now();
+    return now >= sp.lastChange && now - sp.lastChange <= (uint64_t)clock_->hz() / 2;
+}
+
+void D7aBoard::resync(Speaker& sp) {
+    sp.pcm.clear();
+    if (sp.ch) sp.pcm.edge(0, (int8_t)analogOut_[sp.ch - 1]);
+    sp.pcm.skipTo(clock_ ? clock_->now() : 0);
+    sp.heard      = false;
+    sp.lastChange = 0;
+}
+
+void D7aBoard::pumpSpeaker(Speaker& sp) {
+    if (!clock_) return;
+    const uint64_t now = clock_->now();
+    const uint64_t hz  = (uint64_t)clock_->hz();
+
+    // More than a second since the last render is not a slice: the clock was moved under
+    // the board. Never render it -- it could be hours of samples.
+    const uint64_t from  = sp.pcm.renderedTo();
+    const bool     moved = now < from || now - from > hz;
+
+    if (!g_audio || sp.ch == 0 || clock_->free() || moved || !driven(sp)) {
+        sp.pcm.skipTo(now);
+        return;
+    }
+    // No time has gone by: the machine is stopped at the prompt, and a stopped machine
+    // makes no sound. (Without this, an empty queue would get a cushion at every call.)
+    if (now == from) return;
+
+    const size_t rate   = (size_t)g_audio->rate();
+    const size_t queued = g_audio->queued(&sp);
+    if (queued > rate / 4) {  // a quarter second waiting to play
+        sp.pcm.skipTo(now);
+        return;
+    }
+
+    pcmBuf_.clear();
+    if (queued == 0)          // 50 ms at the level the slice starts from
+        pcmBuf_.assign(rate / 20, (int16_t)(sp.pcm.held() * LevelPcm::kGain));
+    sp.pcm.render(now, (long long)hz, (int)rate, pcmBuf_);
+    if (!pcmBuf_.empty()) g_audio->push(&sp, pcmBuf_);
 }
 
 uint8_t D7aBoard::axis8(int16_t a) {
@@ -211,12 +321,36 @@ std::vector<Property> D7aBoard::properties() {
     };
     p.push_back(joyProp("joystick1", "1", js1_));
     p.push_back(joyProp("joystick2", "2", js2_));
+
+    auto spkProp = [this](const char* name, const char* console, const char* dflt,
+                          Speaker& sp) {
+        Property x;
+        x.name = name;
+        x.help = std::string("The analog output that JS-1 console ") + console +
+                 "'s speaker is on: 'none', or a channel 1 to 7 (channel n is port "
+                 "BASE+n). Default " + dflt;
+        x.kind = Kind::Str;
+        x.get  = [&sp] { return Value::ofStr(sp.ch ? std::to_string(sp.ch) : "none"); };
+        x.set  = [this, &sp](const Value& v, std::string& err) {
+            int ch = 0;
+            if (!parseSpeaker(lowerAscii(v.s()), ch)) {
+                err = "expected 'none' or an analog channel, 1 to 7";
+                return false;
+            }
+            sp.ch = ch;
+            resync(sp);
+            return true;
+        };
+        return x;
+    };
+    p.push_back(spkProp("speaker1", "1", "1", spk1_));
+    p.push_back(spkProp("speaker2", "2", "3", spk2_));
     return p;
 }
 
 // The live picture for SHOW <id>: what each console's strap actually resolves to right
 // now -- a named gamepad, the keyboard, or nothing -- which the property table (the strap
-// STRING) cannot show. This is why "joystick1 = auto" is not the same question as "is a
+// STRING) cannot show; and for each speaker, whether it plays and, if not, the reason. This is why "joystick1 = auto" is not the same question as "is a
 // controller connected"; here we answer the second. Reads the host directly, so it polls
 // first (count()/name() are cached by poll()); safe because SHOW runs on the main thread
 // at a stopped prompt, the same place the display's idle hook pumps SDL.
@@ -258,7 +392,20 @@ std::vector<std::string> D7aBoard::statusLines() const {
         return s + resolve(strap, autoIndex);
     };
 
-    return {line("1", js1_, 0), line("2", js2_, 1)};
+    // The speakers: is the guest driving one, and if nothing plays, the reason.
+    auto speaker = [&](const char* console, const Speaker& sp) {
+        std::string s = "speaker " + std::string(console) + "  (" +
+                        (sp.ch ? "channel " + std::to_string(sp.ch) : std::string("none")) + ")";
+        while (s.size() < 24) s += ' ';
+        if (sp.ch == 0) return s + "-> unwired";
+        if (!g_audio) return s + "-> (no audio service in this build)";
+        if (!g_audio->available()) return s + "-> no sound device";
+        if (clock_ && clock_->free())
+            return s + "-> silent: the machine has no crystal (clock_hz = 0)";
+        return s + (driven(sp) ? "-> playing" : "-> silent");
+    };
+
+    return {line("1", js1_, 0), line("2", js2_, 1), speaker("1", spk1_), speaker("2", spk2_)};
 }
 
 std::vector<MapEntry> D7aBoard::ioMap() const {

@@ -4,10 +4,14 @@
 #include "boards/s100-memory.h"
 #include "core/machine.h"
 #include "core/statefile.h"
+#include "host/audio.h"
 #include "host/joystick.h"
+#include "host/level_pcm.h"
 
 #include <cstdint>
+#include <map>
 #include <string>
+#include <vector>
 
 using namespace altair;
 
@@ -31,9 +35,46 @@ struct StubJoystick : public Joystick {
     std::string name(int i) const override { return (i >= 0 && i < 4) ? names[i] : std::string{}; }
 };
 
+// An Audio that keeps what it is given, one list of samples for each voice, and reports
+// whatever queue depth the test sets. The same injection main() does
+// (D7aBoard::setAudio), so the board renders and pushes as it would to a sound device.
+struct StubAudio : public Audio {
+    std::map<Owner, std::vector<int16_t>> voices;
+    int    pushes = 0;      // how many times push() was called
+    size_t depth  = 1000;   // what queued() reports: neither dry nor deep
+    bool   device = true;   // what available() reports
+
+    int    rate() const override { return 44100; }
+    bool   available() const override { return device; }
+    void   push(Owner o, std::span<const int16_t> s) override {
+        ++pushes;
+        voices[o].insert(voices[o].end(), s.begin(), s.end());
+    }
+    size_t queued(Owner) const override { return depth; }
+
+    // Every sample pushed, when the test has one voice.
+    const std::vector<int16_t>& only() const {
+        static const std::vector<int16_t> none;
+        return voices.size() == 1 ? voices.begin()->second : none;
+    }
+};
+
+// Sign changes in a run of samples: two for each cycle of a tone.
+int crossings(const std::vector<int16_t>& pcm) {
+    int n = 0, last = 0;
+    for (int16_t v : pcm) {
+        int sign = v > 0 ? 1 : (v < 0 ? -1 : 0);
+        if (sign == 0) continue;
+        if (last != 0 && sign != last) ++n;
+        last = sign;
+    }
+    return n;
+}
+
 struct Rig {
     Machine       m;
     StubJoystick  joy;
+    StubAudio     aud;
     D7aBoard*     d7a = nullptr;
     MemoryBoard*  mem = nullptr;
 
@@ -51,7 +92,26 @@ struct Rig {
 
         d7a = dynamic_cast<D7aBoard*>(m.add("d7a", "d7a0", err));
         D7aBoard::setJoystick(&joy);
+        D7aBoard::setAudio(&aud);
         m.power();
+    }
+    ~Rig() { D7aBoard::setAudio(nullptr); }
+
+    // A square wave on `port` for `tStates`: the level flips every `half` T-states, and
+    // the board gets its host turn every `slice` T-states, as the run loop gives it.
+    void tone(uint8_t port, uint64_t tStates, uint64_t half, uint64_t slice = 20000) {
+        bool     hi = true;
+        uint64_t sinceSlice = 0;
+        for (uint64_t t = 0; t < tStates; t += half, hi = !hi) {
+            out(port, hi ? 0x40 : 0xC0);
+            m.clock.advance(half);
+            sinceSlice += half;
+            if (sinceSlice >= slice) {
+                d7a->pump();
+                sinceSlice = 0;
+            }
+        }
+        d7a->pump();
     }
 
     uint8_t in(uint8_t port) { return m.bus.ioRead(port); }
@@ -195,7 +255,7 @@ void test_d7a() {
         g.joy.names[0] = "Test Pad";
         // Defaults: console 1 auto -> gamepad 0; console 2 auto -> keyboard (no gamepad 1).
         auto s = g.d7a->statusLines();
-        CHECK(s.size() == 2, "one line per console");
+        CHECK(s.size() == 4, "one line per console, then one per speaker");
         CHECK(s[0].find("console 1") != std::string::npos, "first line is console 1");
         CHECK(s[0].find("(auto)") != std::string::npos, "console 1 defaults to auto");
         CHECK(s[0].find("gamepad 0") != std::string::npos, "console 1 resolves to gamepad 0");
@@ -265,5 +325,195 @@ void test_d7a() {
         CHECK(b2.analogIn(0) == 0xC0, "and the A/D input shadow travels");
 
         D7aBoard::setJoystick(&g.joy);  // put the rig's stub back for any later use
+    }
+
+    SECTION("D+7A -- a tone on the speaker port reaches the sound service at its pitch");
+    {
+        Rig g;
+        g.m.clock.setHz(2000000);
+        g.aud.depth = 0;                       // the device has nothing: a cushion goes first
+        g.d7a->pump();
+        CHECK(g.aud.pushes == 0, "a speaker nobody has driven pushes nothing");
+
+        // One second at 2 MHz, a flip every 1000 T-states: 1000 Hz.
+        g.tone(0x19, 2000000, 1000);
+        const auto& pcm = g.aud.only();
+        CHECK(g.aud.voices.size() == 1, "one speaker is one voice");
+        CHECK(g.aud.pushes == 100, "one push for each slice");
+        // Every push found the queue empty, so each carries its 50 ms cushion.
+        CHECK(pcm.size() == 44100 + 100 * 2205, "a second of sound, and a cushion a push");
+        int n = crossings(pcm);
+        CHECK(n >= 1990 && n <= 2400, "1000 Hz crosses zero about 2000 times");
+        bool swing = false;
+        for (int16_t v : pcm) swing = swing || v == 0x40 * LevelPcm::kGain;
+        CHECK(swing, "at the level the guest wrote, times the gain");
+    }
+
+    SECTION("D+7A -- with sound queued, a slice of time is the same length of sound");
+    {
+        Rig g;
+        g.m.clock.setHz(2000000);              // depth 1000: neither dry nor deep
+        g.tone(0x19, 2000000, 1000);
+        const auto& pcm = g.aud.only();
+        CHECK(pcm.size() == 44100, "one emulated second is one second of samples, no cushion");
+        int n = crossings(pcm);
+        CHECK(n >= 1998 && n <= 2000, "and 1000 Hz crosses zero 2000 times");
+    }
+
+    SECTION("D+7A -- a machine with no crystal plays nothing, and SHOW says why");
+    {
+        Rig g;
+        CHECK(g.m.clock.free(), "precondition: flat out is the default");
+        g.tone(0x19, 2000000, 1000);
+        CHECK(g.aud.pushes == 0, "flat out pushes no samples at all");
+        auto s = g.d7a->statusLines();
+        CHECK(s.size() == 4 && s[2].find("speaker 1") != std::string::npos &&
+                  s[2].find("(channel 1)") != std::string::npos,
+              "the third line is speaker 1, on channel 1");
+        CHECK(s.size() == 4 && s[2].find("no crystal (clock_hz = 0)") != std::string::npos,
+              "and it names the reason");
+
+        // The time that went by flat out is not played late when a crystal is set.
+        g.m.clock.setHz(2000000);
+        g.d7a->pump();
+        CHECK(g.aud.pushes == 0, "setting a crystal does not play what went before");
+        g.tone(0x19, 200000, 1000);
+        CHECK(g.aud.only().size() == 4410, "a tenth of a second from here is a tenth of sound");
+        s = g.d7a->statusLines();
+        CHECK(s[2].find("-> playing") != std::string::npos, "a driven speaker reads as playing");
+        CHECK(s[3].find("(channel 3)") != std::string::npos &&
+                  s[3].find("-> silent") != std::string::npos,
+              "speaker 2 is on channel 3 and nothing drives it");
+
+        g.aud.device = false;
+        s = g.d7a->statusLines();
+        CHECK(s[2].find("no sound device") != std::string::npos, "no device behind the service");
+    }
+
+    SECTION("D+7A -- the speaker straps: unwired, and the Dazzler II wiring");
+    {
+        Rig g;
+        std::string err;
+        g.m.clock.setHz(2000000);
+        CHECK(!setProperty(*g.d7a, "speaker1", "8", err), "there is no channel 8");
+        CHECK(!setProperty(*g.d7a, "speaker1", "0", err), "nor a channel 0");
+        CHECK(setProperty(*g.d7a, "speaker1", "none", err), "'none' unwires the speaker");
+        g.tone(0x19, 200000, 1000);
+        CHECK(g.aud.pushes == 0, "an unwired speaker pushes nothing");
+        CHECK(g.d7a->statusLines()[2].find("unwired") != std::string::npos, "and reads as unwired");
+
+        // Default: console 2's speaker is on channel 3 (port 1B). Port 1A is not a speaker.
+        g.tone(0x1A, 200000, 1000);
+        CHECK(g.aud.pushes == 0, "a D/A channel with no speaker on it pushes nothing");
+        CHECK(g.d7a->analogOut(1) != 0, "though the latch took the writes");
+        CHECK(g.in(0x1A) == 0x00, "and the A/D on the same port still reads the stick");
+
+        CHECK(setProperty(*g.d7a, "speaker2", "2", err), "move speaker 2 to channel 2");
+        g.tone(0x1A, 200000, 1000);
+        CHECK(g.aud.only().size() == 4410, "and port 1A now plays");
+        int n = crossings(g.aud.only());
+        CHECK(n >= 198 && n <= 200, "at its pitch");
+    }
+
+    SECTION("D+7A -- two speakers are two voices");
+    {
+        Rig g;
+        g.m.clock.setHz(2000000);
+        for (int i = 0; i < 100; ++i) {
+            g.out(0x19, i & 1 ? 0x40 : 0xC0);
+            g.out(0x1B, i & 1 ? 0x20 : 0xE0);
+            g.m.clock.advance(1000);
+        }
+        g.d7a->pump();
+        CHECK(g.aud.voices.size() == 2, "each speaker pushes under its own owner");
+    }
+
+    SECTION("D+7A -- a deep queue drops the slice, and the sound does not come late");
+    {
+        Rig g;
+        g.m.clock.setHz(2000000);
+        g.aud.depth = 44100 / 4 + 1;           // more than a quarter second waiting
+        g.tone(0x19, 2000000, 1000);
+        CHECK(g.aud.pushes == 0, "the machine is ahead of the device: nothing is pushed");
+        g.aud.depth = 1000;                    // the device caught up
+        g.tone(0x19, 200000, 1000);
+        CHECK(g.aud.only().size() == 4410, "only the time from here on is played");
+    }
+
+    SECTION("D+7A -- a speaker left alone goes quiet");
+    {
+        Rig g;
+        g.m.clock.setHz(2000000);
+        g.tone(0x19, 200000, 1000);
+        size_t played = g.aud.only().size();
+        // The level now sits where the tone left it. Half a second later it is silence.
+        for (int i = 0; i < 200; ++i) {
+            g.m.clock.advance(20000);
+            g.d7a->pump();
+        }
+        size_t tail = g.aud.only().size() - played;
+        // To the slice: the last change was 1000 T-states before the tone ended, and a
+        // slice is 441 samples.
+        CHECK(tail > 22050 - 2 * 441 && tail <= 22050, "a held level is played for half a second");
+        int before = g.aud.pushes;
+        g.aud.depth = 0;
+        g.d7a->pump();
+        CHECK(g.aud.pushes == before, "and a quiet speaker gets no cushion");
+        CHECK(g.d7a->statusLines()[2].find("-> silent") != std::string::npos, "then it is silent");
+    }
+
+    SECTION("D+7A -- sound is pushed in pump(), not inside a bus cycle");
+    {
+        Rig g;
+        g.m.clock.setHz(2000000);
+        for (int i = 0; i < 50; ++i) {
+            g.out(0x19, i & 1 ? 0x40 : 0xC0);
+            g.m.clock.advance(1000);
+        }
+        CHECK(g.aud.pushes == 0, "fifty writes to the speaker port push nothing");
+        g.d7a->pump();
+        CHECK(g.aud.pushes == 1, "pump() pushes the slice, once");
+        g.aud.depth = 0;
+        g.d7a->pump();
+        CHECK(g.aud.pushes == 1, "a second pump() with no time gone by pushes nothing");
+    }
+
+    SECTION("D+7A -- a bus reset takes the speaker to 0 V");
+    {
+        Rig g;
+        g.m.clock.setHz(441000);               // ten T-states to the sample
+        g.out(0x19, 0x40);
+        g.m.clock.advance(1000);
+        g.m.reset(Reset::Bus);
+        g.m.clock.advance(1000);
+        g.d7a->pump();
+        const auto& pcm = g.aud.only();
+        CHECK(pcm.size() == 200, "two hundred samples");
+        CHECK(pcm.size() == 200 && pcm[99] == 0x40 * LevelPcm::kGain, "the level, up to the reset");
+        CHECK(pcm.size() == 200 && pcm[100] == 0 && pcm[199] == 0, "and 0 V after it");
+    }
+
+    SECTION("D+7A -- power-on and RESTORE do not play the time the clock jumped");
+    {
+        Rig g;
+        g.m.clock.setHz(2000000);
+        g.tone(0x19, 200000, 1000);
+        g.m.power();                            // the clock is back at zero
+        g.aud.voices.clear();
+        g.aud.pushes = 0;
+        g.tone(0x19, 200000, 1000);
+        CHECK(g.aud.only().size() == 4410, "after power-on a tenth of a second is a tenth");
+
+        StateWriter w;
+        g.d7a->serialize(w);
+        g.m.clock.advance(3600ull * 2000000);   // an hour on, as a RESTORE can move it
+        StateReader r(w.data());
+        g.d7a->deserialize(r);
+        g.aud.voices.clear();
+        g.aud.pushes = 0;
+        g.d7a->pump();
+        CHECK(g.aud.pushes == 0, "the hour is not rendered");
+        g.tone(0x19, 200000, 1000);
+        CHECK(g.aud.only().size() == 4410, "and the sound after it is the right length");
     }
 }

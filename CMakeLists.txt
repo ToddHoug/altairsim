@@ -401,6 +401,10 @@ add_library(altair_core STATIC
   # container, an FSK signal is a modulation, a program image is neither.
   src/host/wav.cpp
   src/host/tapemodem.cpp
+  # A held level that changes at emulated instants, rendered to fixed-rate PCM: what a
+  # D/A-driven speaker needs between the board and the host Audio service (host/audio.h).
+  # No SDL and no board in it, so it is in every build and it is tested by itself.
+  src/host/level_pcm.cpp
   # ...and the seam that joins them to a mount. A decorator over MediaFile, so a WAV
   # decodes ONCE at MOUNT and everything above it -- TapeImage, TapeStream, the UART --
   # sees the bytes a .TAP would have given it (host/tapecodec.h).
@@ -609,9 +613,10 @@ target_include_directories(altair_core PUBLIC src "${CMAKE_BINARY_DIR}/generated
 # shipped binary was headless. This comment also used to claim the macOS leg passed
 # -DALTAIRSIM_ENABLE_SDL=OFF; it never did.)
 #
-# ONLY src/host/display_sdl.cpp includes SDL. The boards see host/display.h and
-# never learn a window exists, so they compile in every configuration; only this
-# one translation unit and the composition root (src/main.cpp) are macro-gated.
+# ONLY THE src/host/*_sdl.cpp FILES INCLUDE SDL: display, joystick and audio. The boards
+# see host/display.h, host/joystick.h and host/audio.h and never learn a window or a
+# sound device exists, so they compile in every configuration; only those translation
+# units and the composition root (src/main.cpp) are macro-gated.
 # SDL is cross-platform, not an OS header, so it does not trip the 2.1 platform_lint.
 # ---------------------------------------------------------------------------
 option(ALTAIRSIM_ENABLE_SDL "Build the SDL3-backed video boards if SDL3 is found" ON)
@@ -624,6 +629,10 @@ if(ALTAIRSIM_ENABLE_SDL)
     # need no extra find_package. It self-manages the SDL_INIT_GAMEPAD subsystem, so it
     # never contends with the display's video subsystem. See host/joystick_sdl.h.
     target_sources(altair_core PRIVATE src/host/joystick_sdl.cpp)
+    # The SDL3-backed sound service (host/audio.h): a D+7A plays its JS-1 speakers
+    # through this. It self-manages the SDL_INIT_AUDIO subsystem in the same way, and
+    # opens no device until a guest makes a sound. See host/audio_sdl.h.
+    target_sources(altair_core PRIVATE src/host/audio_sdl.cpp)
     target_link_libraries(altair_core PUBLIC SDL3::SDL3)
     target_compile_definitions(altair_core PUBLIC ALTAIRSIM_ENABLE_SDL)
 
@@ -800,6 +809,7 @@ add_executable(altair_tests
   tests/framecheck.cpp
   tests/test_framedump.cpp
   tests/test_d7a.cpp
+  tests/test_level_pcm.cpp
   tests/test_sol.cpp
   tests/test_tapemount.cpp
   tests/test_lines.cpp
