@@ -73,6 +73,7 @@ const struct {
     {"tapecounter", test_tapecounter},
     {"idle_judgement", test_idle_judgement},
     {"should_pace", test_should_pace},
+    {"may_nap", test_may_nap},
     {"achieved_hz", test_achieved_hz},
     {"boundary", test_boundary},
     {"numbers", test_numbers},

@@ -156,6 +156,10 @@ public:
     // is unchanged, and the guest cannot tell -- the 6850 still sets RDRF when a byte
     // lands, and the byte still lands. Only the host thread sleeps.
     //
+    // The run loop takes the nap only when it is NOT pacing to a crystal: a paced run
+    // already sleeps, and a nap in place of the throttle let the guest outrun its
+    // crystal at a prompt (#606; mayNap, cli/monitor.h).
+    //
     // On by default, and it lives here rather than in the run loop because this is
     // where the loop already comes to ask whether to sleep, and because the crystal it
     // sits beside is published by the same card (boards/mits-88cpu.h, `idle`).

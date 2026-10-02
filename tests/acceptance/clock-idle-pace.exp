@@ -1,0 +1,110 @@
+#!/usr/bin/expect -f
+#
+# A GUEST AT A PROMPT KEEPS ITS CRYSTAL'S TIME (#606).
+#
+# With a crystal set, the run loop's idle nap was taken in place of the throttle. At 2 MHz
+# a 2,000-instruction slice is about 8 ms of guest time and it got a 4 ms nap, so ALTMON at
+# its `*` prompt spent 6.63 s of guest time in 5.01 s of wall time. A guest that counts a
+# timeout while it polls the console counted it short.
+#
+# IT HAS TO BE AN EXPECT TEST. The nap and the throttle are both gated on a real terminal;
+# a piped run does neither, so no piped test can see this.
+#
+# THE BOUND HAS ONE SIDE, and that is why it cannot flake. A loaded host makes a paced guest
+# SLOWER than its crystal, never faster, so "the guest gained no more than 1.1 times the wall
+# time" holds on any runner. The fault gives 1.3 times. The lower check is not a timing
+# check: it only proves that the machine ran at all, so a guest that never started cannot
+# pass by gaining nothing.
+#
+# Every literal is `-ex` (expect patterns are globs, and a bare "*" matches anything).
+#
+# Usage: expect -f tests/acceptance/clock-idle-pace.exp <path-to-altairsim>
+
+set timeout 30
+log_user 0
+
+set sim [lindex $argv 0]
+if {$sim eq ""} { puts "usage: clock-idle-pace.exp <altairsim>"; exit 2 }
+
+proc ok   {msg} { puts "ok    -- $msg" }
+proc fail {msg} { puts "FAIL  -- $msg"; puts "--- last seen ---"; puts $::expect_out(buffer); exit 1 }
+
+# ^E, and the monitor must say that it STOPPED the machine. A prompt alone proves nothing.
+proc attn {what} {
+    send "\005"
+    expect {
+        -ex "STOP -- the machine is still at" {}
+        timeout { fail "^E did not stop the machine ($what)" }
+    }
+    expect {
+        -ex "altairsim> " {}
+        timeout { fail "no monitor prompt after ^E ($what)" }
+    }
+}
+
+# SHOW CLOCK, and the guest's elapsed seconds out of it.
+proc elapsed {what} {
+    send "SHOW CLOCK\r"
+    expect {
+        -re {elapsed\s+([0-9]+\.[0-9]+) s} { set e $expect_out(1,string) }
+        timeout { fail "SHOW CLOCK gave no elapsed time ($what)" }
+    }
+    expect {
+        -ex "altairsim> " {}
+        timeout { fail "no monitor prompt after SHOW CLOCK ($what)" }
+    }
+    return $e
+}
+
+# `altmon` runs its monitor PROM from its own startup line, so the guest has the console
+# as soon as it is spawned.
+spawn $sim -m altmon
+expect {
+    -ex "ALTMON" { ok "ALTMON is running" }
+    timeout      { fail "ALTMON never signed on" }
+}
+expect {
+    -ex "*" {}
+    timeout { fail "ALTMON never reached its prompt" }
+}
+
+attn "before the crystal is set"
+
+send "SET cpu0 clock_hz=2000000\r"
+expect -ex "altairsim> "
+send "SHOW CLOCK\r"
+expect {
+    -ex "paced --"    { ok "the run is paced at 2 MHz" }
+    timeout           { fail "SET cpu0 clock_hz=2000000 did not make the run paced" }
+}
+expect -ex "altairsim> "
+
+set e0 [elapsed "before the wait"]
+
+# The wall time is taken OUTSIDE the run on both sides, so it is never shorter than the
+# time the guest ran. That makes the bound below a little easier to meet, never harder.
+set w0 [clock milliseconds]
+send "RUN\r"
+expect {
+    -ex "console" {}
+    timeout       { fail "RUN did not give the console to the guest" }
+}
+sleep 3
+attn "after the wait at the prompt"
+set w1 [clock milliseconds]
+
+set e1 [elapsed "after the wait"]
+
+set wall  [expr {($w1 - $w0) / 1000.0}]
+set guest [expr {$e1 - $e0}]
+set ratio [expr {$guest / $wall}]
+set said  [format "guest %.3f s in %.3f s of wall time (%.2f times)" $guest $wall $ratio]
+
+if {$guest < 1.0} { fail "the guest did not run at the prompt: $said" }
+if {$guest > $wall * 1.1} { fail "the guest ran faster than its crystal: $said" }
+ok "an idle prompt keeps the crystal's time: $said"
+
+send "QUIT\r"
+expect eof
+puts "PASS"
+exit 0

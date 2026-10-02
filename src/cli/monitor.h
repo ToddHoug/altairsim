@@ -346,4 +346,13 @@ bool guestIsWaiting(const SliceWork& w, uint64_t ratio = 32);
 // console alone left a socket-or-serial-only machine pacing against nothing (#6).
 bool shouldPace(bool anyConsole, bool tty, bool anyRemoteLine, bool free);
 
+// MAY THE RUN LOOP NAP at an idle prompt this run?
+//
+// Only when the CPU card allows it (`idle`), only on an interactive console, and only when
+// the throttle is NOT pacing. A paced run already sleeps for most of every slice, so a nap
+// saves nothing there -- and a nap taken IN PLACE of the throttle leaves the slice before it
+// unpaced: at 2 MHz a 2,000-instruction slice is about 8 ms of guest time and it got a 4 ms
+// nap, so a guest at a prompt ran 1.3 times its crystal (#606).
+bool mayNap(bool idle, bool anyConsole, bool tty, bool paced);
+
 } // namespace altair

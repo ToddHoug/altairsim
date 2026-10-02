@@ -43,6 +43,7 @@ void test_lineedit();
 void test_tapecounter();
 void test_idle_judgement();
 void test_should_pace();
+void test_may_nap();
 void test_achieved_hz();
 void test_boundary();
 void test_numbers();
