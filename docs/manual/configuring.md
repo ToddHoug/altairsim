@@ -61,15 +61,28 @@ property of every board. The program prints that reference from the same table t
 so it is always current.
 
 **An unknown table or key is an error, and the machine does not load.** The program tells you
-which key it did not know:
+which key it did not know, and the line of the file that the key is on:
 
 ```
-mine.toml: unknown [machine] key 'widget'
-mine.toml: [[board]] cpu0: cpu0 has no property 'frobnicate'. Known: clock_hz idle achieved_hz
+mine.toml: line 4: unknown [machine] key 'widget'
+mine.toml: line 7: [[board]] cpu0: cpu0 has no property 'frobnicate'. Known: clock_hz idle achieved_hz
 ```
 
 For this reason, a setting with a typing mistake never looks as if it worked. You find the
 mistake when you load the file.
+
+**A table or a key that you write two times is an error also.** Write `[machine]`,
+`[console]`, `[display]` and `[terminal]` one time each in a file. Write a
+`[board.unit.<name>]` one time below its `[[board]]`, and write a key one time in its table.
+This mistake usually occurs when you paste one machine file into another. The error gives
+both lines:
+
+```
+mine.toml: line 8: [console] is already at line 5 -- a table is written one time
+mine.toml: line 6: 'name' is already set at line 2
+```
+
+Each key must be below a table. A key above the first table is an error.
 
 ## The tables
 
@@ -140,7 +153,7 @@ sense    = 0x80           # ERROR
 The program **rejects both, and it tells you where each one goes**:
 
 ```
-mine.toml: clock_hz belongs to the CPU BOARD, not to [machine] --
+mine.toml: line 4: clock_hz belongs to the CPU BOARD, not to [machine] --
   the crystal is on the board. Put it in the CPU's [[board]]:
       [[board]]
       type     = "8080"

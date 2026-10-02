@@ -223,10 +223,11 @@ unit  = 0
 mount = "disks/Kermit/cpm.dsk"      # meant: the disks/ up beside machines/
 ```
 
-`altairsim -f ./machines/8800c.toml` then prints:
+`altairsim -f ./machines/8800c.toml` then prints the error, with the line of the
+`[[board.drive]]` in your file:
 
 ```
-./machines/8800c.toml: dsk0: 'machines/disks/Kermit/cpm.dsk': no such file
+./machines/8800c.toml: line 12: dsk0: 'machines/disks/Kermit/cpm.dsk': no such file
   ('disks/Kermit/cpm.dsk' is relative to the machine's directory, ./machines/)
 ```
 
