@@ -1466,7 +1466,7 @@ The 8080 begins at `0000`; a boot PROM lives at `FF00`. Something must bridge th
 1. **Synthesize a bootstrap internally** and jam it into memory (what SIMH's `BOOT` does). **Forbidden by §0.1** — it is fabricated hardware, and it means the machine boots in a way no real Altair ever booted.
 2. **Do what the operator does: start execution at the PROM.** `RUN FF00`.
 
-The real hardware does it with a **power-on jump**: a turnkey/PROM board that forces the processor to the PROM address after a reset. That is a genuine S-100 feature and it may eventually be modeled as a **board property** — but it needs the 88-TURNKEY manual first (§17), and no simulator convenience should stand in for it in the meantime.
+The real hardware does it with a **power-on jump**: a turnkey/PROM board that forces the processor to the PROM address after a reset. That is a genuine S-100 feature, and a board that has it models it as a **board property**. Two do: `turnkey` (the 88-TURNKEY's Auto-Start jams `JMP <start>` on the first three fetches) and `sbc` (the SBC-200's auto-start reads the PROM at the `start` page until the PROM reads port `7F`). Neither needed a new `Cycle`: each answers ordinary `MemRead`s and asserts PHANTOM\*. A machine with such a board needs only `RUN`. For a board that has no such circuit, or whose circuit is not modeled yet, `RUN <addr>` is the honest answer, and no simulator convenience stands in for it.
 
 So the monitor keeps only the honest verb — **`RUN <addr>`; `GO` was deleted 2026-07-12, because `RUN` is the switch on the panel and there was never a second thing for `GO` to be** — and to spare you typing it every session, **a machine config can carry a list of monitor commands to run once the backplane is built**:
 
@@ -1854,7 +1854,6 @@ every other card named here over the project's life was answered from a period m
 | Board | What's missing |
 |---|---|
 | **PMMI MM-103** | The **E1–E7 pad → VI0–VI7 correspondence**; the manual says only to consult your CPU/VI card manual. Everything else about the card is recovered and built, and this is precisely why its interrupt enable and mask staging are shadowed but inert (`docs/boards/pmmi-mm103.md`). |
-| **88-TURNKEY / PROM** | **How power-on jump works.** A turnkey board forces the CPU to the PROM address after reset; the mechanism is undocumented in the tree. Nothing is blocked — `startup = ["RUN FF00"]` covers it honestly (§10.0) — but modeling POJ as a real board property is the correct long-run answer, and it would test whether a `Board` can claim an instruction-fetch cycle the way the 88-VI claims an `IntAck` — which would mean **adding one**, since `Cycle` today is `{MemRead, MemWrite, IoRead, IoWrite, IntAck}` and an opcode fetch is just a `MemRead` (§4). |
 
 **Two questions that were on this list were answered by an artifact, not a document**, and both are
 worth remembering. The 88-ACR's manual said nothing about motor control because **there is none** —

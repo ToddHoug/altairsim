@@ -135,36 +135,144 @@ output handshake. The SBC-100 does not have this mechanism.
 
 ## 5. Memory mapping, boot PROM window and auto-start
 
-**Memory-mapping headers** (identical scheme on both):
+The board holds **1024 bytes of static RAM** (U19, U20) and **four ROM/PROM sockets** (ROM 0–3 =
+U36–U39). Jumpers set where each one sits in memory. "The memory on the SBC-200 takes priority
+over any memory on another board which might occupy the same memory addresses."
 
-- **X1** — ROM chip-size selection (1K/2K/4K/8K per socket) and the memory-bank select
-  (A10–A15) that places the board's whole window in an 8K/16K/32K/64K bank.
+**Memory-mapping headers** (identical scheme on both boards):
+
+- **X1** — the ROM chip size (Table 2-3) and the memory bank (Table 2-4).
 - **X2** — ROM *type*: routes A10/A11/A12 to the socket's address pins for the fitted device
   (2758/2716/2732 EPROMs; 2308/2316/2332 mask ROMs; Mostek 34000/32000/36000; 93451 PROM).
-  Boards ship etch-jumpered for **2716** EPROMs in the top bank.
-- **X3** — per-socket placement (ROM 0/1/2 low or high position, ROM 3, RAM). Only sockets
-  jumpered on X3 occupy the map, so the board can claim just its 1 KB alongside a 64 KB
-  EXPANDORAM.
+- **X3** — which slots of the bank are used (Table 2-5). Only the slots jumpered on X3 occupy
+  the map, so the board can claim just its 1 KB alongside a 64 KB EXPANDORAM.
 
-**Auto-start (boot-from-high-PROM).** On reset the board forces the Z80 to begin execution at a
-**4K boundary** (the auto-start address) instead of `0000H`, so a boot PROM living high in
-memory runs first. The boundary is set by jumpers **X16/X17/X18**. The first two instructions
-of the boot code release the override:
+The etch default is **2K ROMs in bank 3**, the top of memory.
+
+### Table 2-3 — ROM size selection (X1)
+
+| Size per chip | Jumpers |
+|---|---|
+| 1K | X1-1 to X1-2, X1-3 to X1-4, X1-5 to X1-6 |
+| 2K | X1-2 to X1-3, X1-4 to X1-5, X1-6 to X1-7, X1-8 to X1-10 |
+| 4K | X1-2 to X1-5, X1-4 to X1-7, X1-6 to X1-9, X1-8 to X1-10, X1-10 to X1-12 |
+| 8K | X1-2 to X1-7, X1-4 to X1-9, X1-6 to X1-11 |
+
+### Table 2-4 — Memory bank selection (X1)
+
+A bank is **eight slots of the chip size**: 8K for 1K chips, 16K for 2K, 32K for 4K, 64K for 8K.
+
+| Chip size | Bank | Addresses | Jumpers |
+|---|---|---|---|
+| 1K | 0 | 0000–1FFF | X1-8 to X1-13, X1-10 to X1-15, X1-12 to X1-16 |
+| 1K | 1 | 2000–3FFF | X1-8 to X1-7, X1-10 to X1-15, X1-12 to X1-16 |
+| 1K | 2 | 4000–5FFF | X1-8 to X1-13, X1-10 to X1-9, X1-12 to X1-16 |
+| 1K | 3 | 6000–7FFF | X1-8 to X1-7, X1-10 to X1-9, X1-12 to X1-16 |
+| 1K | 4 | 8000–9FFF | X1-8 to X1-13, X1-10 to X1-15, X1-12 to X1-11 |
+| 1K | 5 | A000–BFFF | X1-8 to X1-7, X1-10 to X1-15, X1-12 to X1-11 |
+| 1K | 6 | C000–DFFF | X1-8 to X1-13, X1-10 to X1-9, X1-12 to X1-11 |
+| 1K | 7 | E000–FFFF | X1-8 to X1-7, X1-10 to X1-9, X1-12 to X1-11 |
+| 2K | 0 | 0000–3FFF | X1-10 to X1-15, X1-12 to X1-16 |
+| 2K | 1 | 4000–7FFF | X1-10 to X1-9, X1-12 to X1-16 |
+| 2K | 2 | 8000–BFFF | X1-10 to X1-15, X1-12 to X1-11 |
+| 2K | 3 | C000–FFFF | X1-9 to X1-10, X1-11 to X1-12 |
+| 4K | 0 | 0000–7FFF | X1-12 to X1-16 |
+| 4K | 1 | 8000–FFFF | X1-12 to X1-11 |
+| 8K | 0 | 0000–FFFF | X1-8 to X1-10, X1-10 to X1-12, X1-12 to X1-14 (SBC-100 manual: none) |
+
+The SBC-200 manual prints `X-15` for `X1-15` in the 1K bank 1 row.
+
+### Table 2-5 — ROM and RAM memory space (X3)
+
+Each X3 jumper puts one device in one slot of the bank. ROM 0, 1 and 2 each have two possible
+slots (low and high); ROM 3 has one. The RAM is the last slot.
+
+| Slot | Device | Location | X3 jumper | Address in the bank |
+|---|---|---|---|---|
+| 0 | ROM 0 (low) | U36 | X3-1 to X3-2 | 0 × size |
+| 1 | ROM 1 (low) | U37 | X3-3 to X3-4 | 1 × size |
+| 2 | ROM 2 (low) | U38 | X3-5 to X3-6 | 2 × size |
+| 3 | ROM 3 | U39 | X3-7 to X3-8 | 3 × size |
+| 4 | ROM 0 (high) | U36 | X3-9 to X3-10 | 4 × size |
+| 5 | ROM 1 (high) | U37 | X3-11 to X3-12 | 5 × size |
+| 6 | ROM 2 (high) | U38 | X3-13 to X3-14 | 6 × size |
+| 7 | RAM | U19, U20 | X3-15 to X3-16 | 7 × size |
+
+**Slot address = bank × 8 × size + slot × size.** The manual prints the result for every size
+and bank; the formula gives each printed row. For the etch default (2K, bank 3):
+
+| Slot | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 (RAM) |
+|---|---|---|---|---|---|---|---|---|
+| Start | C000 | C800 | D000 | D800 | E000 | E800 | F000 | F800 |
+
+So the monitor PROM at `E000` is ROM 0 in its high slot, the disk BIOS PROM at `F000` is ROM 2
+in its high slot, and the RAM is `F800`–`FFFF`.
+
+**The RAM takes a whole slot.** "When the on board 1K Static RAM is used, it occupies the same
+amount of memory as each of the ROM/PROM sockets. For example, if 2K ROM/PROMS are used, the 1K
+RAM occupies two contiguous 1K blocks, redundantly." With 2K chips the same 1K is at `F800` and
+at `FC00`.
+
+**Switching the onboard memory out (SBC-200 only, manual §2.4.4).** `OUT 7FH` with bit 1 set
+(`LD A,2` or `3`) switches all onboard memory out of the map; with bit 1 clear (`LD A,0`) it
+switches it back in. Bit 0 is the parallel port's handshake bit. While the onboard memory is
+switched out, a memory board may occupy the same addresses. "While the on-board memory is
+switched in, any memory writes to the 1K RAM also writes to the memory on the other board
+containing memory at that address. The SBC-200 always enables the on-board memory upon reset."
+
+### Auto-start (X16, X17, X18)
+
+"Since many systems require RAM starting at address 0, the SBC-200 has the capability of
+automatically causing control to begin on any 4K boundary upon resetting the board." The start
+address is any multiple of `1000H`, `0000H`–`F000H`.
+
+**Table 2-6 (SBC-200) / Table 3-1 (SBC-100)** — each jumper sets one bit of the start address:
+
+| Address bit | Header | 0 | 1 |
+|---|---|---|---|
+| A15 | X17 | X17-2 to X17-3 | X17-1 to X17-2 |
+| A14 | X18 (pins 4-5-6) | X18-5 to X18-6 | X18-4 to X18-5 |
+| A13 | X16 | X16-2 to X16-3 | X16-1 to X16-2 |
+| A12 | X18 (pins 1-2-3) | X18-2 to X18-3 | X18-1 to X18-2 |
+
+The manuals print all sixteen rows (`0000`, `1000`, … `F000`); each row is the four jumpers for
+its four bits. Two rows of the SBC-200 table are misprinted. The SBC-100 table has them right:
+
+| Row | SBC-200 prints | Correct (SBC-100 table) |
+|---|---|---|
+| `5000` | X18-2 TO X18-2 | X18-1 to X18-2 |
+| `9000` | X17-2 TO X17-2 | X17-1 to X17-2 |
+
+The code at the start address must release the circuit with its first two instructions:
 
 ```
 X000  JP  X003        ; C3 03 X0
-X003  IN  A,(7FH)      ; DB 7F  — reading port 7FH clears the auto-start jam
+X003  IN  A,(7FH)     ; DB 7F
 ```
 
-After that, normal memory decoding resumes. (The override is not needed only when X = 0, i.e.
-resetting straight to `0000H`.)
+"This resets the hardware which caused execution to occur at X000 instead of 0000. The only
+case where these instructions are not needed is when X=0 i.e. when resetting to 0000."
 
-- The **SD/MS monitor PROM resides at `E000H`**; a floppy boot is done by setting the auto-start
-  to **`F000H`**, where the disk BIOS (DDBIOS) PROM lives. The single jumper **X18-2** selects
-  E000 vs F000 as the etch default.
-- There is **no separate "phantom" jumper** documented: the auto-start override plus onboard
-  memory priority plus the port-7FH clear together implement the high-PROM boot. (A `PHANTOM`
-  net exists on the SBC-200 schematic but is not user-documented.)
+- "The S.D. Monitor resides at E000 and requires that the jumpers be set to cause an auto start
+  to that address. When resetting to the disk controller prom (BIOS), set the auto start for
+  F000."
+- The board is etch-jumpered for `E000` or `F000`; only the last jumper (**X18-2**) must be
+  connected, and it selects between the two.
+- **What the manuals do not say.** The SBC-200 manual's circuit analysis (§2.3) is blank, and
+  neither manual describes the circuit. The `JP X003` is to an absolute address in the PROM, so
+  after it the program counter is in the PROM and the read of port 7FH can release the circuit.
+  That the circuit supplies all of A12–A15 until the release is read from the table (four
+  jumpers, four bits); it is not confirmed from a schematic analysis.
+- **What the PROMs do.** The MSMONR21 and SDMONV21 monitor PROMs open with `JP E00F`
+  (`C3 0F E0`), and `E00F` is `IN A,(7FH)`. That is the manual's sequence with a different
+  target: a jump to an absolute address in the PROM, then the read of port 7FH.
+- There is **no separate "phantom" jumper** documented. (A `PHANTOM` net exists on the SBC-200
+  schematic but is not user-documented.)
+
+**SBC-100 manual.** It has the same tables under other numbers: bank selection is its Table 2-3,
+the X3 slot table is its Table 2-4, and the auto-start table is its Table 3-1 (Section III).
+The addresses and jumpers agree with the SBC-200 manual, except the 8K bank row above. It has
+no memory switch-out (§8).
 
 ---
 

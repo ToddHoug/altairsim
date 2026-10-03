@@ -784,7 +784,7 @@ SD Systems SBC-100/200: Z80 single-board computer. One 8-port block (78-7F): Int
 
 | Key | Kind | Legal | Meaning |
 |---|---|---|---|
-| `at` | int | any | Where the socket sits in the onboard window (E000 = monitor, F000 = disk BIOS) |
+| `at` | int | any | Where the socket sits: a socket address of the bank (etch: E000 = monitor, F000 = disk BIOS) |
 | `mount` | string | text | What is in the socket: builtin:<name> or a HEX/BIN path. Relative to THIS FILE. |
 
 #### Board properties
@@ -794,6 +794,10 @@ SD Systems SBC-100/200: Z80 single-board computer. One 8-port block (78-7F): Int
 | `variant` | enum | `sbc200` | `sbc100` \| `sbc200` | Which board: sbc100 (2.4576 MHz) or sbc200 (4 MHz). The console, CTC and PROM behave alike here; the CPU crystal is set on the z80 card |
 | `rxd2dsr` | bool | `true` | `on` \| `off` | RxD strapped to /DSR (the SBC auto-baud jumper). Off = a plain 8251 /DSR |
 | `port` | int | `0x7C` | `0x0` .. `0xFE` | Base I/O address (a card jumper). Data at BASE, status/command at BASE+1. The etch default is 7C |
+| `rom_size` | enum | `2K` | `1K` \| `2K` \| `4K` \| `8K` | Size of each PROM socket (the X1 jumpers): 1K, 2K, 4K or 8K. The etch is 2K |
+| `bank` | int | `3` | `0` .. `7` | Which bank the onboard memory is in (the X1 jumpers). A bank is eight sockets' worth: 0-7 for 1K, 0-3 for 2K, 0-1 for 4K, 0 for 8K. The etch is 3 (C000-FFFF) |
+| `ram` | bool | `true` | `on` \| `off` | The onboard 1K static RAM is jumpered in (X3-15 to X3-16). It is the last socket's worth of the bank: F800-FFFF on the etch |
+| `start` | int | `0x0` | `0x0` .. `0xF000` | Auto-start address (the X16/X17/X18 jumpers): after a reset the Z80 reads the PROM here. A multiple of 1000; 0000 = no auto-start |
 
 #### Unit `tty` — `[board.unit.tty]`
 

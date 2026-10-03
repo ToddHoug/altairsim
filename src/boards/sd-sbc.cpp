@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <fstream>
 #include <iterator>
+#include <random>
 #include <utility>
 #include <vector>
 
@@ -72,10 +73,26 @@ bool SbcBoard::decodes(const BusCycle& c) const {
         return p >= blockBase() && (uint8_t)(p - blockBase()) < 8;  // 78-7F, no wrap
     }
 
-    // The onboard PROM answers memory reads in its window while switched in. Writes
-    // fall through to the RAM under the shadow (assertsPhantom keeps the RAM off the
-    // read but not the write), so we do NOT decode MemWrite.
-    if (c.type == Cycle::MemRead) return promArmed_ && inPromWindow(c.addr);
+    // The onboard PROMs and RAM answer memory reads while switched in. Writes are NOT
+    // decoded: a write in a PROM slot falls through to the RAM under the shadow, and a
+    // write in the onboard RAM's slot goes to the off-board RAM as well (snoop() takes
+    // our copy).
+    if (c.type == Cycle::MemRead) {
+        uint16_t t;
+        return onboard(c.addr, t) != Onboard::None;
+    }
+    return false;
+}
+
+// DISASM, DUMP and the debugger's display look here. Onboard memory has no read side
+// effect, so the answer is the one read() gives.
+bool SbcBoard::peek(uint16_t addr, uint8_t& out) const {
+    uint16_t t;
+    switch (onboard(addr, t)) {
+    case Onboard::Prom: out = prom_[t]; return true;
+    case Onboard::Ram:  out = ramStore_[t & (kRamSize - 1)]; return true;
+    case Onboard::None: break;
+    }
     return false;
 }
 
@@ -83,8 +100,9 @@ uint8_t SbcBoard::read(const BusCycle& c) {
     if (c.type == Cycle::IntAck) return ctc_.ch1Vector();  // 0x82 -> ISR pointer at FF82
 
     if (c.type == Cycle::MemRead) {
-        // Only reached while promArmed_ && inPromWindow (see decodes()).
-        return prom_[c.addr - kOnboardBase];
+        uint8_t v = 0xFF;
+        peek(c.addr, v);  // only reached while onboard memory answers (see decodes())
+        return v;
     }
 
     const Clock& clk = clock_ ? *clock_ : deadCard();
@@ -116,7 +134,7 @@ void SbcBoard::write(const BusCycle& c) {
         bool armed = (c.data & 0x02) == 0;
         if (armed != promArmed_) {
             promArmed_ = armed;
-            decodeChanged();  // the E000-FFFF window just changed hands
+            decodeChanged();  // the onboard slots just changed hands
         }
     }
     // 7E (parallel data latch) has no observable effect with nothing wired to J3.
@@ -164,14 +182,35 @@ bool SbcBoard::ch1Triggered() const {
     return bus_ && (bus_->viLines() & viBit(IrqJumper::Vi2)) != 0;
 }
 
-// PHANTOM*, held while the onboard memory is switched in. On a READ in a socket window
-// the PROM drives and the RAM under it stands down (honors_phantom = read); on a WRITE
-// we still assert it, but the RAM honors phantom only on reads, so the write lands in
-// RAM -- which is the whole point of the shadow. Same shape as the Turnkey boot PROM.
+// PHANTOM*, held while the onboard memory is switched in. On a READ the onboard PROM or
+// RAM drives and the RAM under it stands down (honors_phantom = read); on a WRITE we
+// still assert it, but the RAM honors phantom only on reads, so the write lands in RAM
+// -- which is the whole point of the shadow. Same shape as the Turnkey boot PROM.
+//
+// The auto-start override moves READS only: that is all the PROM's two opening
+// instructions do, and the manual says nothing about a write while it is armed.
 bool SbcBoard::assertsPhantom(const BusCycle& c) const {
     if (!promArmed_) return false;
-    if (c.type != Cycle::MemRead && c.type != Cycle::MemWrite) return false;
-    return inPromWindow(c.addr);
+    if (c.type == Cycle::MemRead) {
+        uint16_t t;
+        return onboard(c.addr, t) != Onboard::None;
+    }
+    if (c.type == Cycle::MemWrite) return promPresent_[c.addr] || inRamSlot(c.addr);
+    return false;
+}
+
+// The clocked half (board.h). Two things latch here.
+void SbcBoard::snoop(const BusCycle& c) {
+    // THE AUTO-START RELEASE: the PROM's second instruction is IN A,(7FH). The board
+    // answers that read (the parallel port) AND watches it go by.
+    if (autoStartArmed_ && c.type == Cycle::IoRead && c.port() == (uint8_t)(blockBase() + 7)) {
+        autoStartArmed_ = false;
+        decodeChanged();  // 0000-FFFF stop reading as the `start` page
+    }
+    // A write in the onboard RAM's slot. The off-board RAM at that address takes the
+    // same byte (manual 2.4.4), which is why this is not a decode.
+    if (c.type == Cycle::MemWrite && promArmed_ && inRamSlot(c.addr))
+        ramStore_[c.addr & (kRamSize - 1)] = c.data;
 }
 
 // ---------------------------------------------------------------------------
@@ -218,9 +257,12 @@ uint64_t SbcBoard::nextEdge() const {
 // ---------------------------------------------------------------------------
 void SbcBoard::reset(Reset r) {
     // Any reset switches the onboard memory back IN (the board comes up with the PROM
-    // mapped, reference §7). This is independent of the clock -- do it first.
-    if (!promArmed_) {
-        promArmed_ = true;
+    // mapped, reference §7) and arms auto-start if the jumpers name an address. This is
+    // independent of the clock -- do it first.
+    const bool arm = start_ != 0;
+    if (!promArmed_ || autoStartArmed_ != arm) {
+        promArmed_      = true;
+        autoStartArmed_ = arm;
         decodeChanged();
     }
     if (!clock_) return;
@@ -231,6 +273,19 @@ void SbcBoard::reset(Reset r) {
 
 void SbcBoard::power() {
     loadProm();             // re-read the socket ROMs from the host, like a memory card
+
+    // The RAM chips just powered up: they hold whatever they feel like (DESIGN.md 6).
+    // A fixed seed, so a POWER is repeatable.
+    std::mt19937 rng(0x5BC200u);
+    for (uint8_t& b : ramStore_) b = (uint8_t)(rng() & 0xFF);
+
+    if (start_ != 0 && !promPresent_[start_]) {
+        char buf[160];
+        std::snprintf(buf, sizeof buf,
+                      "%s: start = %04X but no PROM socket is there -- auto-start does nothing",
+                      id.c_str(), start_);
+        log_.push_back(buf);
+    }
     reset(Reset::PowerOn);
 }
 
@@ -250,9 +305,9 @@ void SbcBoard::configChanged() {
 }
 
 // ---------------------------------------------------------------------------
-// Snapshot: the chip's live state travels, and so do the CTC's arm/vector latches and
-// the memory switch. The straps (variant/base/sockets) and the PROM bytes are config,
-// re-read on power (DESIGN.md 13).
+// Snapshot: the chip's live state travels, and so do the CTC's arm/vector latches, the
+// memory switch, the auto-start latch and the onboard RAM. The straps (variant/base/
+// jumpers/sockets) and the PROM bytes are config, re-read on power (DESIGN.md 13).
 // ---------------------------------------------------------------------------
 void SbcBoard::serialize(StateWriter& w) const {
     Board::serialize(w);
@@ -261,6 +316,8 @@ void SbcBoard::serialize(StateWriter& w) const {
     w.boolean(ctc_.ch1IntArmed_);
     for (bool b : ctc_.expectTc_) w.boolean(b);
     w.boolean(promArmed_);
+    w.boolean(autoStartArmed_);
+    w.raw(ramStore_, kRamSize);
 }
 
 void SbcBoard::deserialize(StateReader& r) {
@@ -270,6 +327,8 @@ void SbcBoard::deserialize(StateReader& r) {
     ctc_.ch1IntArmed_ = r.boolean();
     for (bool& b : ctc_.expectTc_) b = r.boolean();
     promArmed_ = r.boolean();
+    autoStartArmed_ = r.boolean();
+    r.raw(ramStore_, kRamSize);
     decodeChanged();  // the PROM window may have changed hands
     refresh();        // re-drive /INT and re-arm the deadline from the restored state
 }
@@ -331,6 +390,71 @@ std::vector<Property> SbcBoard::properties() {
         };
         p.push_back(std::move(x));
     }
+    {
+        Property x;
+        x.name    = "rom_size";
+        x.help    = "Size of each PROM socket (the X1 jumpers): 1K, 2K, 4K or 8K. The etch "
+                    "is 2K";
+        x.kind    = Kind::Enum;
+        x.choices = {"1K", "2K", "4K", "8K"};
+        x.get     = [this] { return Value::ofStr(std::string(1, "1248"[romSizeLog_]) + "K"); };
+        x.set     = [this](const Value& v, std::string&) {
+            romSizeLog_ = v.s() == "1K" ? 0 : v.s() == "2K" ? 1 : v.s() == "4K" ? 2 : 3;
+            loadProm();
+            return true;
+        };
+        p.push_back(std::move(x));
+    }
+    {
+        Property x;
+        x.name = "bank";
+        x.help = "Which bank the onboard memory is in (the X1 jumpers). A bank is eight "
+                 "sockets' worth: 0-7 for 1K, 0-3 for 2K, 0-1 for 4K, 0 for 8K. The etch "
+                 "is 3 (C000-FFFF)";
+        x.kind = Kind::Int;
+        x.min  = 0;
+        x.max  = 7;
+        x.get  = [this] { return Value::ofInt(bank_); };
+        x.set  = [this](const Value& v, std::string&) {
+            bank_ = (int)v.i();
+            loadProm();
+            return true;
+        };
+        p.push_back(std::move(x));
+    }
+    {
+        Property x;
+        x.name = "ram";
+        x.help = "The onboard 1K static RAM is jumpered in (X3-15 to X3-16). It is the "
+                 "last socket's worth of the bank: F800-FFFF on the etch";
+        x.kind = Kind::Bool;
+        x.get  = [this] { return Value::ofBool(ram_); };
+        x.set  = [this](const Value& v, std::string&) {
+            ram_ = v.b();
+            return true;
+        };
+        p.push_back(std::move(x));
+    }
+    {
+        Property x;
+        x.name  = "start";
+        x.help  = "Auto-start address (the X16/X17/X18 jumpers): after a reset the Z80 "
+                  "reads the PROM here. A multiple of 1000; 0000 = no auto-start";
+        x.kind  = Kind::Int;
+        x.radix = 16;
+        x.min   = 0;
+        x.max   = 0xF000;
+        x.get   = [this] { return Value::ofInt(start_); };
+        x.set   = [this](const Value& v, std::string& err) {
+            if (v.i() & 0x0FFF) {
+                err = "start is a 4K boundary: 0000, 1000, ... F000";
+                return false;
+            }
+            start_ = (uint16_t)v.i();
+            return true;
+        };
+        p.push_back(std::move(x));
+    }
     return p;
 }
 
@@ -358,17 +482,27 @@ std::vector<MapEntry> SbcBoard::ioMap() const {
          "8251 -- status / mode+command"},
         {(uint32_t)b + 6, (uint32_t)b + 6, "read/write", "parallel port -- data latch"},
         {(uint32_t)b + 7, (uint32_t)b + 7, "read/write",
-         "parallel handshake; bit 1 switches the onboard PROM out of the map"},
+         "parallel handshake; a write with bit 1 set switches the onboard memory out of "
+         "the map; a read releases auto-start"},
     };
 }
 
 std::vector<MapEntry> SbcBoard::memMap() const {
+    // How the board is BUILT (SHOW MACHINE reads this too), not where the OUT 7F switch
+    // is now. WHO gives the answer for the moment.
     std::vector<MapEntry> m;
     for (const auto& sock : sockets_) {
         if (sock.mount.empty()) continue;
-        m.push_back({(uint32_t)sock.at, (uint32_t)sock.at, "read",
+        m.push_back({(uint32_t)sock.at, (uint32_t)sock.at + romBytes() - 1, "read",
                      "onboard PROM socket (" + sock.mount +
                      "); shadows RAM until OUT 7F bit 1 switches it out"});
+    }
+    if (ram_ && bankValid()) {
+        std::string note = "onboard 1K static RAM";
+        if (romBytes() > (uint32_t)kRamSize)
+            note += ", repeated in its " + std::to_string(romBytes() / 1024) + "K slot";
+        m.push_back({slotAddr(kRamSlot), slotAddr(kRamSlot) + romBytes() - 1, "read/write",
+                     note + "; a write also reaches the RAM board under it"});
     }
     return m;
 }
@@ -422,12 +556,58 @@ std::vector<std::string> SbcBoard::drainLog() {
 // The onboard PROM sockets. `builtin:` and a host path travel the SAME Intel HEX parser
 // as a memory card's ROM region (DESIGN.md 10.3.1) -- the same loader the Turnkey uses.
 // ---------------------------------------------------------------------------
+int SbcBoard::slotAt(uint16_t at) const {
+    for (int n = 0; n < kSlots; ++n)
+        if (slotAddr(n) == at) return n;
+    return -1;
+}
+
+std::string SbcBoard::socketFault(uint16_t at, size_t skip) const {
+    char buf[200];
+    if (!bankValid()) {
+        std::snprintf(buf, sizeof buf, "rom_size = %uK has banks 0-%d, and bank = %d",
+                      (unsigned)(romBytes() / 1024), bankCount() - 1, bank_);
+        return buf;
+    }
+    const int n = slotAt(at);
+    if (n < 0) {
+        std::snprintf(buf, sizeof buf,
+                      "%04X is not a socket address: with rom_size = %uK and bank = %d the "
+                      "sockets are at %04X, %04X, ... %04X",
+                      at, (unsigned)(romBytes() / 1024), bank_, (unsigned)slotAddr(0),
+                      (unsigned)slotAddr(1), (unsigned)slotAddr(kRamSlot - 1));
+        return buf;
+    }
+    if (n == kRamSlot) {
+        std::snprintf(buf, sizeof buf, "%04X is the onboard RAM's place, not a PROM socket", at);
+        return buf;
+    }
+    // ROM 0, 1 and 2 each have a low and a high place (slot n and n+4). It is one socket.
+    for (size_t i = 0; i < sockets_.size(); ++i) {
+        if (i == skip) continue;
+        const int m = slotAt(sockets_[i].at);
+        if (m >= 0 && m != kRamSlot && (m % 4) == (n % 4)) {
+            std::snprintf(buf, sizeof buf, "%04X and %04X are the same socket (ROM %d)",
+                          sockets_[i].at, at, n % 4);
+            return buf;
+        }
+    }
+    return {};
+}
+
 void SbcBoard::loadProm() {
     std::fill(std::begin(prom_), std::end(prom_), (uint8_t)0xFF);
     std::fill(std::begin(promPresent_), std::end(promPresent_), false);
+    decodeChanged();
 
-    for (const auto& sock : sockets_) {
+    for (size_t si = 0; si < sockets_.size(); ++si) {
+        const auto& sock = sockets_[si];
         if (sock.mount.empty()) continue;
+        // The jumpers can move after a socket was filled (SET rom_size / bank).
+        if (std::string why = socketFault(sock.at, si); !why.empty()) {
+            log_.push_back(id + ": socket not loaded: " + why);
+            continue;
+        }
         Image       img;
         std::string err;
 
@@ -478,17 +658,22 @@ void SbcBoard::loadProm() {
                           id.c_str(), sock.mount.c_str(), img.lo(), sock.at);
             log_.push_back(buf);
         }
+        unsigned outside = 0;
         for (const auto& [a, b] : img.bytes) {
-            if (a >= kOnboardBase && a < (uint32_t)kOnboardBase + kOnboardSize) {
-                prom_[a - kOnboardBase]        = b;
-                promPresent_[a - kOnboardBase] = true;
+            if (a >= sock.at && a < (uint32_t)sock.at + romBytes()) {
+                prom_[a]        = b;
+                promPresent_[a] = true;
             } else {
-                char buf[160];
-                std::snprintf(buf, sizeof buf,
-                              "%s: %s byte at %04X is outside the onboard window E000-FFFF",
-                              id.c_str(), sock.mount.c_str(), (unsigned)a);
-                log_.push_back(buf);
+                ++outside;
             }
+        }
+        if (outside) {
+            char buf[200];
+            std::snprintf(buf, sizeof buf,
+                          "%s: %s: %u byte(s) outside the %uK socket at %04X were not loaded",
+                          id.c_str(), sock.mount.c_str(), outside,
+                          (unsigned)(romBytes() / 1024), sock.at);
+            log_.push_back(buf);
         }
     }
 }
@@ -499,7 +684,8 @@ std::vector<Property> SbcBoard::subUnitProperties(const std::string& table) cons
     {
         Property x;
         x.name  = "at";
-        x.help  = "Where the socket sits in the onboard window (E000 = monitor, F000 = disk BIOS)";
+        x.help  = "Where the socket sits: a socket address of the bank (etch: E000 = monitor, "
+                  "F000 = disk BIOS)";
         x.kind  = Kind::Int;
         x.radix = 16;
         p.push_back(std::move(x));
@@ -534,6 +720,10 @@ bool SbcBoard::addSubUnit(const std::string& table, const KeyValues& kv, std::st
     }
     if (!haveAt) {
         err = "[[board.socket]] needs an `at`";
+        return false;
+    }
+    if (std::string why = socketFault(sock.at, sockets_.size()); !why.empty()) {
+        err = "[[board.socket]] " + why;
         return false;
     }
     sockets_.push_back(std::move(sock));

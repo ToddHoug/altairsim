@@ -10,6 +10,8 @@
 #include "host/display_null.h"
 #include "host/stream.h"
 
+#include <filesystem>
+#include <fstream>
 #include <memory>
 
 using namespace altair;
@@ -52,6 +54,37 @@ struct ChipRig {
 // bit period and whole-character time at 9600/4MHz, for readable assertions.
 constexpr uint64_t kBit  = 4000000 / 9600;  // ~416
 constexpr uint64_t kChar = kBit * 10;       // 8N1 = 10 bits
+
+// An SBC over a plain 64K RAM board that stands down for PHANTOM* on reads -- the layout
+// the onboard memory is made for. Set jumpers and fill sockets, then power().
+struct MemRig {
+    Machine      m;
+    std::string  err;
+    SbcBoard*    sbc = nullptr;
+    MemoryBoard* mem = nullptr;
+
+    MemRig() {
+        m.bus.setVerify(true);
+        sbc = dynamic_cast<SbcBoard*>(m.add("sbc", "sbc0", err));
+        mem = dynamic_cast<MemoryBoard*>(m.add("memory", "mem0", err));
+        Region rr;
+        rr.kind = RegionKind::Ram;
+        rr.at   = 0;
+        rr.size = 0x10000;
+        mem->addRegion(rr, err);
+        setProperty(*mem, "fill", "zero", err);
+        setProperty(*mem, "honors_phantom", "read", err);
+    }
+    bool set(const char* name, const char* v) { return setProperty(*sbc, name, v, err); }
+    bool socket(const char* at, const std::string& mount) {
+        return sbc->loadSubUnit("socket", {{"at", at}, {"mount", mount}}, err);
+    }
+    bool logSays(const std::string& what) {
+        for (const auto& l : sbc->drainLog())
+            if (l.find(what) != std::string::npos) return true;
+        return false;
+    }
+};
 
 } // namespace
 
@@ -410,7 +443,9 @@ void test_sbc() {
 
         CHECK(m.bus.memRead(0xE000) == 0xC3, "E000 reads the PROM (JP E003), not RAM");
         CHECK(m.bus.memRead(0xE800) == 0x00, "the gap above the 2K ROM falls through to RAM");
-        CHECK(m.bus.memRead(0xFF80) == 0x00, "the interrupt-table page is RAM, not PROM");
+        // The interrupt-table page is the onboard 1K RAM (slot 7, F800-FFFF), not PROM.
+        m.bus.memWrite(0xFF80, 0x5A);
+        CHECK(m.bus.memRead(0xFF80) == 0x5A, "the interrupt-table page is RAM, not PROM");
 
         // A write into the PROM window lands in the RAM beneath the shadow.
         m.bus.memWrite(0xE000, 0x99);
@@ -430,6 +465,196 @@ void test_sbc() {
         CHECK(m.bus.memRead(0xE000) == 0x99, "switched out again");
         m.reset(Reset::Bus);
         CHECK(m.bus.memRead(0xE000) == 0xC3, "a reset switched the onboard PROM back in");
+    }
+
+    SECTION("SBC board -- the memory decode jumpers (X1, X3): where a socket may sit");
+    {
+        // The etch: 2K ROMs in bank 3, so the slots are C000, C800, ... F000 and the RAM
+        // is the last one, F800.
+        MemRig g;
+        CHECK(g.socket("E000", "builtin:msmonr21"), "E000 is a socket (ROM 0, high)");
+        CHECK(g.socket("F000", "builtin:msmonr21"), "F000 is a socket (ROM 2, high)");
+        CHECK(!g.socket("F800", "builtin:msmonr21"), "F800 is the RAM's place: refused");
+        CHECK(!g.socket("E400", "builtin:msmonr21"), "E400 is not a slot address: refused");
+        CHECK(!g.socket("C000", "builtin:msmonr21"),
+              "C000 is ROM 0 again (its low place), and ROM 0 is at E000: refused");
+
+        // 4K ROMs in bank 0: the slots are 0000, 1000, ... 6000.
+        MemRig lo;
+        CHECK(lo.set("rom_size", "4K") && lo.set("bank", "0"), "4K ROMs, bank 0");
+        CHECK(lo.socket("4000", "builtin:msmonr21"), "4000 is a socket there (ROM 0, high)");
+        CHECK(!lo.socket("E000", "builtin:msmonr21"), "and E000 is not");
+
+        // 4K ROMs have two banks. Bank 3 is not one of them.
+        MemRig bad;
+        bad.set("rom_size", "4K");
+        bad.set("bank", "3");
+        CHECK(!bad.socket("8000", "builtin:msmonr21"), "4K ROMs have no bank 3: refused");
+
+        // A 2K ROM in a 1K socket: the socket holds the first 1K, and the board says so.
+        MemRig cut;
+        CHECK(cut.set("rom_size", "1K") && cut.set("bank", "7"), "1K ROMs, bank 7");
+        CHECK(cut.socket("E000", "builtin:msmonr21"), "E000 is a socket there too");
+        cut.m.power();
+        CHECK(cut.m.bus.memRead(0xE000) == 0xC3, "the first 1K of the ROM is in the socket");
+        uint8_t v = 0;
+        CHECK(!cut.sbc->peek(0xE400, v), "the second 1K is not: E400 is another socket");
+        CHECK(cut.m.bus.memRead(0xE400) == 0x00, "...so the RAM board answers there");
+        CHECK(cut.logSays("outside the 1K socket at E000"), "and the log says bytes were cut");
+    }
+
+    SECTION("SBC board -- the onboard 1K static RAM (X3-15 to X3-16)");
+    {
+        MemRig g;  // no sockets: the RAM is jumpered in by default
+        g.m.power();
+
+        // A write goes to the onboard RAM and to the RAM board at that address.
+        g.m.bus.memWrite(0xF800, 0x5A);
+        CHECK(!g.m.bus.lastContended(), "one board takes the write on the bus");
+        CHECK(g.m.bus.memRead(0xF800) == 0x5A, "F800 reads the byte back");
+        CHECK(g.mem->storeAt(0xF800) == 0x5A, "the RAM board took the same write");
+        CHECK(g.m.bus.memRead(0xFC00) == 0x5A, "the 1K repeats in its 2K slot: FC00 is F800");
+
+        // Switched out, the RAM board answers; a write now does not reach the onboard RAM.
+        g.m.bus.ioWrite(0x7F, 0x02);
+        g.m.bus.memWrite(0xF800, 0x11);
+        CHECK(g.m.bus.memRead(0xF800) == 0x11, "OUT 7F,2: F800 is the RAM board");
+        g.m.bus.ioWrite(0x7F, 0x00);
+        CHECK(g.m.bus.memRead(0xF800) == 0x5A, "OUT 7F,0: the onboard RAM is back, unchanged");
+
+        g.m.bus.ioWrite(0x7F, 0x02);
+        g.m.reset(Reset::Bus);
+        CHECK(g.m.bus.memRead(0xF800) == 0x5A, "a reset switches it in and keeps the contents");
+        CHECK(g.m.bus.drain().empty(), "no contention was reported");
+
+        // The snapshot carries the 1024 bytes.
+        StateWriter w;
+        g.sbc->serialize(w);
+        MemRig h;
+        h.m.power();
+        StateReader r(w.data());
+        h.sbc->deserialize(r);
+        CHECK(h.m.bus.memRead(0xF800) == 0x5A, "a restored board has the RAM contents");
+
+        // ram = off: the jumper is out, and the slot belongs to the RAM board.
+        MemRig off;
+        CHECK(off.set("ram", "off"), "the RAM jumper comes out");
+        off.m.power();
+        uint8_t v = 0;
+        CHECK(!off.sbc->peek(0xF800, v), "the board does not answer F800");
+        off.m.bus.memWrite(0xF800, 0x77);
+        CHECK(off.m.bus.memRead(0xF800) == 0x77, "the RAM board does");
+    }
+
+    SECTION("SBC board -- auto-start (X16, X17, X18): a reset reads the PROM at the start page");
+    {
+        MemRig g;
+        g.socket("E000", "builtin:msmonr21");
+        CHECK(!g.set("start", "E800"), "start is a 4K boundary: E800 is refused");
+        CHECK(g.set("start", "E000"), "start = E000");
+        g.m.power();
+
+        // MSMONR21 opens with JP E00F, and E00F is its IN A,(7F).
+        CHECK(g.m.bus.memRead(0x0000) == 0xC3 && g.m.bus.memRead(0x0001) == 0x0F &&
+                  g.m.bus.memRead(0x0002) == 0xE0,
+              "0000 reads the PROM's JP E00F");
+        CHECK(g.m.bus.memRead(0x1234) == g.m.bus.memRead(0xE234),
+              "every 4K page reads the start page: 1234 is E234");
+
+        g.m.bus.memWrite(0x0000, 0x42);
+        CHECK(g.mem->storeAt(0x0000) == 0x42, "a write is not moved: it reaches RAM at 0000");
+        CHECK(g.m.bus.memRead(0x0000) == 0xC3, "and the read is still the PROM");
+
+        // The snapshot carries the latch. Take it while armed.
+        StateWriter w;
+        g.sbc->serialize(w);
+
+        (void)g.m.bus.ioRead(0x7F);
+        CHECK(g.m.bus.memRead(0x0000) == 0x42, "IN 7F releases it: 0000 is RAM");
+        CHECK(g.m.bus.memRead(0xE000) == 0xC3, "and the PROM is still at E000");
+
+        StateReader r(w.data());
+        g.sbc->deserialize(r);
+        CHECK(g.m.bus.memRead(0x0000) == 0xC3, "a restored board is armed again");
+        (void)g.m.bus.ioRead(0x7F);
+
+        g.m.reset(Reset::Bus);
+        CHECK(g.m.bus.memRead(0x0000) == 0xC3, "a RESET arms it again");
+
+        // Switching the onboard memory out takes the PROM away, armed or not.
+        g.m.bus.ioWrite(0x7F, 0x02);
+        CHECK(g.m.bus.memRead(0x0000) == 0x42, "OUT 7F,2 while armed: 0000 is RAM");
+        // The memory map is how the board is built: the switch does not change it.
+        CHECK(g.sbc->memMap().size() == 2 &&
+                  g.sbc->memMap()[1].note.find("repeated in its 2K slot") != std::string::npos,
+              "the memory map still lists the PROM socket and the RAM in its 2K slot");
+
+        (void)g.m.bus.ioRead(0x7F);
+        g.m.power();
+        CHECK(g.m.bus.memRead(0x0000) == 0xC3, "a POWER arms it again");
+        CHECK(g.m.bus.drain().empty(), "no contention was reported");
+
+        // start = 0000 (the default): no override.
+        MemRig none;
+        none.socket("E000", "builtin:msmonr21");
+        none.m.power();
+        CHECK(none.m.bus.memRead(0x0000) == 0x00, "start = 0000: 0000 is RAM after a reset");
+
+        // start names a place with no PROM: nothing to read, and the board says so.
+        MemRig empty;
+        empty.socket("E000", "builtin:msmonr21");
+        empty.set("start", "D000");
+        empty.m.power();
+        CHECK(empty.m.bus.memRead(0x0000) == 0x00, "no PROM at D000: 0000 is RAM");
+        CHECK(empty.logSays("no PROM socket is there"), "and the log says so");
+    }
+
+    SECTION("SBC board -- auto-start to a PROM in a low bank (4K ROMs, bank 0, start = 4000)");
+    {
+        namespace fs = std::filesystem;
+        const fs::path rom = fs::temp_directory_path() / "altairsim-sbc-autostart.bin";
+        {
+            std::ofstream f(rom, std::ios::binary);
+            f.write("\xC3\x03\x40\xDB\x7F\x76", 6);  // JP 4003 / IN A,(7F) / HALT
+        }
+        MemRig g;
+        CHECK(g.set("rom_size", "4K") && g.set("bank", "0"), "4K ROMs, bank 0");
+        CHECK(g.socket("4000", rom.string()), "a PROM at 4000");
+        CHECK(g.set("start", "4000"), "start = 4000");
+        g.m.power();
+        CHECK(g.m.bus.memRead(0x0000) == 0xC3 && g.m.bus.memRead(0x0002) == 0x40,
+              "0000 reads the PROM's JP 4003");
+        (void)g.m.bus.ioRead(0x7F);
+        CHECK(g.m.bus.memRead(0x0000) == 0x00, "released: 0000 is RAM");
+        CHECK(g.m.bus.memRead(0x4000) == 0xC3, "and the PROM is at 4000");
+        std::error_code ec;
+        fs::remove(rom, ec);
+    }
+
+    SECTION("SBC board -- auto-start with a Z80: POWER, and the monitor PROM runs from 0000");
+    {
+        MemRig g;
+        g.socket("E000", "builtin:msmonr21");
+        g.set("start", "E000");
+        g.m.add("z80", "cpu0", g.err);
+        g.m.power();
+        CHECK(g.m.cpu()->pc() == 0x0000, "the Z80 starts at 0000, as it always does");
+
+        StepResult sr = g.m.master()->step(g.m.bus);  // JP E00F, read at 0000
+        g.m.clock.advance(sr.tStates);
+        CHECK(g.m.cpu()->pc() == 0xE00F, "the PROM's JP put PC in the PROM");
+        CHECK(g.m.bus.memRead(0x0000) == 0xC3, "the circuit is still armed");
+
+        sr = g.m.master()->step(g.m.bus);             // IN A,(7F)
+        g.m.clock.advance(sr.tStates);
+        CHECK(g.m.cpu()->pc() == 0xE011, "IN A,(7F) ran");
+        CHECK(g.m.bus.memRead(0x0000) == 0x00, "and released the circuit: 0000 is RAM");
+
+        // RESET on the running machine goes back to the PROM, not to RAM at 0000.
+        g.m.reset(Reset::Bus);
+        sr = g.m.master()->step(g.m.bus);
+        g.m.clock.advance(sr.tStates);
+        CHECK(g.m.cpu()->pc() == 0xE00F, "a RESET runs the PROM again");
     }
 
     SECTION("SBC + VDB-8024 -- the video keyboard interrupt: a VDB key raises CTC vector 0x02");

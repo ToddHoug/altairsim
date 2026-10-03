@@ -13,7 +13,7 @@
 
 [machine]
 name    = "cpm3-banked-acceptance"
-startup = ["RUN E000"]
+startup = ["RUN"]
 
 [[board]]
 type     = "z80"
@@ -25,6 +25,7 @@ type    = "sbc"
 id      = "sbc0"
 variant = "sbc200"
 port    = 7C
+start   = E000
 
   [board.unit.tty]
   connect = "console"
