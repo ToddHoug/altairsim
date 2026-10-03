@@ -12,8 +12,8 @@ as it is now; this document is the record of how it got there.
 
 **1.3.0 is the release that adds new boards and sound, and lets a floppy take the time of a real
 disk.** The North Star MDS-A and MDS-A-D controllers, the CADzilla graphics board and the Newtech
-music board are new. The Cromemco D+7A plays the JS-1 speaker. A guest can paste a file, and an
-AI assistant can let a guest run between calls.
+music board are new. The Cromemco D+7A plays the JS-1 speaker. You can paste a file into the
+guest, and an AI assistant can let a guest run between calls.
 
 ### New boards
 
@@ -21,16 +21,16 @@ AI assistant can let a guest run between calls.
 is the MDS-A-D double-density controller. Each one has its own boot PROM, and each one boots CP/M
 and North Star DOS from a 5¼″ North Star disk image (`.NSI`). The `mdsad` reads and writes
 single-density, double-density and two-sided disks. These boards have no ports. A board decodes a
-1 K block of memory at `E800`, and a program gives a command when it reads an address in the
+1 K block of memory at `E800`, and a guest gives a command when it reads an address in the
 block. The machines `northstar` and `northstardd` have the boards. Their drives start empty.
-Mount your image in `fd0:drive0`, then type `RUN E900` on `northstar` or `RUN E800` on
+Mount your image in `fd0:drive0`. To boot, type `RUN E900` on `northstar` or `RUN E800` on
 `northstardd`.
 
 **The CADzilla graphics board.** `cadzilla` is a new design built from two chips of the mid 1980s.
 The Hitachi **HD63484 ACRTC** is a CRT controller with a drawing processor and 2 MB of its own
-frame memory. The Brooktree **Bt453** is a RAMDAC: a color table of 256 entries. The board uses
-one block of 8 I/O ports and no memory. The guest writes drawing commands into the ACRTC's FIFO,
-and the board does every command of the chip: lines, rectangles, polygons, circles, ellipses,
+frame memory. The Brooktree **Bt453** is a RAMDAC, a color table of 256 entries. The board uses
+one block of 8 I/O ports and no memory. The guest writes drawing commands into the ACRTC's FIFO.
+The board does every command of the chip: lines, rectangles, polygons, circles, ellipses,
 arcs, area paint, patterns and block copies. The picture has 8 bits for each pixel. It shows on a
 fixed-frequency VESA monitor that you select with `mode`: `640x480`, `800x600` or `1024x768` (the
 default).
@@ -46,7 +46,7 @@ check fails, it writes what the board drew as a `.ppm` file that you can open. T
 Guide chapter *Writing a video board* shows how.
 
 **The Newtech Model 6 Music Board.** `music6` has one output port, a 6-bit D/A converter and a
-speaker. A program writes the port in a timed loop, and you hear the result on the sound output of
+speaker. A guest writes the port in a timed loop, and you hear the result on the sound output of
 your computer. The default port is `24`, and the board also answers at `25`, `26` and `27`, as the
 real board does. The `port` setting takes `04`, `14`, `24` and so on to `F4`.
 
@@ -71,7 +71,7 @@ and, if it is silent, the reason.
 **Floppy controllers can take the time of a real disk.** A new board setting, `timing`, is on the
 `tarbell`, `tarbelldd`, `versafloppy`, `16fdc`, `64fdc`, `mdsa` and `mdsad`. These boards make the
 processor wait until the disk has the next byte. With `full` (the default), the wait takes no
-time, as before. With `real`, it takes as long as on the real machine: a seek takes its step
+time, as before. With `real`, it takes as long as on the real machine. A seek takes its step
 time, and each byte comes at the speed of the disk. Set it with `SET fdc0 timing=real`, or
 `timing = "real"` in the machine file. On the `tarbelldd`, bit 7 of port `FD` now shows that a
 disk command is still running. Before, it always showed that the command was done.
@@ -79,24 +79,24 @@ disk command is still running. Before, it always showed that the command was don
 **Cromemco's GOTCHA runs.** The status port of the Dazzler (`dazzler`, `IN 0E`) read 0 on its six
 unused bits. They now read 1, as on the board. The odd/even line bit (D7) also stays 0 during the
 vertical blank, and the port reads `3F` for the full 4 ms between frames. GOTCHA times each move
-on that value: before, it drew its picture and then stopped. A joystick on the `d7a` pushed all
+on that value. Before, it drew its picture and then stopped. A joystick on the `d7a` pushed all
 the way gave half of the range of the A/D converter (`3F` and `C0`). It now gives the full range
 (`7F` and `81`), so GOTCHA can be steered right and up. Dazzle Doodle draws only when the stick is
-in the middle half of its range: push the stick more than half and Doodle stops the line until the
-stick comes back.
+in the middle half of its range. If you push the stick more than half, Doodle stops the line until
+the stick comes back.
 
-**A guest at a prompt keeps the time of its crystal.** With a crystal set, a guest that waited at
-a prompt after `RUN` ran at about 1.3 times its crystal, and a guest that counted a timeout while
-it waited for a key counted it too fast. At full speed, nothing changes: `idle` still lets the
+**A guest at a prompt runs at the speed of its crystal.** With a crystal set, a guest that waited at
+a prompt after `RUN` ran at about 1.3 times its crystal. A guest that counted a timeout while
+it waited for a key counted it too fast. At full speed, nothing changes. `idle` still lets the
 processor rest at a prompt.
 
 ### Driving a machine from the monitor and over `--mcp`
 
 - **`PASTE <file>`** sends a host file to the keyboard of the guest, as if you pasted it from the
   clipboard. The file can be of any size and no character is lost. Use it in a `startup` list to
-  enter a program that the guest reads from its keyboard, for example a SOLOS `ENTER` script or an
+  enter a program that the guest reads from its keyboard. Examples are a SOLOS `ENTER` script and an
   Intel HEX file for `PIP`. `NOPASTE` stops a paste that is not finished. The Sol-20 keyboard now
-  gives the guest the next key when the guest looks for it, so text pasted into a Sol-20 no longer
+  gives the guest the next key when the guest looks for it. Text pasted into a Sol-20 no longer
   arrives very slowly.
 - **`TYPE` sends a quote and a control key.** `TYPE "PRINT \"HI\"\r"` typed only `PRINT \`.
   `TYPE` now sends the full line. It also has two new escapes: `\^X` is the key Ctrl-X (`\^C`,
@@ -105,12 +105,13 @@ processor rest at a prompt.
 - **The guest can run between MCP calls.** Two new MCP tools, `start` and `stop`. `start` starts
   the guest and returns at once. The guest then runs between tool calls until `stop`, a `HLT` or
   a breakpoint. All the other tools still work while it runs, and `status` tells if it still
-  runs. Use it for a server on the guest that must answer its clients in time, for two machines
-  that talk to each other, and to let a person take over the console through `--mirror`.
+  runs. Use it for a server on the guest that must answer its clients in time, and for two
+  machines that talk to each other. It also lets a person take over the console through
+  `--mirror`.
 - **A trace started by an assistant is written to its file.** `TRACE ON <file>`, sent through the
   MCP `monitor` tool, now writes the trace to the file. Before, the file stayed empty or the
   simulator stopped with an error on the next `run`. Through MCP, `TRACE ON` with no file is
-  refused: give a file, or use the `bus_trace` tool.
+  refused. Give a file, or use the `bus_trace` tool.
 - **`R` no longer puts a space in a CP/M name.** `R *.TXT` copied a host file such as
   `my notes.txt` to a CP/M file with a space in its name, which you cannot type at `A>`. `R` now
   removes a space, as it removes the other characters that CP/M cannot have in a name. The disks
@@ -129,7 +130,7 @@ processor rest at a prompt.
   `[board.unit.<name>]` written two times below one `[[board]]`, and for a key written two times
   in one table. The error gives both lines. A key above the first table, text after a table
   header, and a `startup` list with no closing `]` are also errors now. **A machine file that
-  loaded before can be refused now**; the error tells you which line to remove.
+  loaded before can be refused now.** The error tells you which line to remove.
 - **Two files that name each other as `base`** now give one short line: the file that you loaded,
   the line of its `base`, and the cause. Before, the file and line were there once for each of the
   8 levels.
@@ -137,12 +138,12 @@ processor rest at a prompt.
 ### The documents
 
 - The serial and disks chapters of the User Manual now show the machine-file form of `CONNECT`
-  and `MOUNT`, below the command, under the words "In a machine file:". The serial chapter has a
-  new section, "The same in a machine file". The disks chapter has a table that gives the key for
-  each part of a `MOUNT` command.
+  and `MOUNT`. The form is below the command, under the words "In a machine file:". The serial
+  chapter has a new section, "The same in a machine file". The disks chapter has a table that
+  gives the key for each part of a `MOUNT` command.
 - The configuration chapter has a new example of a machine file that uses a second machine file as
-  its `base`, and it shows the message for two files that name each other. The samples that change
-  a board of the base now leave the `type` out: a `[[board]]` with a `type` replaces the board,
+  its `base`. It also shows the message for two files that name each other. The samples that change
+  a board of the base now leave the `type` out. A `[[board]]` with a `type` replaces the board,
   and it loses the settings of the base.
 - The chapter *Moving files in and out* has the correct steps for `R` and the list of the
   characters that `R` removes.
@@ -150,7 +151,7 @@ processor rest at a prompt.
 ### Fewer examples in the package, and more at altairsim.com
 
 The package now has five examples: `cpm`, `basic4k`, `basic1`, `debugger` and `ai-mcp`. `basic4k`
-and `basic1` replace `basic`. `basic4k` has Altair 4K BASIC 3.1 as a `.tap` and as audio, and
+and `basic1` replace `basic`. `basic4k` has Altair 4K BASIC 3.1 as a `.tap` and as audio.
 `basic1` has Altair BASIC 1.0, the first one, as a `.tap` and as audio. More examples, with their
 media and more documentation, are at https://altairsim.com.
 
