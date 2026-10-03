@@ -1,14 +1,22 @@
 # Altair BASIC 1.0 -- the FIRST one -- off a period cassette.
 #
-#>
-#>Altair BASIC 1.0 by Micro-Soft
-#>
-#>Bill and Paul's Excellent Adventure - Party on, dudes!
-#>
+#>***
+#>*** Altair BASIC 1.0 by Micro-Soft
+#>***
+#>*** Bill and Paul's Excellent Adventure - Party on, dudes!
+#>***
+#>*** The tape loads in about a second, then the machine goes quiet.
+#>*** Press Ctrl-E, then type RUN 0 to start BASIC.
+#>***
+#>*** Backspace does not work in BASIC 1.0. Type _ (underscore) to delete the last character.
+#>***
 #
 #     cd examples/basic1 && altairsim basic1.toml
 #     -> the tape loads, the machine goes quiet; press ^E, then type: RUN 0
 #     -> MEMSIZ?
+#
+# BACKSPACE DOES NOT DELETE. BASIC 1.0 deletes the last character with _ (underscore), as the
+# Teletype did. It does not know DEL or BS, so neither Backspace key works.
 #
 # "8080 BASIC VER 1.0" is the oldest Altair BASIC there is: the interpreter Bill Gates and
 # Paul Allen wrote for the Altair in 1975, read here off a real cassette image by the
