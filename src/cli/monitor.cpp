@@ -2492,9 +2492,34 @@ void Monitor::showBus(const std::vector<std::string>& a, std::ostream& out) {
             std::string id, what, note;
         };
         std::vector<Row> rows;
+        // memMap() says how a board is BUILT, and SHOW MACHINE prints it as it is. This
+        // map is the bus NOW, so each range is cut to the addresses the board answers at
+        // this moment -- the question WHO asks. A PROM the guest has switched out gives no
+        // row, and RAM under a shadow that takes reads and writes gives only its live part.
+        auto answers = [&](const Board* b, uint32_t addr) {
+            for (Cycle t : {Cycle::MemRead, Cycle::MemWrite}) {
+                BusCycle c;
+                c.type = t;
+                c.addr = (uint16_t)addr;
+                for (auto* r : m_.bus.respondersTo(c))
+                    if (r == b) return true;
+            }
+            return false;
+        };
         for (const auto& b : m_.boards())
-            for (const auto& e : b->memMap())
-                rows.push_back({e.lo, e.hi, b->id, e.what, e.note});
+            for (const auto& e : b->memMap()) {
+                const uint32_t hi = std::min<uint32_t>(e.hi, 0xFFFF);
+                int64_t start = -1;
+                for (uint32_t addr = e.lo; addr <= hi; ++addr) {
+                    bool live = answers(b.get(), addr);
+                    if (live && start < 0) start = addr;
+                    if (start >= 0 && (!live || addr == hi)) {
+                        rows.push_back({(uint32_t)start, live ? addr : addr - 1, b->id, e.what,
+                                        e.note});
+                        start = -1;
+                    }
+                }
+            }
         std::sort(rows.begin(), rows.end(), [](const Row& x, const Row& y) {
             return x.lo < y.lo || (x.lo == y.lo && x.id < y.id);
         });

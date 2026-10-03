@@ -67,23 +67,38 @@ bool TurnkeyBoard::assertsPhantom(const BusCycle& c) const {
     return false;
 }
 
+// The byte a MemRead at `addr` gets from this card, or false when the card does not drive
+// that address now. read() and peek() both come here, so the display cannot drift from
+// the bus. Nothing latches: snoop() is the only place the state moves.
+bool TurnkeyBoard::memByte(uint16_t addr, uint8_t& out) const {
+    if (autostartArmed_ && addr == (uint16_t)autostartStep_ && autostartStep_ < 3) {
+        // C3 00 <hi>: JMP to (START ADDR switches << 8). The low byte is always 0 --
+        // SW8/SW9 are the high eight bits and the address is a multiple of 256.
+        out = autostartStep_ == 0 ? 0xC3 : autostartStep_ == 1 ? 0x00 : (uint8_t)(start_ >> 8);
+        return true;
+    }
+    if (promArmed_ && inPromWindow(addr)) {
+        out = prom_[addr - promBase_];
+        return true;
+    }
+    return false;
+}
+
 uint8_t TurnkeyBoard::read(const BusCycle& c) {
     if (c.type == Cycle::MemRead) {
-        if (autostartArmed_ && c.addr == (uint16_t)autostartStep_ && autostartStep_ < 3) {
-            // C3 00 <hi>: JMP to (START ADDR switches << 8). The low byte is always 0 --
-            // SW8/SW9 are the high eight bits and the address is a multiple of 256.
-            if (autostartStep_ == 0) return 0xC3;
-            if (autostartStep_ == 1) return 0x00;
-            return (uint8_t)(start_ >> 8);
-        }
-        if (promArmed_ && inPromWindow(c.addr)) return prom_[c.addr - promBase_];
-        return 0xFF;
+        uint8_t v = 0xFF;
+        memByte(c.addr, v);
+        return v;
     }
     if (c.type == Cycle::IoRead) {
         if (c.port() == 0xFF) return sense_;  // SA8..SA15; snoop() latches the phantom off
         if (sio_.decodesPort(c.port())) return sio_.read(c.port());
     }
     return 0xFF;
+}
+
+bool TurnkeyBoard::peek(uint16_t addr, uint8_t& out) const {
+    return enabled_ && memByte(addr, out);
 }
 
 void TurnkeyBoard::write(const BusCycle& c) {

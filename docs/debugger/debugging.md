@@ -596,6 +596,10 @@ SHOW BUS IRQ          the eight interrupt lines: which board is set to each, and
 SHOW BUS CONTENTION   the addresses that two boards answer
 ```
 
+`SHOW BUS MAP` lists only the memory that answers now. A boot PROM that the guest has switched
+out is not in the list, and `WHO` gives the same answer for an address in it. `SHOW MACHINE`
+shows how each board is built, and it lists the PROM always.
+
 ## The machine over time: `TRACE`, `HISTORY`
 
 `WHO` and `SHOW BUS` show the backplane as it is *now*. `REGS` and `STEP` show the machine as it

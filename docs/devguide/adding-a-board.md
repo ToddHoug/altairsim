@@ -211,6 +211,15 @@ This is what `BOARDS`, `SHOW BUS IO` and `WHO` print. **It is documentation, not
 the bus never consults it. A board whose `ioMap()` disagreed with its `decodes()` would work
 perfectly and lie to you, which is worse than a board that does not work.
 
+`memMap()` is the same thing for memory, with one more rule: **it says how the board is built,
+and it does not follow a latch.** `SHOW MACHINE` prints it, and how a machine is built does not
+change when the guest writes a port. A board with a PROM that the guest can switch out lists
+the PROM always. `SHOW BUS MAP` asks the bus which of those addresses the board answers now,
+and takes only the text from `memMap()`, so the board needs no code for that.
+
+A board with a PROM, or with any memory that a read does not change, also gives `peek()`.
+Without it, `DISASM` and `DUMP` show `FF` there while the processor reads the correct bytes.
+
 ## 2. Put it in the registry
 
 Two lines and an include, in `src/boards/registry.cpp`:

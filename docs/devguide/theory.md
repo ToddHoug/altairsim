@@ -380,7 +380,11 @@ cards.**
 
 A memory card is **a list of regions**, not an address range: RAM here, a ROM socket there, an
 empty socket between them. One card can occupy two separate ranges, because a real one does.
-`SHOW BUS MAP` is per-*range*, not per-board, for that reason.
+`SHOW BUS MAP` is per-*range*, not per-board, for that reason. It is also the bus as it is
+*now*: the monitor takes each range from the board's `memMap()` and asks `Bus::respondersTo()`
+which of its addresses the board answers, for a read or for a write. A PROM that the guest has
+switched out has no row. `memMap()` itself is a fixed description of the board, and
+`SHOW MACHINE` prints it unchanged.
 
 **An empty socket decodes nothing.** It does not read as zero — it floats to `FF`, like anything
 else nobody drives.

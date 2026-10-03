@@ -126,6 +126,36 @@ void test_turnkey() {
         CHECK(bus.memRead(1) == 0x77, "...and so does 1");
     }
 
+    // DISASM and DUMP look through Bus::peek(). The PROM and the jam have no side
+    // effect, so the display shows the byte a read gets -- and looking moves no latch.
+    SECTION("MITS Turnkey -- peek shows the PROM and the jam, and moves no latch (#657)");
+    {
+        Rig  rig;
+        Bus& bus = rig.m.bus;
+        bus.memWrite(0, 0x76);
+        bus.memWrite(0xFF00, 0x99);
+        rig.m.reset(Reset::Bus);
+
+        CHECK(bus.peek(0xFF00) == 0x21, "peek FF00 is the boot PROM byte, not FF");
+        CHECK(bus.peek(0xFC00) == 0xFF, "an unpopulated socket peeks as FF, as it reads");
+        uint8_t three[3];
+        bus.peekBytes(0xFF00, three, 3);
+        CHECK(three[0] == 0x21 && three[1] == bus.memRead(0xFF01) && three[2] == bus.memRead(0xFF02),
+              "peekBytes gives the same PROM bytes a read gets");
+
+        CHECK(bus.peek(0) == 0xC3, "peek 0 is the jammed JMP opcode");
+        CHECK(bus.peek(0) == 0xC3, "...and a second look sees it again");
+        CHECK(bus.memRead(0) == 0xC3, "the look did not use up the jam: the fetch gets C3");
+        CHECK(bus.peek(1) == 0x00, "the jam moved on with the fetch, and peek follows it");
+        bus.memRead(1);
+        bus.memRead(2);
+        CHECK(bus.peek(0) == 0x76, "the jam is over -- peek 0 is RAM");
+
+        CHECK(bus.peek(0xFF00) == 0x21, "looking at the PROM did not switch it out");
+        bus.ioRead(0xFF);
+        CHECK(bus.peek(0xFF00) == 0x99, "after IN FF, peek FF00 is the RAM under the PROM");
+    }
+
     SECTION("MITS Turnkey -- START ADDR is a strap");
     {
         Rig         rig;

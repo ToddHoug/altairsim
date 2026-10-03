@@ -17,6 +17,13 @@ and `ram` is the 1K onboard RAM, which is new. A `[[board.socket]]` address that
 of the board is refused: before, any address from `E000` to `FFFF` was accepted. A snapshot from
 an earlier version does not load.
 
+**`SHOW BUS MAP` shows the memory that answers now.** Before, it listed a range that a board had
+switched out, such as the boot PROM of the `turnkey` machine after the loader ran, and `WHO` gave
+a different answer. Now the two agree. `SHOW MACHINE` shows how each board is built, as before.
+
+**`DISASM` and `DUMP` show the boot PROM of the Turnkey board.** Before, they showed `FF` there
+and at the Auto-Start jump, while the processor read the correct bytes.
+
 ## 1.3.0
 
 **1.3.0 is the release that adds new boards and sound, and lets a floppy take the time of a real
