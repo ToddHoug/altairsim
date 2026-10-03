@@ -23,7 +23,7 @@
 
 [machine]
 name    = "sbc200v"
-startup = ["RUN E000"]        # the authentic reset jam-to-E000 is a later phase
+startup = ["RUN"]             # the board's auto-start puts the Z80 in the monitor PROM
 
 # The video window is this machine's console: it comes to the front when it opens and
 # keeps the keyboard when the guest stops, like a Sol-20.
@@ -67,36 +67,28 @@ type    = "sbc"
 id      = "sbc0"
 variant = "sbc200"
 port    = 7C
+start   = E000                # the auto-start jumpers: a reset reads the PROM at E000
 
-# MEMORY: the SD monitor EPROM at E000 (SDMONV21, 2K) and the disk BIOS at F000 (DDBIOS,
-# 2K), with RAM filling everything else -- 56K below, and the gaps around the ROMs,
-# including the monitor's FF60-FFFF scratch/stack/register-save area.
+  # THE ONBOARD PROM SOCKETS (the etch: 2K PROMs in the top bank). The onboard 1K RAM is
+  # at F800-FFFF; the monitor keeps its stack and register-save area there (FF60-FFFF).
+  [[board.socket]]
+  at    = E000
+  mount = "builtin:sdmonv21"  # SDMONV21, the video-console monitor
+
+  [[board.socket]]
+  at    = F000
+  mount = "builtin:ddb200"    # the DDBIOS disk BIOS
+
+# MEMORY: 64K of RAM under the onboard memory. `honors_phantom = "read"`: while the onboard
+# PROMs and RAM are switched in they answer the reads, and a write still reaches this
+# board. After `OUT 7F` with bit 1 set, this board has all 64K.
 [[board]]
-type = "memory"
-id   = "mem0"
-fill = "random"               # real static RAM does not come up zeroed
+type           = "memory"
+id             = "mem0"
+fill           = "random"     # real static RAM does not come up zeroed
+honors_phantom = "read"
 
   [[board.region]]
   type = "ram"
   at   = 0000
-  size = "56K"                # 0000-DFFF
-
-  [[board.region]]
-  type  = "rom"
-  at    = E000
-  mount = "builtin:sdmonv21"  # 2K -> E000-E7FF (the VDM-console build of the monitor)
-
-  [[board.region]]
-  type = "ram"
-  at   = E800
-  size = "2K"                 # E800-EFFF
-
-  [[board.region]]
-  type  = "rom"
-  at    = F000
-  mount = "builtin:ddb200"    # 2K -> F000-F7FF
-
-  [[board.region]]
-  type = "ram"
-  at   = F800
-  size = "2K"                 # F800-FFFF (monitor scratch/stack/registers at FF60-FFFF)
+  size = "64K"

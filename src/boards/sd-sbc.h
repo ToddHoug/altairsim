@@ -22,10 +22,15 @@
 //     drops the onboard PROM out of the map so RAM shows through (CP/M's cold boot does
 //     this for a 64K system). Modeled as a phantom overlay, the same shape as the
 //     Turnkey board's boot PROM (boards/mits-turnkey.h).
-//   - THE ONBOARD PROM via [[board.socket]] (at + mount). Empty by default, so a machine
-//     that keeps its ROMs on a memory card (machines/sbc200.toml) is untouched; a
-//     machine that wants the authentic single-board layout puts MSMONR21 at E000 and
-//     DDBIOS at F000 in sockets over a plain 64K RAM board.
+//   - THE ONBOARD MEMORY: four PROM sockets via [[board.socket]] (at + mount) and 1K of
+//     static RAM. Where they sit is jumpered (X1/X3, manual Tables 2-3 to 2-5): `rom_size`
+//     and `bank` pick eight slots, a socket goes in one of the first seven and the RAM is
+//     the eighth. The etch (2K, bank 3) puts MSMONR21 at E000, DDBIOS at F000 and the RAM
+//     at F800, over a plain 64K RAM board.
+//   - AUTO-START (X16/X17/X18, manual Table 2-6). After a reset the board supplies
+//     A12-A15 from the `start` jumpers, so the Z80 -- which really does start at 0000 --
+//     reads the PROM at `start`. The PROM opens with JP X003 / IN A,(7FH); the read of
+//     port 7F releases the override. Nothing is injected and nobody writes the PC.
 //
 // It is the structural twin of the 88-SIO (boards/mits-88sio.h): one UART embedded
 // DIRECTLY as a member, with the card owning refresh()/nextEdge()/wake_. It is NOT a
@@ -56,6 +61,13 @@ public:
     bool    decodes(const BusCycle& c) const override;
     uint8_t read(const BusCycle& c) override;
     void    write(const BusCycle& c) override;
+    bool    peek(uint16_t addr, uint8_t& out) const override;
+
+    // The clocked half: the auto-start release (a read of port 7F) and the write that
+    // lands in the onboard RAM. The board does not DECODE that write -- the off-board RAM
+    // takes it too, as the manual says, and two boards on one write is contention.
+    bool wantsSnoop() const override { return true; }
+    void snoop(const BusCycle& c) override;
 
     // THE KEYBOARD INTERRUPT. /INT is pulled when the CTC has armed channel 1 and the
     // 8251 has a byte waiting -- a level, cleared when the ISR reads the data port. The
@@ -167,16 +179,45 @@ private:
     // whole point of this card, and what the monitor's auto-baud watches.
     Intel8251 u_{"tty"};
 
-    // ---- the onboard boot PROM (host-backed config, re-read on power; not serialized) ----
-    // The four PROM sockets sit in the top bank; the reference's etch puts the monitor
-    // at E000 and the disk BIOS at F000, and the 1 KB onboard RAM at the very top. We
-    // model the whole E000-FFFF onboard window: `promPresent_[i]` says a socket ROM
-    // occupies that byte (else the read falls through to off-board RAM).
-    static constexpr uint16_t kOnboardBase = 0xE000;
-    static constexpr int      kOnboardSize = 0x2000;  // E000-FFFF
-    bool inPromWindow(uint16_t a) const {
-        return a >= kOnboardBase && promPresent_[a - kOnboardBase];
+    // ---- where the onboard memory sits: the X1/X3 jumpers (manual Tables 2-3 to 2-5) ----
+    // X1 sets the size of a socket (1K/2K/4K/8K) and the BANK: eight slots of that size.
+    // X3 puts a device in a slot: ROM 0/1/2 in slot 0/1/2 (low) or 4/5/6 (high), ROM 3 in
+    // slot 3, the RAM in slot 7. The etch is 2K, bank 3: C000-FFFF, monitor in slot 4
+    // (E000), disk BIOS in slot 6 (F000), RAM in slot 7 (F800).
+    static constexpr int kSlots   = 8;
+    static constexpr int kRamSlot = 7;
+    static constexpr int kRamSize = 1024;
+    int  romSizeLog_ = 1;   // 0..3 -> 1K, 2K, 4K, 8K
+    int  bank_       = 3;
+    bool ram_        = true;  // X3-15 to X3-16: the RAM is jumpered in
+
+    uint32_t romBytes() const { return (uint32_t)1024 << romSizeLog_; }
+    int      bankCount() const { return 8 >> romSizeLog_; }
+    bool     bankValid() const { return bank_ < bankCount(); }
+    uint32_t slotAddr(int n) const { return ((uint32_t)bank_ * kSlots + (uint32_t)n) * romBytes(); }
+    // Which slot starts at `at`, or -1. Only meaningful while bankValid().
+    int      slotAt(uint16_t at) const;
+    // Why a socket cannot sit at `at` under the jumpers as they are -- empty if it can.
+    // `skip` is the index of a socket to leave out of the one-socket-two-slots check.
+    std::string socketFault(uint16_t at, size_t skip) const;
+    bool inRamSlot(uint16_t a) const {
+        return ram_ && bankValid() && a >= slotAddr(kRamSlot) &&
+               (uint32_t)a < slotAddr(kRamSlot) + romBytes();
     }
+
+    // WHICH ONBOARD BYTE ANSWERS A READ AT `a`? `t` is the address the onboard decode
+    // sees: `a` itself, or -- while auto-start is armed -- `a` with A12-A15 replaced by
+    // the `start` jumpers.
+    enum class Onboard { None, Prom, Ram };
+    Onboard onboard(uint16_t a, uint16_t& t) const {
+        if (!promArmed_) return Onboard::None;
+        t = autoStartArmed_ ? (uint16_t)(start_ | (a & 0x0FFF)) : a;
+        if (promPresent_[t]) return Onboard::Prom;
+        if (inRamSlot(t)) return Onboard::Ram;
+        return Onboard::None;
+    }
+
+    // ---- the onboard PROMs (host-backed config, re-read on power; not serialized) ----
     void loadProm();  // (re)read the socket ROMs into prom_/promPresent_
 
     struct Socket {
@@ -184,14 +225,25 @@ private:
         std::string mount;   // "builtin:msmonr21", a HEX/BIN path, ...
     };
     std::vector<Socket> sockets_;      // config (rebuilt from TOML)
-    uint8_t prom_[kOnboardSize] = {};
-    bool    promPresent_[kOnboardSize] = {};
+    static constexpr int kMemSize = 0x10000;
+    uint8_t prom_[kMemSize] = {};
+    bool    promPresent_[kMemSize] = {};
 
-    // ---- runtime latch (travels in a snapshot) ----
+    // ---- the onboard 1K static RAM (travels in a snapshot) ----
+    // It answers its whole slot, so with a 2K slot the 1K shows twice. Neither reset
+    // touches it; POWER fills it (DESIGN.md 6).
+    uint8_t ramStore_[kRamSize] = {};
+
+    // ---- auto-start: the X16/X17/X18 jumpers (manual Table 2-6) ----
+    // A 4K boundary; 0000 = the board supplies nothing and the Z80 runs from 0000.
+    uint16_t start_ = 0;
+
+    // ---- runtime latches (travel in a snapshot) ----
     // The onboard memory (PROM + 1 KB RAM) is switched IN after reset; `OUT 7F` bit 1
-    // switches it out (A=2), bit-1-clear switches it back in (A=0). Only meaningful when
-    // a socket is configured; with none, the whole overlay is inert.
+    // switches it out (A=2), bit-1-clear switches it back in (A=0).
     bool promArmed_ = true;
+    // Set by either reset when `start` is not 0000; cleared by a read of port 7F.
+    bool autoStartArmed_ = false;
 
     std::vector<std::string> log_;
     Clock::Handle wake_ = Clock::kNone;

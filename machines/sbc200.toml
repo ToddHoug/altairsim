@@ -10,14 +10,13 @@
 # NOTHING until you press Enter -- that is authentic, not a hang. Then it prints its
 # `.` prompt; the command set is in reference/SD Systems Monitor.md.
 #
-# PHASE 1 IS THE SERIAL CONSOLE ONLY. The Z80-CTC baud generator (port 78), the
-# parallel port (7E/7F), the memory switch-out, the disk BIOS driving a real
-# VersaFloppy, and the reset auto-start-jam-to-E000 (with the IN 7F release) are later
-# phases; here the machine is simply started at the monitor with `RUN E000`.
+# RESET STARTS THE MONITOR. The board's auto-start jumpers are set for E000 (`start`
+# below), so after a reset the Z80 reads the monitor PROM, and `RUN` is all the startup
+# needs. `RESET` then `RUN` brings the monitor back.
 
 [machine]
 name    = "sbc200"
-startup = ["RUN E000"]        # the authentic reset jam-to-E000 is a later phase
+startup = ["RUN"]             # the board's auto-start puts the Z80 in the monitor PROM
 
 # THE CPU. The SBC-200 is a 4 MHz Z80. clock_hz sets the crystal the 8251 divides to
 # turn baud into T-states (and it is what makes the auto-baud bit width period-correct).
@@ -33,40 +32,32 @@ type    = "sbc"
 id      = "ser0"
 variant = "sbc200"
 port    = 7C
+start   = E000                # the auto-start jumpers: a reset reads the PROM at E000
 
   [board.unit.tty]
   connect = "console"
   baud    = 9600
 
-# MEMORY: the monitor EPROM at E000 (MSMONR21, 2K) and the disk BIOS at F000 (DDBIOS,
-# 2K), with RAM filling everything else -- 56K below, and the gaps around the ROMs,
-# including the monitor's FF60-FFFF scratch/stack/register-save area.
+  # THE ONBOARD PROM SOCKETS (the etch: 2K PROMs in the top bank). The onboard 1K RAM is
+  # at F800-FFFF; the monitor keeps its stack and register-save area there (FF60-FFFF).
+  [[board.socket]]
+  at    = E000
+  mount = "builtin:msmonr21"  # the MSMONR21 monitor
+
+  [[board.socket]]
+  at    = F000
+  mount = "builtin:ddb200"    # the DDBIOS disk BIOS
+
+# MEMORY: 64K of RAM under the onboard memory. `honors_phantom = "read"`: while the onboard
+# PROMs and RAM are switched in they answer the reads, and a write still reaches this
+# board. After `OUT 7F` with bit 1 set, this board has all 64K.
 [[board]]
-type = "memory"
-id   = "mem0"
-fill = "random"               # real static RAM does not come up zeroed
+type           = "memory"
+id             = "mem0"
+fill           = "random"     # real static RAM does not come up zeroed
+honors_phantom = "read"
 
   [[board.region]]
   type = "ram"
   at   = 0000
-  size = "56K"                # 0000-DFFF
-
-  [[board.region]]
-  type  = "rom"
-  at    = E000
-  mount = "builtin:msmonr21"  # 2K -> E000-E7FF
-
-  [[board.region]]
-  type = "ram"
-  at   = E800
-  size = "2K"                 # E800-EFFF
-
-  [[board.region]]
-  type  = "rom"
-  at    = F000
-  mount = "builtin:ddb200"    # 2K -> F000-F7FF
-
-  [[board.region]]
-  type = "ram"
-  at   = F800
-  size = "2K"                 # F800-FFFF (monitor scratch/stack/registers at FF60-FFFF)
+  size = "64K"

@@ -6,6 +6,17 @@ as it is now; this document is the record of how it got there.
 
 ---
 
+## Unreleased
+
+**The SBC-200 starts in its monitor after a reset.** The `sbc` board has the auto-start circuit
+of the real board. Set `start` to a 4K boundary, and after a reset the Z80 reads the PROM there
+until the PROM reads port `7F`. The `sbc200` and `sbc200v` machines have `start = E000`: they
+start with `RUN`, and `RESET` then `RUN` brings the monitor back. The board also has the
+memory jumpers of the real board. `rom_size` and `bank` set where the four PROM sockets are,
+and `ram` is the 1K onboard RAM, which is new. A `[[board.socket]]` address that is not a socket
+of the board is refused: before, any address from `E000` to `FFFF` was accepted. A snapshot from
+an earlier version does not load.
+
 ## 1.3.0
 
 **1.3.0 is the release that adds new boards and sound, and lets a floppy take the time of a real

@@ -547,8 +547,9 @@ the software uses. They are all in one block of eight ports, `78`–`7F`:
 
 - an **Intel 8251 USART** console, unit `tty`, with data at `7C` and status and command at `7D`
 - a **Z80-CTC** at `78`–`7B`, which gives a keyboard interrupt when a byte arrives
-- a **parallel port** at `7E`–`7F`. A write to `7F` with bit 1 set switches the onboard PROM off
-- a socket for an **onboard boot PROM**
+- a **parallel port** at `7E`–`7F`. A write to `7F` with bit 1 set switches the onboard memory
+  off
+- four sockets for **onboard PROMs**, and **1K of onboard RAM**
 
 The 8251 is not the 6850 that the MITS boards use. Software for a 2SIO cannot use it. The SBC's
 own **SD monitor** can. The processor is a separate `z80` board, and its `clock_hz` sets the
@@ -560,6 +561,43 @@ The board has **auto-baud**. Run `altairsim sbc200`, and the SD monitor waits fo
 Return**. It times the bits of that one character, and sets its own baud rate to match. A
 terminal at any common speed works. Nothing happens until you press Return. The program is not
 stopped. It is waiting for that key.
+
+#### The onboard memory
+
+The jumpers of the real board set where its PROM sockets and its RAM are. The `sbc` board has
+them as properties:
+
+| Property | What it sets | Default |
+|---|---|---|
+| `rom_size` | the size of each PROM: `1K`, `2K`, `4K` or `8K` | `2K` |
+| `bank` | the bank that holds the eight slots. A bank is eight times `rom_size` | `3`, which is `C000`–`FFFF` |
+| `ram` | `true` puts the 1K RAM in the last slot of the bank | `true` |
+| `start` | the auto-start address, a multiple of `1000` | `0000`, which is off |
+
+With the defaults, the sockets are at `C000`, `C800`, `D000`, `D800`, `E000`, `E800` and `F000`,
+and the RAM is at `F800`–`FFFF`. Put a PROM in a socket with a `[[board.socket]]` table. The
+board refuses an address that is not a socket.
+
+In a machine file:
+
+```toml
+[[board]]
+type  = "sbc"
+id    = "sbc0"
+start = E000
+
+  [[board.socket]]
+  at    = E000
+  mount = "builtin:msmonr21"
+```
+
+The machine needs a `memory` board with RAM under the onboard memory, and that board must have
+`honors_phantom = "read"`. The onboard memory answers a read. A write also goes to the `memory`
+board.
+
+**Auto-start.** A Z80 starts at `0000` after a reset. With `start = E000`, the board makes the
+Z80 read the PROM at `E000` after a reset, until the PROM reads port `7F`. Then memory is
+normal again. Thus `RUN` starts the monitor, and `RESET` then `RUN` starts it again.
 
 The `sbc200` machine boots the **SD monitor**. With the **DDBIOS** disk BIOS in a PROM socket
 and a `versafloppy` controller, the monitor's `C` command boots **SDOS**. See the VersaFloppy
