@@ -45,13 +45,14 @@ TarbellBoardBase::~TarbellBoardBase() {
 TarbellBoard::TarbellBoard() { buildChip(); }
 
 // THE PART IS THE GENERATION. The single-density card has an FD1771; the rest of the
-// family (register file, command set) is shared in Wd17xx. Always wait-synced: the
-// Tarbell's data port stalls the CPU on the wait-state generator rather than exposing
-// a byte clock (reference §4), so every command completes on the access that would
-// have waited (see wd17xx.h). DD builds a Wd1791 instead.
+// family (register file, command set) is shared in Wd17xx. Wait-synced under `timing =
+// full` (the default): the Tarbell's wait port stalls the CPU on the wait-state generator
+// rather than exposing a byte clock (reference §4), so every command completes on the
+// access that would have waited (see wd17xx.h). Under `timing = real` the chip runs on the
+// clock and the wait port holds READY instead. DD builds a Wd1791.
 void TarbellBoard::buildChip() {
     chip_ = std::make_unique<Wd1771>("fdc");
-    chip_->setWaitSynced(true);
+    chip_->setWaitSynced(!timingReal_);
     if (clock_) chip_->powerOn(*clock_);
     applySelection();
 }
@@ -110,10 +111,15 @@ uint8_t TarbellBoardBase::read(const BusCycle& c) {
             // FC WAIT: bit7 = DRQ (a byte is ready), or 0 = INTRQ (command done). The
             // PROM's RLOOP polls this: sign set -> read a byte, sign clear -> finished.
             // The low seven bits float; return them high (period code tests only bit7).
-            chip_->poll(k);
+            // On the board this access holds XRDY until DRQ or INTRQ. Under `timing =
+            // real` that wait is charged to the clock; under `full` it takes no time.
+            holdReady(chip_->holdUntilReady(k));
             v = (uint8_t)((chip_->drq() ? 0x80 : 0x00) | 0x7F);
             break;
-        default: v = readExtra(off); break;  // FD (DD only) / FE-FF
+        default:  // FD (DD only) / FE-FF
+            chip_->poll(k);  // FD follows INTRQ, so bring the chip up to now first
+            v = readExtra(off);
+            break;
     }
     refresh();
     return v;
@@ -359,6 +365,27 @@ std::vector<Property> TarbellBoardBase::properties() {
         p.push_back(std::move(x));
     }
     p.push_back(irqJumperProperty("interrupt", "Where the card's interrupt is soldered", irq_));
+    {
+        Property x;
+        x.name    = "timing";
+        x.help    = "Disk timing. full: a disk access completes at once. real: the wait port "
+                    "holds READY until the next byte or the end of the command, so seek, head "
+                    "settle and byte times take emulated time, as on the board";
+        x.kind    = Kind::Enum;
+        x.choices = {"full", "real"};
+        x.get     = [this] { return Value::ofStr(timingReal_ ? "real" : "full"); };
+        x.set     = [this](const Value& v, std::string& err) {
+            if (v.s() != "full" && v.s() != "real") {
+                err = "timing is full or real";
+                return false;
+            }
+            timingReal_ = v.s() == "real";
+            chip_->setWaitSynced(!timingReal_);
+            refresh();  // a timed chip has deadlines to arm; a wait-synced one has none
+            return true;
+        };
+        p.push_back(std::move(x));
+    }
     return p;
 }
 
@@ -609,7 +636,7 @@ void TarbellBoardBase::deserialize(StateReader& r) {
 // ===========================================================================
 void TarbellDdBoard::buildChip() {
     chip_ = std::make_unique<Wd1791>("fdc");
-    chip_->setWaitSynced(true);
+    chip_->setWaitSynced(!timingReal_);
     if (clock_) chip_->powerOn(*clock_);
     applySelection();
 }
@@ -701,10 +728,14 @@ void TarbellDdBoard::writeControl(uint8_t v) {
     applySelection();
 }
 
-// Port FD IN: the DMA-busy check. We are a PIO model and never busy, so bit7 = 0
-// ("transfer complete") -- period DMA code that polls it never hangs.
+// Port FD IN: the DMA-busy check. Bit 7 = 1 while the FD1791 command runs, 0 once INTRQ
+// is up ("transfer complete"). The 1791 has no BUSY pin; INTRQ is the only end-of-command
+// line the card can gate here. The tracked CBIOSes need exactly that: the DMA build polls
+// FD after a SEEK (no DMA armed) before it reads status, and the PIO build's Read Address
+// recovery drains ID bytes while FD bit 7 is set. Reading status resets INTRQ, so after a
+// status read FD reads busy again until the next command ends -- as the pin would.
 uint8_t TarbellDdBoard::readExtra(uint8_t off) const {
-    if (off == 5) return 0x00;
+    if (off == 5) return chip_->intrq() ? 0x00 : 0x80;
     return 0xFF;
 }
 

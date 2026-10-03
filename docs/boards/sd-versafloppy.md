@@ -125,7 +125,7 @@ with 8″ drives at 360 RPM (6 rev/s) and 5.25″ minis at 300 RPM (5 rev/s) —
 | Quirk | If you get it wrong |
 |---|---|
 | **63H is negative-true** — the guest writes `~control` | Every drive-select picks the wrong drive → the disk reads NOT READY → **the boot hangs**. This is the bug that cost the first boot attempt. |
-| **PRDY wait-synchronization** — the data port and command completion stall the CPU; there is no DRQ polling | The `INIR`/`OTIR` transfer loop reads a byte before it is ready, or a status read returns BUSY forever. Modeled by `Wd17xx::setWaitSynced(true)`: any register access resolves all pending time-based progress, serving the next byte on demand. |
+| **PRDY wait-synchronization** — the data port and command completion stall the CPU; there is no DRQ polling | The `INIR`/`OTIR` transfer loop reads a byte before it is ready, or a status read returns BUSY forever. Modeled two ways, by the `timing` property (below). |
 | **DD-256 uses double-density 256-byte sectors** | The DDBIOS format probe reads the ID field's length code (`IDSV+3`); a wrong sector size fails detection and the boot falls through to the monitor. |
 | **FD1771 vs FD1791 differ** (step rates, side byte, record-type bits) | Wrong step-rate table seeks at the wrong speed; wrong record-type width misreports deleted sectors. Split into `Wd1771`/`Wd1791` parts, not a flag. |
 
@@ -139,9 +139,20 @@ with 8″ drives at 360 RPM (6 rev/s) and 5.25″ minis at 300 RPM (5 rev/s) —
   flux-level model, and `Read Track` returns nothing.
 - **`Read Address`/`Read Track` are not the format path.** Formatting is `Write Track`;
   `Read Track` has no bit image to return.
-- **The collapsed command time is invisible** under wait-synchronization — a seek does not spend
-  its 20 ms/track in emulated time, because a PRDY-stalled CPU cannot observe it. Correct for
-  this card; a DRQ-polling card (a future Tarbell) would use the chip's byte-timed path instead.
+- **Under the default `timing = full`, the stall takes no emulated time** — a seek does not spend
+  its 20 ms/track, and a sector moves as fast as the CPU can run `INIR`. Set `timing = real` for
+  the real time.
+- **No rotational latency**, under either setting: a sector is found as soon as the head settles.
+
+## `timing` — how long the wait states take
+
+The card holds PRDY on an `IN`/`OUT (67H)` while the wait-enable bit is set (VF-I D6, VF-II D7),
+until the FD177x has a byte (DRQ) or the command ends (INTRQ). Ports 63H-66H never stall.
+
+| `timing` | What it does |
+|---|---|
+| `full` (default) | The chip is wait-synced: every byte is ready the moment it is asked for, and the stall costs nothing. |
+| `real` | The chip runs its byte-timed model on the clock — step rate, head settle, one byte per byte time — and a 67H access holds READY until DRQ or INTRQ. The hold is charged to the CPU as wait states, so a seek and a sector take as long as on the machine. With wait-enable clear, 67H never holds. |
 
 ## Verification
 

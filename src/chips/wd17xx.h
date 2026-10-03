@@ -306,8 +306,8 @@ public:
     // sector-transfer loop is a bare `IN A,(67H)` with NO software DRQ polling, and a
     // status read after a command blocks until the FDC is done.
     //
-    // This simulator cannot inject wait states -- the clock does not advance inside a bus
-    // cycle. So a wait-synced card sets this, and then EVERY register access resolves all
+    // This is the board's `timing = full` model (the default). The clock does not advance
+    // inside a bus cycle, so a wait-synced card sets this, and then EVERY register access resolves all
     // pending TIME-BASED progress first: poll() treats every deadline as already due and
     // runs the state machine forward, stopping only where it genuinely needs the guest --
     // the next byte of a transfer, which the data register serves on demand. A status read
@@ -317,8 +317,24 @@ public:
     // time is invisible, and Lost Data (which the wait-state hardware exists to prevent) is
     // correctly unreachable. Off by default: a DRQ-polling card leaves it alone and gets the
     // byte-timed model above, Lost Data and all.
+    //
+    // `timing = real` (issue #637) leaves this OFF and charges the wait instead: the chip
+    // runs its byte-timed model, and the board calls holdUntilReady() at the access the
+    // hardware stalls on, then holds READY (Board::holdReady()) for what it returns.
     void setWaitSynced(bool on) { waitSynced_ = on; }
     bool waitSynced() const { return waitSynced_; }
+
+    // THE CPU WAITS ON READY UNTIL DRQ OR THE END OF THE COMMAND. Runs the state machine
+    // forward, deadline by deadline, until DRQ is up or the chip is idle, and returns the
+    // T-states that took -- the wait states the board holds READY for. Zero if it is
+    // already so, and zero on a wait-synced chip (that model charges no time at all).
+    //
+    // THE CHIP RUNS AHEAD OF THE CLOCK. The clock does not move inside an instruction; it
+    // is charged the hold at the boundary (DESIGN.md 7.5). Until then the chip has lived
+    // through time the clock has not reached yet, and ahead_ remembers how far, so every
+    // time the chip reads is now() = max(clock, ahead_). After the instruction the clock
+    // catches up and ahead_ is behind it again.
+    uint32_t holdUntilReady(const Clock& clk);
 
     // The SIDE the board's drive-select latch has chosen (the 179x has a side-select
     // input pin; the 1771 does not). The board writes it; only a part that has the pin
@@ -485,6 +501,12 @@ protected:
 
     // Where the state machine is going next, and when.
     uint64_t due_ = 0;
+
+    // The latest time the chip has lived through inside a held bus cycle (see
+    // holdUntilReady()). Never serialized: at an instruction boundary the clock has already
+    // been charged the hold, so ahead_ is never past it there.
+    uint64_t ahead_ = 0;
+    uint64_t now(const Clock& clk) const { return clk.now() > ahead_ ? clk.now() : ahead_; }
 
     // ---- THE STEPPING DIRECTION IS A LATCH ON THE REAL CHIP (the DIRC pin) ----
     // A bare Step command (not Step In / Step Out) repeats the LAST direction, so it

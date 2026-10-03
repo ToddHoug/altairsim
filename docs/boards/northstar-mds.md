@@ -181,11 +181,15 @@ is its command interface.
   computes it. A status read does not turn the disk.
 - **The status is sampled before the command acts.** The MDS-A schematic clocks `MOTOR-SAMP`
   and `WINDOW-SAMP` on the leading edge of the read.
-- **Wait states.** The board does not hold `PRDY`. A read-data or write-data access moves
-  the next byte at once, as if the processor had waited, and the wait takes no emulated time.
-  The VersaFloppy does the same (`src/chips/wd17xx.h`, `setWaitSynced`). A board can now
-  charge a wait to the clock (`Board::holdReady()`, issue #619); using it here is issue
-  #637.
+- **Wait states, and the `timing` property.** A read-data or write-data access holds `PRDY`
+  until the shift register is ready. How long that takes depends on `timing`:
+  - **`full`** (the default): the access moves the next byte at once, and the wait takes no
+    emulated time.
+  - **`real`**: the access holds until its byte's time on the disk, and the hold is charged to
+    the CPU as wait states (`Board::holdReady()`). Read byte *p* (the data, then the check
+    character) is ready at body + (*p*+1) byte times. A written byte is taken at the next byte
+    slot after the window shuts. A byte time is 64 µs in single density and 32 µs in double.
+    An access that is already late holds nothing.
 - **Media: hard-sectored, but the image holds the data only.** A `.NSI` file is the sector
   data in order: track, then sector. The preamble, the sync character and the check character
   are not in the file. On a read, the board supplies the data and then the check character,
@@ -268,9 +272,10 @@ table, and the MDS-A PROM writes `59` (not initialized) to the table before it l
 - **A write that stops early is dropped.** If the next sector pulse comes before the last data
   byte, nothing is written. On real media the sector would be left with no valid check
   character. A payload-only image cannot hold such a sector.
-- **A read is not limited by the 20 ms sector.** Bytes come as fast as the guest reads them. A
-  guest that is too slow loses data on the real board (the MDS-A manual gives a 64 µs loop
-  limit). Here it does not.
+- **A slow guest does not lose data.** Under `timing = full`, bytes come as fast as the guest
+  reads them. Under `real`, they come no faster than the disk. But under either setting, a guest
+  that is too slow gets the next byte, not a lost one; on the real board it loses data (the MDS-A
+  manual gives a 64 µs loop limit).
 - **No spin-up time and no head-settle time in the board.** The real board has neither. The
   drive does, and the period software waits for it with sector counts.
 - **The motor-off jumper of the MDS-A-D** (3.2 to 38.4 seconds) is not a property. The time

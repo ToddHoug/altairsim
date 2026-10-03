@@ -41,7 +41,7 @@ window and no port-04 ¬RESTORE. The board type is `64fdc`; `builtin:rdos312` is
   follow-up for when port 04 stops being an inert stub; today only side-select moves emulated
   state, and the head homes on the FD1793's own Restore.
 - Everything in the 16FDC's *Limitations* section (Phase-1 polled boot, no interrupt delivery,
-  Write Track parsing) applies unchanged.
+  Write Track parsing) applies unchanged, and so does its AUTO WAIT `timing` property.
 
 ## Verification
 

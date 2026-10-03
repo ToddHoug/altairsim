@@ -30,10 +30,11 @@
 // the guest sends, finds the sync, and keeps the data.
 //
 // THE CPU IS STALLED, NOT POLLED. A read-data or write-data access holds PRDY until the
-// shift register is ready. The simulator cannot add wait states inside a bus cycle (see
-// chips/wd17xx.h, setWaitSynced), so each such access moves the next byte at once, as if
-// the CPU had waited. What IS timed is everything the guest polls for: the sector flag,
-// the window, read enable, body.
+// shift register is ready. Under `timing = full` (the default) each such access moves the
+// next byte at once, as if the CPU had waited, and the wait takes no emulated time. Under
+// `timing = real` the board holds READY (Board::holdReady()) until the byte is under the
+// head. Either way, what is timed is everything the guest polls for: the sector flag, the
+// window, read enable, body.
 //
 // THE MOTOR IS FREE BY DEFAULT, the same call the 88-MDS makes: the motors start on the
 // command that starts them, and with `motor = "real"` they stop again after the board's
@@ -216,6 +217,16 @@ private:
     int       drives_;
     IrqJumper irq_       = IrqJumper::None;
     bool      motorReal_ = false;
+    bool      timingReal_ = false;  // `timing = real`: a data access holds READY (#637)
+
+    // `timing = real`. The clock does not move inside an instruction; the run loop charges
+    // a READY hold at the boundary. Until then the board has lived through time the clock
+    // has not reached, and ahead_ says how far: every time the board reads is now() =
+    // max(clock, ahead_). Not serialized -- at a boundary the clock has caught up.
+    uint64_t ahead_ = 0;
+    uint64_t now() const;
+    void     holdUntil(uint64_t t);         // hold READY until T, if T is still to come
+    uint64_t byteT(bool dd) const;          // one byte under the head: 64 us SD, 32 us DD
 
     std::vector<Drive> drive_;
     Spindle            spindle_;  // 300 RPM, ten sector holes

@@ -100,9 +100,10 @@ private:
     };
 
     // The controller and the guest's control latch.
-    void     buildChip();       // (re)construct chip_ for variant_, wait-synced
+    void     buildChip();       // (re)construct chip_ for variant_ and timing
     void     selectFromControl();  // decode 63H: drive select, side, density -> attach + straps
     void     refresh();         // advance the chip, re-drive pin 73, re-arm any wake
+    void     waitHold(const Clock& k);  // `timing = real`: the 67H PRDY hold
     Drive*   selected();
     Clock&   clk() const;
 
@@ -115,6 +116,7 @@ private:
     std::vector<Drive>      drive_;
 
     uint8_t control_ = 0;   // the last byte written to 63H (drive/side/density/wait/int)
+    bool    timingReal_ = false;  // `timing = real`: 67H holds READY (#637)
     int     sel_     = -1;  // which drive the one-hot select picked, or -1 for none
 
     // What the CARD (as opposed to the chip) has to say -- e.g. a host-forced write-protect.

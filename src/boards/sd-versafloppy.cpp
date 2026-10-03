@@ -77,13 +77,14 @@ VersaFloppyBoard::~VersaFloppyBoard() {
 }
 
 // THE PART IS THE VARIANT. VF-I has an FD1771, VF-II an FD1791; the rest of the family
-// (register file, command set) is shared in Wd17xx. Always wait-synced: the VersaFloppy
-// stalls the CPU on PRDY rather than exposing DRQ, so every command completes on the access
-// that would have waited (see the header and wd17xx.h).
+// (register file, command set) is shared in Wd17xx. Wait-synced under `timing = full` (the
+// default): the VersaFloppy stalls the CPU on PRDY rather than exposing DRQ, so every command
+// completes on the access that would have waited (see the header and wd17xx.h). Under
+// `timing = real` the chip runs on the clock and 67H holds READY instead (waitHold()).
 void VersaFloppyBoard::buildChip() {
     if (variant_ == Variant::Vf1) chip_ = std::make_unique<Wd1771>("fdc");
     else                          chip_ = std::make_unique<Wd1791>("fdc");
-    chip_->setWaitSynced(true);
+    chip_->setWaitSynced(!timingReal_);
     if (clock_) chip_->powerOn(*clock_);
     selectFromControl();  // re-attach whatever the control latch had selected
 }
@@ -168,7 +169,10 @@ uint8_t VersaFloppyBoard::read(const BusCycle& c) {
         case 4: v = chip_->readStatus(k);   break;
         case 5: v = chip_->readTrackReg();  break;
         case 6: v = chip_->readSectorReg(); break;
-        case 7: v = chip_->readData(k);     break;
+        case 7:
+            waitHold(k);
+            v = chip_->readData(k);
+            break;
     }
     refresh();
     return v;
@@ -189,9 +193,21 @@ void VersaFloppyBoard::write(const BusCycle& c) {
         case 4: chip_->writeCommand(c.data, k);  break;
         case 5: chip_->writeTrackReg(c.data);    break;
         case 6: chip_->writeSectorReg(c.data);   break;
-        case 7: chip_->writeData(c.data, k);     break;
+        case 7:
+            waitHold(k);
+            chip_->writeData(c.data, k);
+            break;
     }
     refresh();
+}
+
+// `timing = real`: an access to 67H holds PRDY until the FDC raises DRQ (or ends the
+// command), and only while the wait-state generator is enabled -- VF-I D6, VF-II D7
+// (reference §4). 63H-66H never wait. Under `timing = full` the chip is wait-synced and
+// holdUntilReady() charges nothing.
+void VersaFloppyBoard::waitHold(const Clock& k) {
+    const uint8_t enable = (variant_ == Variant::Vf1) ? 0x40 : 0x80;
+    if (control_ & enable) holdReady(chip_->holdUntilReady(k));
 }
 
 // ---------------------------------------------------------------------------
@@ -309,6 +325,28 @@ std::vector<Property> VersaFloppyBoard::properties() {
         p.push_back(std::move(x));
     }
     p.push_back(irqJumperProperty("interrupt", "Where the card's interrupt is soldered", irq_));
+    {
+        Property x;
+        x.name    = "timing";
+        x.help    = "Disk timing. full: a disk access completes at once. real: the data port "
+                    "holds READY until the next byte or the end of the command (while the "
+                    "wait-state circuit is enabled), so seek, head settle and byte times take "
+                    "emulated time, as on the board";
+        x.kind    = Kind::Enum;
+        x.choices = {"full", "real"};
+        x.get     = [this] { return Value::ofStr(timingReal_ ? "real" : "full"); };
+        x.set     = [this](const Value& v, std::string& err) {
+            if (v.s() != "full" && v.s() != "real") {
+                err = "timing is full or real";
+                return false;
+            }
+            timingReal_ = v.s() == "real";
+            chip_->setWaitSynced(!timingReal_);
+            refresh();  // a timed chip has deadlines to arm; a wait-synced one has none
+            return true;
+        };
+        p.push_back(std::move(x));
+    }
     return p;
 }
 

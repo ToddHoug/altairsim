@@ -25,6 +25,8 @@
 #include "boards/s100-memory.h"
 #include "core/bus.h"
 #include "core/clock.h"
+#include "core/debug.h"
+#include "core/machine.h"
 #include "core/roms.h"
 #include "host/media.h"
 #include "host/stream.h"
@@ -107,6 +109,38 @@ void withRampDisk(uint64_t bytes) {
         return std::make_unique<MemoryMedia>(path, std::move(d), ro);
     });
 }
+
+// `timing = real` (issue #637): a whole machine -- 48K RAM, a 16FDC with its ROM off, a Z80
+// at 4 MHz -- because a READY hold is charged by the run loop, at the instruction boundary,
+// and nowhere else.
+struct TimedRig {
+    Machine     m;
+    Fdc16Board* fdc = nullptr;
+    TimedRig(const char* timing, const std::vector<uint8_t>& code) {
+        std::string err;
+        auto* mem = dynamic_cast<MemoryBoard*>(m.add("memory", "mem0", err));
+        Region r;
+        r.kind = RegionKind::Ram;
+        r.at   = 0x0000;
+        r.size = 0xC000;
+        mem->addRegion(r, err);
+        setProperty(*mem, "fill", "zero", err);
+        fdc = dynamic_cast<Fdc16Board*>(m.add("16fdc", "fdc0", err));
+        setProperty(*fdc, "bootstrap", "off", err);
+        setProperty(*fdc, "timing", timing, err);
+        Board* cpu = m.add("z80", "cpu0", err);
+        setProperty(*cpu, "clock_hz", "4000000", err);
+        m.power();
+        fdc->mount("drive0", "cdos.dsk", false, err);
+        for (size_t i = 0; i < code.size(); ++i) m.bus.memWrite((uint16_t)i, code[i]);
+        m.cpu()->setPc(0);
+    }
+    uint64_t step() {
+        uint64_t t0 = m.clock.now();
+        m.debug.run(1);
+        return m.clock.now() - t0;
+    }
+};
 
 // A 48K RAM board (0000-BFFF). The Cromemco ROM sits in a memory HOLE at C000 -- unlike
 // the Tarbell's low-RAM PHANTOM* shadow, it does not overlay RAM, so the fixture leaves
@@ -703,5 +737,58 @@ void test_cromemco_fdc() {
 
         delete fdc;
         delete mem;
+    }
+
+    // ---- `timing = real`: IN 34 holds READY under Auto Wait (issue #637) ----
+    //
+    // The RDOS read idiom, IN 34 / INI per byte, on a real Z80. Under `real` each IN 34 holds
+    // READY until the FD1793 has the next byte -- 32 us at 8" single density, 128 T-states at
+    // 4 MHz -- and the INI from port 33 never waits.
+    SECTION("boards/cromemco-fdc: timing = real -- IN 34 holds READY under Auto Wait");
+    {
+        // 00 LD A,B1 ; OUT (34),A      Auto Wait + MAXI + MOTOR + drive 0 (8" SD)
+        // 04 LD A,1 ; OUT (32),A ; LD A,88 ; OUT (30),A ; LD HL,2000 ; LD C,33
+        // 11 L: IN A,(34) ; RLA ; JR NC,done ; INI ; JR L
+        // 1A done: HALT
+        const std::vector<uint8_t> rd = {
+            0x3E, 0xB1, 0xD3, FD_FLG, 0x3E, 0x01, 0xD3, FD_SEC, 0x3E, 0x88, 0xD3, FD_CMD,
+            0x21, 0x00, 0x20, 0x0E, FD_DAT,
+            0xDB, FD_FLG, 0x17, 0x30, 0x04, 0xED, 0xA2, 0x18, 0xF7,
+            0x76};
+        const uint64_t byte = 128;  // 32 us at 250 kbit/s, at 4 MHz
+
+        withRampDisk(26ull * 128 + 16ull * 512 + 76ull * 2 * 16 * 512);
+        {
+            TimedRig g("real", rd);
+            for (int i = 0; i < 5; ++i) g.step();  // LD OUT LD OUT LD
+            uint64_t t = 0;
+            for (int i = 0; i < 4; ++i) t += g.step();  // OUT (30) ; LD HL ; LD C ; IN 34
+            CHECK(t == 11 + byte, "from the Read Sector OUT, the first IN 34 ends one byte time on");
+            const uint64_t rla = g.step(), jr = g.step(), ini = g.step();
+            const uint64_t back = g.step(), in2 = g.step();  // JR L ; IN 34
+            CHECK(ini == 16, "the INI from port 33 never holds");
+            CHECK(rla + jr + ini + back + in2 == byte, "each later pass of the loop takes one byte time");
+        }
+        {
+            TimedRig g("real", rd);
+            const uint64_t t0 = g.m.clock.now();
+            RunResult rr = g.m.debug.run(2000000);
+            CHECK(rr.why == StopReason::Halted, "the timed IN 34 / INI loop reaches its HALT");
+            bool ramp = true;
+            for (int i = 0; i < 128; ++i)
+                if (g.m.bus.memRead((uint16_t)(0x2000 + i)) != (uint8_t)i) ramp = false;
+            CHECK(ramp, "...with track 0 sector 1 in RAM, in order");
+            CHECK(g.m.bus.memRead(0x2080) == 0, "...and not one byte more");
+            CHECK((in(*g.fdc, FD_CMD) & 0x05) == 0, "...the command over, and no Lost Data");
+            CHECK(g.m.clock.now() - t0 >= 128 * byte, "...and it took 128 byte times");
+        }
+        {
+            TimedRig g("full", rd);
+            for (int i = 0; i < 8; ++i) g.step();
+            CHECK(g.step() == 11, "under timing = full, IN 34 is the Z80's 11 T-states");
+            RunResult rr = g.m.debug.run(2000000);
+            CHECK(rr.why == StopReason::Halted && g.m.bus.memRead(0x2005) == 5,
+                  "...and the same loop reads the same sector");
+        }
     }
 }

@@ -149,6 +149,21 @@ uint64_t NorthStarFdc::tFromUs(uint64_t us) const {
     return t ? t : 1;
 }
 
+uint64_t NorthStarFdc::now() const {
+    if (!clock_) return ahead_;
+    return clock_->now() > ahead_ ? clock_->now() : ahead_;
+}
+
+void NorthStarFdc::holdUntil(uint64_t t) {
+    const uint64_t n = now();
+    if (t <= n) return;  // the byte is already here: a late access waits for nothing
+    const uint64_t d = t - n;
+    holdReady(d > UINT32_MAX ? UINT32_MAX : (uint32_t)d);
+    ahead_ = t;
+}
+
+uint64_t NorthStarFdc::byteT(bool dd) const { return tFromUs(dd ? 32 : 64); }
+
 // ---------------------------------------------------------------------------
 // WHERE THE DISK IS -- the one place rotation is computed, as a reading off the Clock.
 // Nothing here advances anything: a counter that moved when the guest read a status byte
@@ -167,9 +182,9 @@ NorthStarFdc::Rotation NorthStarFdc::where() const {
 
     uint64_t per = r.real ? spindle_.tPerSector(*clock_) : tFromUs(kFreeRunUs);
     if (!per) per = 1;
-    const uint64_t now = clock_->now();
-    r.abs    = now / per;
-    r.into   = now % per;
+    const uint64_t t = now();
+    r.abs    = t / per;
+    r.into   = t % per;
     r.sector = (int)(r.abs % (uint64_t)(r.real ? kNsSectors : freeRunModulo()));
     return r;
 }
@@ -178,7 +193,7 @@ NorthStarFdc::Rotation NorthStarFdc::where() const {
 void NorthStarFdc::tick() {
     if (!clock_) return;
 
-    if (motorOn_ && motorReal_ && clock_->now() >= motorOffAt_) {
+    if (motorOn_ && motorReal_ && now() >= motorOffAt_) {
         motorOn_ = false;
         onMotorOff();
     }
@@ -235,7 +250,7 @@ void NorthStarFdc::scheduleWake() {
     const Rotation r = where();
     uint64_t per = r.real ? spindle_.tPerSector(*clock_) : tFromUs(kFreeRunUs);
     if (!per) per = 1;
-    wake_ = clock_->at(clock_->now() - r.into + per, [this] {
+    wake_ = clock_->at(now() - r.into + per, [this] {
         wake_ = Clock::kNone;
         tick();
         scheduleWake();
@@ -265,7 +280,7 @@ void NorthStarFdc::resetSectorFlag() {
 // ---------------------------------------------------------------------------
 void NorthStarFdc::motorSet() {
     motorOn_ = true;
-    if (clock_) motorOffAt_ = clock_->now() + tFromUs(motorOffUs());
+    if (clock_) motorOffAt_ = now() + tFromUs(motorOffUs());
 }
 
 void NorthStarFdc::motorStop() { motorOn_ = false; }
@@ -307,6 +322,7 @@ void NorthStarFdc::controllerReset() {
 // POC always clears the controller. Whether the front-panel RESET does is the board's.
 // The images stay mounted and the heads stay where they are.
 void NorthStarFdc::reset(Reset r) {
+    if (r == Reset::PowerOn) ahead_ = 0;  // power restarts the clock at zero
     if (resetsOn(r)) controllerReset();
     scheduleWake();
 }
@@ -377,9 +393,13 @@ bool NorthStarFdc::body(const Rotation& r) {
 }
 
 // Read Data. On the board this access stalls the CPU until the read shift register is
-// full; here the byte is simply the next one. After the data comes the check character.
+// full. Under `timing = full` the byte is simply the next one; under `timing = real` the
+// access holds READY until it has come under the head -- byte p of the body, p+1 byte times
+// after the sync character. After the data comes the check character.
 uint8_t NorthStarFdc::readData(const Rotation& r) {
     if (!body(r) || !loadSector(r)) return 0;
+    if (timingReal_ && rdPos_ <= rdLen_)
+        holdUntil(now() - r.into + tFromUs(kBodyUs) + (uint64_t)(rdPos_ + 1) * byteT(mediumDD()));
     uint8_t v = 0;
     if (rdPos_ < rdLen_)       v = rdBuf_[rdPos_];
     else if (rdPos_ == rdLen_) v = checkChar(rdBuf_, rdLen_);
@@ -415,6 +435,18 @@ void NorthStarFdc::beginWrite(const Rotation& r) {
 }
 
 void NorthStarFdc::writeData(uint8_t v) {
+    // `timing = real`: the access holds READY until the write shift register takes the byte.
+    // It shifts one out every byte time from the end of the window, and the board writes
+    // the first zero itself -- so the guest's bytes are taken at window end + 1, 2, 3 ...
+    // byte times, each at the next such slot after the access. That needs no count of the
+    // bytes written: where the disk is says which slot comes next.
+    if (timingReal_ && wr_ != Wr::Idle && wr_ != Wr::Done && clock_) {
+        const Rotation r  = where();
+        const uint64_t t  = now();
+        const uint64_t bt = byteT(wrDD_);
+        const uint64_t w0 = t - r.into + tFromUs(kWindowUs);  // the window ends; writing starts
+        holdUntil(t < w0 ? w0 + bt : w0 + ((t - w0) / bt + 1) * bt);
+    }
     switch (wr_) {
         case Wr::Idle:
         case Wr::Done:
@@ -701,6 +733,25 @@ std::vector<Property> NorthStarFdc::properties() {
         };
         p.push_back(std::move(x));
     }
+    {
+        Property x;
+        x.name    = "timing";
+        x.help    = "Disk timing. full: a read-data or write-data access completes at once. "
+                    "real: it holds READY until the byte is under the head, so a sector transfer "
+                    "takes emulated time, as on the board";
+        x.kind    = Kind::Enum;
+        x.choices = {"full", "real"};
+        x.get     = [this] { return Value::ofStr(timingReal_ ? "real" : "full"); };
+        x.set     = [this](const Value& v, std::string& err) {
+            if (v.s() != "full" && v.s() != "real") {
+                err = "timing is full or real";
+                return false;
+            }
+            timingReal_ = v.s() == "real";
+            return true;
+        };
+        p.push_back(std::move(x));
+    }
     return p;
 }
 
@@ -850,6 +901,7 @@ void NorthStarFdc::serialize(StateWriter& w) const {
 
 void NorthStarFdc::deserialize(StateReader& r) {
     Board::deserialize(r);
+    ahead_ = 0;  // never serialized: see holdUntil()
     sel_        = (int)(int32_t)r.u32();
     sf_         = r.boolean();
     armed_      = r.boolean();
