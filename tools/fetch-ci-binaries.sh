@@ -72,9 +72,9 @@ gh run watch "$run" --exit-status
 # binary at all, because it looks exactly like a current one.
 rm -rf "$OUT"
 
-# A GREEN RUN WITH NO BINARIES IS A MERGE CI DID NOT REBUILD. When a merge to master changes no
-# files, ci.yml skips the build (tools/ci-merge-already-tested.sh): the PR's run already built
-# those exact bytes, and it holds the binaries.
+# A GREEN RUN WITH NO BINARIES IS A MERGE CI DID NOT REBUILD. When a documentation merge to
+# master changes no files, ci.yml skips the build (tools/ci-merge-already-tested.sh): the PR's
+# run already built those exact bytes, and it holds the binary.
 if [ "$(gh api "repos/{owner}/{repo}/actions/runs/$run/artifacts" -q .total_count)" = "0" ]; then
     echo "fetch-ci-binaries: run $run built nothing -- a merge whose tree its PR run already" >&2
     echo "  tested. Fetch from that PR instead: tools/fetch-ci-binaries.sh <PR-number>" >&2

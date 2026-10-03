@@ -4,27 +4,42 @@ name: CI
 # The ~10-min 8080 exerciser (label "slow") is NOT run here -- see cpu-exerciser.yml,
 # which runs it only when CPU/ISA code changes.
 #
-# DOCUMENTATION-ONLY CHANGES RUN ONE LEG, NOT THREE.
+# A PR RUNS THREE LEGS ONLY WHEN IT TOUCHES CORE. MASTER RUNS THREE AFTER EVERY CODE MERGE.
+#
+#   change (tools/ci-changed-code.sh)   pull request    push to master
+#   docs                                Linux           Linux, or nothing if the PR tested it
+#   code  (boards, cli, mcp, tests...)  Linux           Linux + macOS + Windows
+#   core  (core, cpu, platform, host,   Linux + macOS   Linux + macOS + Windows
+#          build, CI, anything new)     + Windows
+#
+# Most PRs are a board, a monitor command or a test: portable C++ above the platform layer.
+# Building those on three operating systems before the merge made every PR wait on the
+# slowest leg (Windows, ~5 min) to learn what Linux had already said. They now build on Linux,
+# and the run on master after the merge builds all three. Nobody waits on that run, and an
+# MSVC- or Clang-only warning in a board shows up minutes after the merge, not at release.
+# A change to the core -- the bus, the CPU, the platform layer, the SDL host, the build --
+# is where the platforms really differ, so it still builds three before the merge.
 #
 # The fast suite VALIDATES the documentation -- docs-manual (the User Manual names nothing
 # outside the shipped package) and docs-reference (the committed docs/manual/ref/*.md matches
 # what the binary emits) both run here, and both need the binary. So a docs change is not a
-# no-op for CI and must not skip it. What a docs change does NOT need is the same binary built
-# on three operating systems: those two tests are platform-independent. So the `scope` job
-# classifies the diff and hands `build` a matrix of three legs for a code change or one (Linux)
-# for a docs-only change. There is no branch protection requiring the legs by name, so a
-# reduced matrix cannot deadlock a PR the way a trigger-level `paths:` filter would.
+# no-op for CI and must not skip it; it runs the Linux leg. There is no branch protection
+# requiring the legs by name, so a reduced matrix cannot deadlock a PR the way a trigger-level
+# `paths:` filter would.
+#
+# THE MASTER RUN ALSO KEEPS THE COMPILER CACHE WARM. A PR can read only its own cache entries
+# and master's. When master merges skipped the build (#543), master's cache went stale, and
+# every PR compiled almost from scratch -- see the build job.
 on:
   push:
     branches: [ master ]
   pull_request:
   workflow_dispatch:
 
-# A MERGE THAT CHANGED NO FILES DOES NOT BUILD AGAIN. Merging an up-to-date PR makes a commit
-# whose tree is byte-identical to the PR head CI just passed; `scope` sees that
-# (tools/ci-merge-already-tested.sh) and `build` is skipped. The run is still green, and says
-# why in the scope log. A merge that did change the tree -- conflicts resolved, or master moved
-# underneath the branch -- builds as before. Issue #543.
+# A DOCUMENTATION MERGE THAT CHANGED NO FILES DOES NOT BUILD AGAIN. Merging an up-to-date docs
+# PR makes a commit whose tree is byte-identical to the PR head CI just passed on Linux; `scope`
+# sees that (tools/ci-merge-already-tested.sh) and `build` is skipped (issue #543). A CODE merge
+# builds three legs even then: its PR may have built only Linux, and master's cache needs it.
 #
 # A NEWER PUSH TO A PR CANCELS THE OLDER RUN, which nobody will read. Pushes to master are
 # grouped by commit instead, so no master run ever cancels or queues behind another.
@@ -33,15 +48,14 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Look at what actually changed and choose the build matrix. Default is CODE (the full
-  # three-platform matrix): an unrecognized path runs everything, so a new directory is never
-  # silently skipped. Only a change that is ENTIRELY documentation drops to the single Linux leg.
+  # Look at what actually changed and choose the build matrix (the table at the top). An
+  # unrecognized path is core, so a new directory is never built on fewer platforms than it needs.
   scope:
     name: Classify the change
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.pick.outputs.matrix }}
-      code: ${{ steps.pick.outputs.code }}
+      level: ${{ steps.pick.outputs.level }}
       tested: ${{ steps.pick.outputs.tested }}
     steps:
       - uses: actions/checkout@v5
@@ -71,59 +85,51 @@ jobs:
           macos='{"name":"macos-arm64","os":"macos-14","artifact":"altairsim-macos-arm64","binary":"build/altairsim"}'
           windows='{"name":"windows-x86_64","os":"windows-2025-vs2026","artifact":"altairsim-windows-x86_64","binary":"build/altairsim.exe"}'
           full="{\"include\":[$linux,$macos,$windows]}"
-          docsonly="{\"include\":[$linux]}"
+          linuxonly="{\"include\":[$linux]}"
 
-          # Already tested? Then `build` is skipped on this output. The matrix still has to be
-          # valid JSON even for a job that will not run -- a matrix cannot be empty -- so hand
-          # over the one-leg one.
-          tested=$(bash tools/ci-merge-already-tested.sh '${{ github.event_name }}')
-          echo "tested=$tested" >> "$GITHUB_OUTPUT"
-          if [ "$tested" = "true" ]; then
-            echo "code=false"       >> "$GITHUB_OUTPUT"
-            echo "matrix=$docsonly" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # Did code change? HEAD is the merge commit (PR) or the pushed tip. The path rule
-          # itself lives in tools/ci-changed-code.sh, so it can be run against any commit locally.
-          #
-          # A PUSHED MERGE ASKS ABOUT BOTH PARENTS, and builds everything only if BOTH answer
-          # code. Each parent is a tree CI already tested: HEAD^1 is master's previous tip, HEAD^2
-          # the PR head. If either side added only documentation on top of its tested tree, the
-          # merge is that tree plus docs, and one leg is enough. Either parent alone gets one case
-          # wrong:
-          #   - HEAD^2 alone: a docs PR cut from an OLD master drags in everything master gained
-          #     since, all of it already tested there, and builds three platforms (#531's merge).
-          #   - HEAD^1 alone: a code PR merged after the PDF bot committed to master counts the
-          #     PR's own code -- which its PR run tested -- as new, and builds it again.
-          # A merge that changed no files relative to HEAD^2 never gets here; `tested` above
-          # skips it.
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            code=$(bash tools/ci-changed-code.sh '${{ github.event.pull_request.base.sha }}')
-          elif [ "${{ github.event_name }}" = "push" ] && git rev-parse --verify --quiet 'HEAD^2' >/dev/null; then
-            code=$(bash tools/ci-changed-code.sh 'HEAD^1')
-            if [ "$code" = "true" ]; then
-              code=$(bash tools/ci-changed-code.sh 'HEAD^2')
+          # What kind of change? The path rule lives in tools/ci-changed-code.sh (docs, code or
+          # core), so it can be run against any commit locally.
+          #   - a PR: everything the PR adds to its base.
+          #   - a pushed merge: what the merge added to master, HEAD^1..HEAD. A docs PR cut from
+          #     an old master is still docs this way, because master already has the rest.
+          #   - any other push: since the previous tip. The first push of a branch has no usable
+          #     base -- take no chances and call it core.
+          #   - workflow_dispatch: somebody asked for the full answer.
+          event='${{ github.event_name }}'
+          if [ "$event" = "pull_request" ]; then
+            level=$(bash tools/ci-changed-code.sh '${{ github.event.pull_request.base.sha }}')
+          elif [ "$event" = "push" ] && git rev-parse --verify --quiet 'HEAD^2' >/dev/null; then
+            level=$(bash tools/ci-changed-code.sh 'HEAD^1')
+          elif [ "$event" = "push" ]; then
+            base='${{ github.event.before }}'
+            if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+              echo "no base to diff against -- treating it as core"
+              level=core
+            else
+              level=$(bash tools/ci-changed-code.sh "$base")
             fi
           else
-            base='${{ github.event.before }}'
-            # First push of a branch has no usable base -- take no chances, build everything.
-            if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
-              echo "no base to diff against -- full matrix"
-              code=true
-            else
-              code=$(bash tools/ci-changed-code.sh "$base")
-            fi
+            echo "event is '$event' -- full matrix"
+            level=core
           fi
+          echo "level=$level" >> "$GITHUB_OUTPUT"
 
-          if [ "$code" = "true" ]; then
-            echo "code changed -- full matrix"
-            echo "code=true"    >> "$GITHUB_OUTPUT"
+          # A docs merge whose PR run already tested this exact tree is skipped. The matrix
+          # still has to be valid JSON even for a job that will not run -- a matrix cannot be
+          # empty -- so hand over the one-leg one. A code merge is never skipped: its PR may have
+          # built Linux only, and the master run is what refreshes master's compiler cache.
+          tested=false
+          if [ "$level" = "docs" ]; then
+            tested=$(bash tools/ci-merge-already-tested.sh "$event")
+          fi
+          echo "tested=$tested" >> "$GITHUB_OUTPUT"
+
+          if [ "$level" = "core" ] || { [ "$event" != "pull_request" ] && [ "$level" = "code" ]; }; then
+            echo "$level change on $event -- Linux, macOS and Windows"
             echo "matrix=$full" >> "$GITHUB_OUTPUT"
           else
-            echo "documentation only -- Linux leg only (still runs docs-manual + docs-reference)"
-            echo "code=false"       >> "$GITHUB_OUTPUT"
-            echo "matrix=$docsonly" >> "$GITHUB_OUTPUT"
+            echo "$level change on $event -- Linux only (master builds all three after a code merge)"
+            echo "matrix=$linuxonly" >> "$GITHUB_OUTPUT"
           fi
 
   # THE CHANGELOG IS THE ONE SHIPPED DOCUMENT WITH NOTHING CHECKING IT.
@@ -207,20 +213,26 @@ jobs:
     if: needs.scope.outputs.tested != 'true'
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
-    # THE WAIT IN CI IS THE COMPILE, NOT THE TESTS. The fast suite is seconds; a cold C++
-    # build is minutes. Two levers, and they are not the same lever on every leg:
+    # THE WAIT IN CI IS THE COMPILE, AND THEN THE TESTS RUN ONE AT A TIME. Three levers:
     #   - sccache caches object files across runs keyed on the preprocessed source and the
-    #     compiler+flags, so a warm push only recompiles the TUs the diff touched. MEASURED:
-    #     Linux 46s->22s (87% hit), macOS 44s->31s (37%). GitHub Actions cache is the backend
-    #     (SCCACHE_GHA_ENABLED); no actions/cache step needed.
-    #   - Ninja instead of MSBuild on Windows (see the MSVC step) -- and on Windows that is
-    #     the ENTIRE win: the leg dropped 258s->188s from the generator alone, while sccache
-    #     gets 0% there (all writes fail against the Actions cache v2 backend with MSVC; a
-    #     known sccache issue, non-fatal -- the build still passes, it just does not cache).
-    # Net wall-clock ~4.5 min -> ~3.4 min, Windows still the long pole. Closing the Windows
-    # cache is the remaining prize and is tracked separately, not blocking.
+    #     compiler+flags, so a warm push only recompiles the TUs the diff touched.
+    #   - Ninja instead of MSBuild on Windows (see the MSVC step): 258s->188s by itself.
+    #   - ctest --parallel (see the Test step).
+    #
+    # THE CACHE IS ONE FILE PER LEG ON DISK, NOT SCCACHE'S ACTIONS-CACHE BACKEND. That backend
+    # (SCCACHE_GHA_ENABLED) stores every object file as its own cache entry. MEASURED on PR #639:
+    # Windows 238 of 238 writes failed (0% hits, a 5m12s build -- every run cold), Linux 87 and
+    # macOS 104 writes failed, and hit rates were 21% and 16%; 11,631 tiny entries had piled up.
+    # Now sccache keeps a plain local directory, restored from and saved to one actions/cache
+    # entry per leg. MSVC has no special case on a local disk.
+    #
+    # THE KEY CHANGES EVERY RUN, SO EVERY RUN SAVES. An actions/cache key cannot be overwritten,
+    # so it carries the commit and the attempt; restore-keys picks the newest entry for the leg.
+    # Which entries a run can SEE is GitHub's rule: its own branch's and master's. That is why a
+    # master code merge always builds (see the scope job): without it, master's entry ages and
+    # every new PR starts cold.
     env:
-      SCCACHE_GHA_ENABLED: "true"
+      SCCACHE_CACHE_SIZE: 1G
     # All legs that run are required to pass. Windows was advisory (continue-on-error) while
     # src/platform/win32/ was being brought up; it now compiles, links, and passes the full
     # suite on MSVC, so a Windows regression blocks a PR like any other. fail-fast is off so
@@ -239,10 +251,23 @@ jobs:
         with:
           fetch-depth: 0
 
-      # The compiler cache. Installs the sccache binary and wires it to the Actions cache.
-      # The Configure step below points CMake's compiler launcher at it on every leg.
+      # The compiler cache. Installs the sccache binary; SCCACHE_DIR is where it keeps objects
+      # (set here because the runner context is not available in job-level env), and the
+      # restore below fills that directory from the newest entry for this leg. The Configure
+      # step points CMake's compiler launcher at it on every leg.
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Compiler cache directory
+        shell: bash
+        run: echo "SCCACHE_DIR=${{ runner.temp }}/sccache" >> "$GITHUB_ENV"
+
+      - name: Restore the compiler cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: sccache-${{ matrix.name }}-${{ github.sha }}-${{ github.run_attempt }}
+          restore-keys: sccache-${{ matrix.name }}-
 
       # WINDOWS BUILDS WITH NINJA + MSVC, NOT THE VISUAL STUDIO GENERATOR. Two reasons, and the
       # first turned out to be the one that pays: Ninja is simply faster than MSBuild here (leg
@@ -323,6 +348,17 @@ jobs:
       - name: sccache stats
         run: sccache --show-stats
 
+      # Stop the server so every object is on disk, then save. Saved after the build, not at
+      # the end of the job, so a red test still leaves the next push a warm cache.
+      - name: Stop sccache
+        run: sccache --stop-server
+
+      - name: Save the compiler cache
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: sccache-${{ matrix.name }}-${{ github.sha }}-${{ github.run_attempt }}
+
       # SAY WHICH COMMIT THIS IS, in the log, on every leg. The version string is baked in
       # at configure time from `git describe`, so it is the one thing in the run that can
       # go quietly wrong without failing anything: revert the checkout above to the default
@@ -337,8 +373,13 @@ jobs:
       # is a harmless no-op rather than the requirement it was under the VS generator -- kept
       # so the line reads the same everywhere. serial-hw self-skips (exit 77); disk-gated tests
       # are not registered without the (non-git) CP/M images.
+      #
+      # IN PARALLEL. One at a time the suite took 130s on Linux and 152s on macOS, while its
+      # longest test (`unit`) takes 18-36s. Every acceptance script works in its own scratch
+      # folder under the build tree, so the tests do not share files. A test that fails only
+      # when run beside others has a real bug, and gets it fixed -- never RUN_SERIAL to hide it.
       - name: Test (fast)
-        run: ctest --test-dir build -C Release -LE slow --output-on-failure
+        run: ctest --test-dir build -C Release -LE slow --output-on-failure --parallel 4
 
       - name: Upload binary
         uses: actions/upload-artifact@v4

@@ -52,7 +52,9 @@ commit message. No attribution. Any comment you post on it ends with
 gh pr checks <N>
 ```
 
-Wait until all three platforms (Linux, macOS, Windows) have finished.
+Wait until every leg the run started has finished. A core change runs Linux, macOS and
+Windows; any other change runs Linux only (`tools/ci-changed-code.sh` decides, and the
+`Classify the change` log says which). A leg that never started is not a missing check.
 
 - **Red:** stop and report the failing step and its log excerpt
   (`gh run view <id> --log-failed`). Never re-run a failure hoping it goes green — that hides
@@ -61,7 +63,7 @@ Wait until all three platforms (Linux, macOS, Windows) have finished.
 
 ## 5. Merge on green
 
-No further approval is needed once all three are green.
+No further approval is needed once every leg that ran is green.
 
 ```sh
 gh pr merge <N> --merge --delete-branch
@@ -84,6 +86,13 @@ tested by hand, a window check a person has not done.
 
 **The merge is not the end of the work — finish these before saying the task is done, so the
 maintainer can `/clear` without losing anything.** Say explicitly when they are all done.
+
+- **Check the `master` run of a code change.** After any non-docs merge, `CI` on `master`
+  builds Linux, macOS and Windows — for most PRs that is the first time macOS and Windows
+  compile the change. Poll it in the background
+  (`gh run list --workflow=ci.yml --branch master -L 1`) and read every leg's result. A red leg
+  is reported at once with its log excerpt (`gh run view <id> --log-failed`), and its fix is the
+  next change, before anything else merges.
 
 - **Wait for CI's PDF commit, then pull again.** If the change touched anything under `docs/`,
   the `Documents` workflow rebuilds `docs/*.pdf` and pushes a `Rebuild the PDFs for <sha>`

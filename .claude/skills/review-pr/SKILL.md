@@ -151,7 +151,8 @@ step 1.
 
 ## 9. CI, then the maintainer
 
-Poll `gh pr checks <N>` every 20 seconds until all three platforms have finished.
+Poll `gh pr checks <N>` every 20 seconds until every leg the run started has finished — all
+three platforms for a core change, Linux only otherwise (`tools/ci-changed-code.sh`).
 
 - **Red:** find out whose it is. A failure in their change goes into a step 7 comment, or is
   fixed as an easy item. Never re-run a red job hoping it goes green.
