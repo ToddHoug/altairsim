@@ -23,7 +23,7 @@ name: CPU exerciser
 #
 # What it was guarding is real but rare: a CMake change that alters how the CPU is compiled
 # (an optimization flag, a standard level). That is a workflow_dispatch, not a standing trigger
-# -- and a release now exercises all three platforms anyway (cpu-exerciser-release.yml).
+# -- and a release exercises all four build machines anyway (tools/release-worker.sh).
 on:
   push:
     branches: [ master ]

@@ -176,10 +176,11 @@ instructions and `cpu-zexdoc`/`cpu-zexall` ~5.8 billion each, so they are labell
 excluded from the per-push matrix. `cpu-exerciser.yml` runs them on one Linux runner *only when
 CPU/ISA code changes* — an opcode bug is a logic bug and shows up on any host, so one
 architecture is enough to catch it, and paying for three would be paying three times for the
-same answer. `cpu-exerciser-release.yml` then runs them on **all three platforms** at a release
-tag (or on demand), because the one thing that is *not* architecture-independent is the
-compiler: the cores are full of shifts, masks and half-carry arithmetic, and until a release
-nothing has ever driven billions of instructions through the MSVC build.
+same answer. **A release then runs them on all four build machines** (`tools/release-worker.sh`,
+`ctest -L slow`), through the binaries that ship, because the one thing that is *not*
+architecture-independent is the compiler: the cores are full of shifts, masks and half-carry
+arithmetic, and until a release nothing has ever driven billions of instructions through the
+MSVC build. `cpu-exerciser-release.yml` runs them on the three CI platforms on demand only.
 
 The hardware tests (`-L hw`) run against an actual null-modem cable between two USB serial
 ports, because a claim about a cable deserves a cable. They are opt-in, pointed at your ports

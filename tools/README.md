@@ -8,6 +8,8 @@ starts with a long comment that gives its usage and the reason that it exists.
 
 | File | What it does |
 |---|---|
+| `release-worker.sh` | Builds, tests, packages and delivers the archive of one release on one build machine, with a check after each step. Runs on all four targets (on Windows, in Git Bash). |
+| `release-drive.sh` | On the coordinator: starts `release-worker.sh` on a build machine from `distribution.conf`, proves that it started, and reads its result. |
 | `build-package.sh` | Assembles the release archive for this platform from [`docs/package.map`](../docs/package.map). |
 | `verify-package.sh` | Unpacks a finished archive outside the repository and runs the commands that the *User Manual* gives. |
 | `build-checksums.sh` | Writes `SHA256SUMS` when all the archives of one version are present. |

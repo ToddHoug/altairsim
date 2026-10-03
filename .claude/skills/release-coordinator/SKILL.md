@@ -13,7 +13,7 @@ here. The coordinator is also a build machine for its own target.
 **Read `distribution.conf` first** (repo root, gitignored; `distribution.conf.example` names
 every key). It says which target this box builds (`COORDINATOR_TARGET`), how to reach each
 worker (`<TARGET>_SSH`, `_REPO`, `_PARALLEL`, `_PATH`), their serial ports, and which targets
-share one physical machine (`SHARED_HOST`). If it is missing, STOP and ask for it — do not
+share one physical machine (`SHARED_HOST`, empty when none do). If it is missing, STOP and ask for it — do not
 reconstruct addresses from memory or old docs.
 
 The four targets: `macos-arm64`, `macos-x86_64`, `windows-x86_64`, `linux-x86_64`.
@@ -48,8 +48,9 @@ is a different document.
 git tag vX.Y.Z <pdf-rebuild-sha> && git push origin vX.Y.Z
 ```
 
-This fires `cpu-exerciser-release.yml` (8080EXM, ZEXDOC, ZEXALL on all three CI platforms).
-**Wait for it to go green before publishing anything.**
+The tag starts no CI run. The CPU exercisers (8080EXM, 8085EXM, ZEXDOC, ZEXALL) run on the four
+build machines in step 5, through the binaries that ship. `cpu-exerciser-release.yml` is manual
+only (`gh workflow run`), for a check on the CI runners outside a release.
 
 ## 4. Open the draft
 
@@ -59,35 +60,42 @@ gh release create vX.Y.Z --draft --notes-file <notes>
 
 ## 5. Build on all four machines
 
-Each machine runs the **`release-worker`** skill's steps. The coordinator runs them locally
-for `COORDINATOR_TARGET` (its archive lands straight in `dist/`, no scp) and drives each
-worker over ssh.
+Each machine runs `tools/release-worker.sh` (the **`release-worker`** skill gives the reason
+for each of its checks). **Start it with `tools/release-drive.sh`, one command for each
+target. Do not write your own ssh command or your own worker script** — that is where the
+1.3.0 mistakes were (issue #643).
 
-- **Any order, but never two targets in `SHARED_HOST` at once** — they are one physical
-  machine, and building both just makes them fight over one CPU and one pool of RAM. Others
-  can build alongside.
-- **Pass each worker its site values in the command**: `--parallel` or not, `PATH` prefix,
-  and `ALTAIR_SERIAL_A/B` if it has ports. A worker needs no config file of its own.
-- **Tell each worker the version.** It never decides one.
+```sh
+tools/release-drive.sh start macos-arm64    X.Y.Z
+tools/release-drive.sh start macos-x86_64   X.Y.Z
+tools/release-drive.sh start linux-x86_64   X.Y.Z
+tools/release-drive.sh start windows-x86_64 X.Y.Z
+```
 
-Driving a worker over ssh — these have all bitten:
+The driver reads `distribution.conf`, copies the worker script to the box (outside its
+checkout), gives it the site values and the version, and starts it detached. For
+`COORDINATOR_TARGET` it runs the script here: no ssh and no delivery, the archive lands in
+`dist/`. **This checkout must have no change to a tracked file**, because the worker checks
+out the tag in it.
 
-- **Never `ssh host 'bash -s' < script`.** Commands in the script inherit the script as stdin
-  and desync bash's parser: the build passes, then a phantom syntax error, non-zero exit, no
-  delivery. `scp` the script over and run it as a file: `ssh host 'bash /tmp/worker.sh'`.
-- **Non-login shells skip the profile.** A `cmake` that the profile puts on `PATH` (a tarball
-  install on a Mac, for one) is then not found. Prefix with `export PATH="<TARGET>_PATH:$PATH"`.
-- **Windows, PowerShell steps:** `ssh host 'powershell -NoProfile -ExecutionPolicy Bypass
-  -File build-win.ps1'`. The default policy blocks a `.ps1`.
-- **Windows, Git Bash steps:** bash is not on the ssh `PATH`. Use the space-free short path so
-  it parses in cmd or PowerShell: `ssh host 'C:\PROGRA~1\Git\bin\bash.exe --login
-  /c/Users/<user>/package-win.sh'`.
-- **A moved tag needs `git fetch --tags --force`** on every worker, or it silently builds the
-  old commit.
+- **CHECK `release-drive: OK -- <target> started`.** The driver prints it only when the
+  checkout on the box is at `vX.Y.Z`, the worker is a running process, and its log names the
+  version. **STOP on `release-drive: FAIL`.** An empty log is not a build in progress: in 1.3.0
+  a start that printed `started` ran nothing, and nobody saw it for about 10 minutes.
+- **Any order, and at the same time**, but the driver refuses a target in `SHARED_HOST` while
+  another target of that list runs. They are one physical machine.
+- **Read the result** with `tools/release-drive.sh status <target>`. It prints the end of the
+  log and exits 2 while the worker runs, 0 on `release-worker: OK`, 1 on
+  `release-worker: FAIL at step N`. A build with the exercisers takes 10 to 30 minutes for
+  each box; poll every few minutes.
+- The Windows log is `dist/worker-windows-x86_64.log` here, and the ssh that holds the worker
+  runs on this machine: do not end it. The macOS and Linux workers run on their boxes and
+  survive a dropped link.
 
-Collect each worker's report block. Any STOP is a STOP for the release: do not upload a set
+Collect each worker's report block. Any FAIL is a STOP for the release: do not upload a set
 with a hole in it. `serial-hw` and `tnfs-hw` results are warnings — put them in front of the
-person, do not hold the release for them.
+person, do not hold the release for them. The `exercisers` line of each report is the CPU
+gate for that platform.
 
 ### Re-spinning for a doc-only fix
 
