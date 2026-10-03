@@ -461,6 +461,15 @@ public:
     // leaving the backplane, exactly as intWire() is.
     bool holdWire() const { return holdWire_; }
 
+    // "I AM HOLDING READY LOW FOR THIS CYCLE." Called from the board's own read() or
+    // write(), with how many T-states it holds the line; the CPU waits that long before
+    // the cycle completes, and the run loop charges it to the Clock with the
+    // instruction (Bus::addWaitStates()). A board with no wait-state logic never calls
+    // it. On the bench (no bus) it is a no-op.
+    void holdReady(uint32_t tStates) {
+        if (bus_) bus_->addWaitStates(tStates);
+    }
+
     // ---- Lifecycle (DESIGN.md 6) ----
 
     // POC* or RESET*. Board-specific: each board decides what it means. A bankmem

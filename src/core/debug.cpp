@@ -449,6 +449,7 @@ void Debugger::serviceDma() {
             StepResult ds = dm->step(m_.bus);
             inDma_ = false;
             dmaMaster_ = nullptr;
+            ds.tStates += m_.bus.takeWaitStates();  // READY holds a DMA cycle too
             m_.clock.advance(ds.tStates);
 
             // A granted bus cycle costs time. A master that steals zero-time cycles
@@ -485,6 +486,12 @@ RunResult Debugger::run(uint64_t maxSteps, bool clearPending) {
     if (skipArmed_ && cpu->pc() != resumeCyclePc_) skipArmed_ = false;
 
     if (clearPending) clearStopRequest();
+
+    // READY wait states left on the bus by a cycle no instruction ran -- the monitor's
+    // IN/OUT drives a real bus cycle between runs. That took no emulated time, so the
+    // first instruction of this run must not pay for it.
+    m_.bus.takeWaitStates();
+
     bool armed = armObserver();
     m_.running = true;
 
@@ -609,6 +616,10 @@ RunResult Debugger::run(uint64_t maxSteps, bool clearPending) {
             std::vector<RegDef>& regs = regDefs();
             for (size_t i = 0; i < regs.size(); ++i) regs[i].set(slot->regs[i]);
 
+            // The instruction did not happen, so neither did any READY wait an
+            // earlier cycle of it pushed. Rerunning it pushes them again.
+            m_.bus.takeWaitStates();
+
             r.why = StopReason::Breakpoint;
             r.bp = cycleHit_;
 
@@ -625,13 +636,17 @@ RunResult Debugger::run(uint64_t maxSteps, bool clearPending) {
         // (including a later pass over this same instruction in a loop).
         if (skipArmed_) skipArmed_ = false;
 
+        // Plus the wait states any board held READY low for during this instruction's
+        // cycles (Bus::addWaitStates()). The core cannot know them; the board does.
+        s.tStates += m_.bus.takeWaitStates();
+
         ++r.steps;
         r.tStates += s.tStates;
 
         // EMULATED TIME ADVANCES HERE AND NOWHERE ELSE (DESIGN.md 7.5). Exactly
-        // the T-states the CPU said it took -- so the UART's idea of when a
-        // character has finished going out is derived from the same instruction
-        // stream the guest is timing it with, and the two cannot drift.
+        // the T-states the CPU said it took, wait states included -- so the UART's
+        // idea of when a character has finished going out is derived from the same
+        // instruction stream the guest is timing it with, and the two cannot drift.
         m_.clock.advance(s.tStates);
 
         // pHLDA: hand the bus to any board pulling pHOLD, now that we are at an

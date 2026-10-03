@@ -22,6 +22,13 @@ Two new machines have the boards: `northstar` and `northstardd`. Their drives st
 Mount your image in `fd0:drive0`, then type `RUN E900` on `northstar` or `RUN E800` on
 `northstardd`. The Boards chapter of the *User Manual* describes the boards.
 
+### A JS-1 tone plays at the correct pitch
+
+A real Cromemco D+7A makes the CPU wait 5.5 µs on every `IN` or `OUT` to an analog port. The
+`d7a` now does this too. Before, a tone loop that writes a JS-1 speaker played too high, and a
+game that reads the joysticks ran slightly too fast. An analog `OUT` now takes 21 T-states at
+2 MHz, not 10.
+
 ### `R` no longer puts a space in a CP/M name
 
 `R *.TXT` copied a host file such as `my notes.txt` to a CP/M file with a space in its name.

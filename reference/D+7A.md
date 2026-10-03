@@ -82,13 +82,10 @@ whenever data is input from one of the seven analog input ports. The ready line 
 held down for 5.5 microseconds when data is output to one of the seven analog output
 ports to assure adequate time for settling of the analog sample and hold amplifier."
 
-**Emulation stance:** the wait states are **not modeled** in v1 — for the same reason
-the Dazzler's DMA slowdown is not: `read()`/`write()` are pure over state and the bus
-does not charge per-cycle wait states to the `Clock`. The wait states only become
-audible when reproducing JS-1 **sound pitch** precisely (they lengthen the CPU's
-sample-output loop), and sound is a separate follow-up (see
-`docs/boards/cromemco-d7a.md`). If bit-exact sound timing is ever wanted, the hook is
-charging 11 T-states when a D+7A analog cycle is decoded.
+**Emulation stance:** modeled (issue #619). An analog cycle calls `Board::holdReady()`
+with 5.5 µs in T-states at the machine's clock (11 at 2 MHz, 22 at 4 MHz), and the run
+loop charges it to the `Clock` with the instruction. The hold is what sets JS-1 **sound
+pitch**: it lengthens the CPU's sample-output loop. See `docs/boards/cromemco-d7a.md`.
 
 ## 5. Connector (informative)
 

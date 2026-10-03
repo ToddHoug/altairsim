@@ -548,4 +548,79 @@ void test_d7a() {
         g.tone(0x19, 200000, 1000);
         CHECK(g.aud.only().size() == 4410, "and the sound after it is the right length");
     }
+
+    // ---- The READY hold (issue #619) ----
+    //
+    // A real D+7A holds READY low for 5.5 us on every analog IN and OUT -- 11 wait
+    // states at 2 MHz (reference/D+7A.md §4). These run a real 8080 through the
+    // debugger's run loop, because that is where an instruction's time is charged.
+
+    // The rig, with a CPU at `hz` and `code` at 0.
+    struct CpuRig : Rig {
+        Board* cpu = nullptr;
+        CpuRig(const std::vector<uint8_t>& code, long long hz = 2000000) {
+            std::string err;
+            cpu = m.add("8080", "cpu0", err);
+            setProperty(*cpu, "clock_hz", std::to_string(hz), err);
+            m.power();
+            for (size_t i = 0; i < code.size(); ++i) m.bus.memWrite((uint16_t)i, code[i]);
+            m.cpu()->setPc(0);
+        }
+        // The T-states one instruction took.
+        uint64_t step() {
+            uint64_t t0 = m.clock.now();
+            m.debug.run(1);
+            return m.clock.now() - t0;
+        }
+    };
+
+    SECTION("D+7A -- an analog IN or OUT holds READY 11 wait states at 2 MHz; the parallel port none");
+    {
+        // OUT 18h ; OUT 19h ; IN 18h ; IN 19h ; OUT 1Fh ; NOP
+        CpuRig g({0xD3, 0x18, 0xD3, 0x19, 0xDB, 0x18, 0xDB, 0x19, 0xD3, 0x1F, 0x00});
+        CHECK(g.step() == 10, "OUT to the parallel port is the 8080's 10 T-states");
+        CHECK(g.step() == 21, "OUT to analog channel 1 is 10 + 11 wait states");
+        CHECK(g.step() == 10, "IN from the parallel port is 10");
+        CHECK(g.step() == 21, "IN from analog channel 1 is 10 + 11");
+        CHECK(g.step() == 21, "channel 7 holds READY the same as channel 1");
+        CHECK(g.step() == 4, "and the next instruction pays nothing for them");
+    }
+
+    SECTION("D+7A -- the hold is 5.5 us, so a faster clock waits more states");
+    {
+        CpuRig g4({0xD3, 0x19}, 4000000);
+        CHECK(g4.step() == 10 + 22, "at 4 MHz, 5.5 us is 22 wait states");
+        CpuRig g3({0xD3, 0x19}, 3000000);
+        CHECK(g3.step() == 10 + 17, "at 3 MHz, 16.5 states round up to 17");
+        CpuRig g0({0xD3, 0x19}, 0);
+        CHECK(g0.step() == 10 + 11, "flat out the divisor is 2 MHz, so 11");
+    }
+
+    SECTION("D+7A -- a monitor OUT between runs takes no emulated time");
+    {
+        CpuRig g({0x00});
+        g.out(0x19, 0x40);  // the monitor's OUT: a real bus cycle, but no instruction
+        CHECK(g.step() == 4, "the NOP after it is still 4 T-states");
+    }
+
+    SECTION("D+7A -- a JS-1 tone loop plays at the pitch the wait states give it");
+    {
+        // A square wave on channel 1. Each half: MVI A ; OUT 19h ; MVI B,10 ; DCR B/JNZ.
+        //   L:  MVI A,40h  OUT 19h  MVI B,10  D1: DCR B  JNZ D1
+        //       MVI A,C0h  OUT 19h  MVI B,10  D2: DCR B  JNZ D2   JMP L
+        // Per period: 2 x (7 + 10+11 + 7 + 10 x 15) + 10 = 380 T-states with the hold
+        // (5263 Hz at 2 MHz); 358 without it (5587 Hz). A tenth of a second is 526.3
+        // periods -- 1052 sign changes -- against 1117 without the hold.
+        CpuRig g({0x3E, 0x40, 0xD3, 0x19, 0x06, 0x0A, 0x05, 0xC2, 0x06, 0x00,
+                  0x3E, 0xC0, 0xD3, 0x19, 0x06, 0x0A, 0x05, 0xC2, 0x10, 0x00,
+                  0xC3, 0x00, 0x00});
+        uint64_t sinceSlice = 0;
+        while (g.m.clock.now() < 200000) {
+            sinceSlice += g.step();
+            if (sinceSlice >= 20000) { g.d7a->pump(); sinceSlice = 0; }
+        }
+        g.d7a->pump();
+        int n = crossings(g.aud.only());
+        CHECK(n >= 1050 && n <= 1055,"the tone is 5263 Hz, not the 5587 Hz it played without the hold");
+    }
 }
