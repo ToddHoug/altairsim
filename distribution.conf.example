@@ -1,5 +1,6 @@
 # distribution.conf -- THIS site's release machines. The procedure is generic and lives in the
-# release skills (.claude/skills/release-*); what is true only of YOUR network lives here.
+# release skills (.claude/skills/release-*) and in tools/release-drive.sh, which reads this
+# file; what is true only of YOUR network lives here.
 #
 #   cp distribution.conf.example distribution.conf      # then fill in your values
 #
@@ -51,9 +52,10 @@ LINUX_X86_64_REPO=src/altairsim
 LINUX_X86_64_PARALLEL=no
 LINUX_X86_64_PATH=
 
-# Targets that are ONE physical machine (a VM and its host), comma-separated. Build them one
-# at a time: together they only fight over the same CPU and RAM. Empty if none.
-SHARED_HOST=macos-x86_64,linux-x86_64
+# Targets that are ONE physical machine (a VM and its host), comma-separated, for example
+# macos-x86_64,linux-x86_64. tools/release-drive.sh starts them one at a time: together they
+# only fight over the same CPU and RAM. Empty if each target has a machine of its own.
+SHARED_HOST=
 
 # --- Hardware tests (ctest -L hw), per box ---------------------------------------------------
 #

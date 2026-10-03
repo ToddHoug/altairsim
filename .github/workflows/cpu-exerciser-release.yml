@@ -18,15 +18,15 @@ name: CPU exercisers (release)
 # this leg cross-built a universal binary -- a fat binary still executes only the slice the
 # runner can run -- so the coverage has not changed, only the honesty of the description.
 #
-# It is no longer unclosable, though. GitHub's Intel Mac runners are scarce and deprecating,
-# but an Intel Mac now builds and tests a package of its own (DISTRIBUTION.md 4), so this is a
-# job to run there rather than a hole to apologise for in the release notes.
+# THIS NO LONGER RUNS ON A TAG (issue #643). A release runs the exercisers on the four build
+# machines: tools/release-worker.sh step 4c is `ctest -L slow` through the binary that each
+# machine ships. That covers the Intel Mac, which no runner here covers, and it takes a 25 to
+# 35 minute run out of the release. In 1.3.0 this workflow hung in the macOS build step and was
+# cancelled, and the exercisers ran on the build machines.
 #
-# No tags exist yet; v* is the convention this expects. workflow_dispatch makes it runnable on
-# demand today, which is also how you use it before cutting the first one.
+# It stays as a manual run (`gh workflow run cpu-exerciser-release.yml`), for a check of the
+# three CI compilers outside a release.
 on:
-  push:
-    tags: [ 'v*' ]
   workflow_dispatch:
 
 jobs:
@@ -46,8 +46,7 @@ jobs:
 
     steps:
       # Full history for the same reason as ci.yml: --version is `git describe`, and at
-      # depth 1 there is no tag to describe against. This workflow runs on a `v*` tag,
-      # which is exactly the case where the describe output should be the tag itself.
+      # depth 1 there is no tag to describe against.
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0

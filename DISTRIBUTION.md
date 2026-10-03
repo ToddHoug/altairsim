@@ -197,7 +197,10 @@ The macOS and Linux workers are set up by hand.
 
 ### 4.2 The eight steps, on every machine
 
-The `release-worker` skill has them as commands, per OS, with every CHECK and STOP. In outline:
+`tools/release-worker.sh` does them, on all four targets (on Windows, in Git Bash), with every
+CHECK and STOP. Each check reads the full output of its command. The script ends with a report
+block and one line, `release-worker: OK` or `release-worker: FAIL at step N`. The
+`release-worker` skill gives the reason for each check. In outline:
 
 1. **Fetch the tag, never a branch** — `git fetch --tags --force; git checkout -f vX.Y.Z`. A
    re-spin can force-move the tag, and a plain fetch keeps the old one.
@@ -206,7 +209,10 @@ The `release-worker` skill has them as commands, per OS, with every CHECK and ST
 3. **Build** — `--parallel`, except on a machine short of RAM.
 4. **Test** — `ctest -LE slow`, minus the hardware tests. CHECK `100% tests passed`. The
    hardware tests (`serial-hw` with a null-modem pair, `tnfs-hw` with `de-tnfsd` on `PATH`) run
-   separately and **warn** rather than stop.
+   separately and **warn** rather than stop. Then **the CPU exercisers**, `ctest -L slow`
+   (8080EXM, 8085EXM, ZEXDOC, ZEXALL), through the binary that this machine ships. CHECK the
+   same pass line. They run here and not in CI on the tag: the four build machines are the four
+   compilers that ship, and the Intel Mac has no CI runner.
 5. **`altairsim --version`** — CHECK exactly `AltairSim X.Y.Z`; STOP on a `-N-gsha` suffix or
    `(modified)`.
 6. **Package** — `tools/build-package.sh --pdf docs/altairsim-manual.pdf --target <target>`.
@@ -299,12 +305,15 @@ The `release-coordinator` skill has the commands. Steps 1–4 can be done ahead 
    them as *"Rebuild the PDFs for `<sha>`"*. **Tag that commit**, not the merge, or the tagged
    tree carries a stale manual. The manual goes to `build-package.sh` with `--pdf`; the
    changelog, monitor and debugger PDFs are copied straight from the tagged tree.
-3. **Tag and push.** That fires `cpu-exerciser-release.yml` (8080EXM, ZEXDOC, ZEXALL on all three
-   CI platforms). **Wait for it to go green before publishing anything.**
+3. **Tag and push.** The tag starts no CI run: the CPU exercisers run on the build machines in
+   step 5 (§4.2 step 4). `cpu-exerciser-release.yml` is manual only.
 4. **Open the draft** — `gh release create vX.Y.Z --draft`.
-5. **Build on all four machines** (§4.2), in any order, but never two that share a physical
-   machine at once. The workers `scp` their archives into the coordinator's `dist/`; the
-   coordinator builds its own straight into it.
+5. **Build on all four machines** (§4.2): `tools/release-drive.sh start <target> X.Y.Z` for
+   each, in any order. The driver copies the worker script to the box, starts it detached, and
+   **proves that it started** (the checkout is at the tag, and the worker is a running
+   process). It refuses two targets that share a physical machine at once.
+   `tools/release-drive.sh status <target>` reads the result. The workers `scp` their archives
+   into the coordinator's `dist/`; the coordinator builds its own straight into it.
 6. **Verify, checksum, upload, publish.** §7 on each archive; then `tools/build-checksums.sh`
    (it refuses unless all four of one version are in `dist/`, and writes `dist/SHA256SUMS`);
    then upload the four archives and `SHA256SUMS` and publish the draft.
@@ -393,8 +402,8 @@ person to answer yes or no per platform. An assistant driving a pipe cannot clic
 
 ## 8. What is not automated
 
-- **No workflow builds a package.** `tools/build-package.sh` is run by hand on four machines,
-  and nothing automates the `scp`, the collection or the upload.
+- **No workflow builds a package.** The coordinator starts `tools/release-worker.sh` on each of
+  the four machines with `tools/release-drive.sh`. The upload is by hand.
 - **Setting up a worker is scripted on Windows only.** The macOS and Linux workers, and every
   worker's delivery key, are set up by hand (§4.5).
 - **Nothing makes the machines' SDL3 versions agree** other than the pin in the two scripts.

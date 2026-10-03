@@ -1303,6 +1303,26 @@ add_test(NAME docs-package
 set_tests_properties(docs-package PROPERTIES LABELS acceptance TIMEOUT 60)
 
 # ---------------------------------------------------------------------------
+# THE RELEASE WORKER'S CHECKS MUST READ WHAT THE TOOLS REALLY PRINT.
+#
+# tools/release-worker.sh decides STOP or go on a release from lines of text: ctest's pass
+# line, the SDL3 line of the configure, `--version`, the verify-package PASS line. In 1.3.0 a
+# hand-written check read only the last 6 lines of the ctest output and reported a STOP on a
+# pass (issue #643). --self-test runs the checks on sample output, including that case. It
+# builds nothing. No `sh`, no test -- and we say so, as for `expect` below.
+# ---------------------------------------------------------------------------
+find_program(SH_EXECUTABLE sh)
+if(SH_EXECUTABLE)
+  add_test(NAME release-worker-selftest
+           COMMAND ${SH_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/release-worker.sh --self-test)
+  set_tests_properties(release-worker-selftest PROPERTIES
+                       LABELS acceptance TIMEOUT 60
+                       PASS_REGULAR_EXPRESSION "release-worker self-test: PASS")
+else()
+  message(STATUS "sh not found -- the release-worker-selftest test is not registered")
+endif()
+
+# ---------------------------------------------------------------------------
 # EVERY reference/ DISTILLATION MUST BE CATALOGUED.
 #
 # reference/*.md are the text-only hardware references. reference/README.md indexes them and
