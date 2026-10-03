@@ -11,6 +11,11 @@
 # compiles the same sources on three operating systems to reach the same answer; measured,
 # that was about half of all CI runner-minutes (issue #543).
 #
+# WHAT THE CALLER DOES WITH `true` DEPENDS ON THE CHANGE. ci.yml skips the build for a docs
+# merge. For a core merge it builds all three platforms without the tests, because that build
+# saves master's compiler cache (issue #641). It does not ask for a code merge: that PR built
+# Linux only, so the run on master is the first macOS and Windows test.
+#
 # This compares CONTENT, not paths. Nothing is judged safe to skip; the bytes are the same.
 # Every other case builds:
 #   - a pull_request run, or a manual workflow_dispatch -- somebody asked for an answer

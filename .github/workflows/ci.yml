@@ -9,8 +9,8 @@ name: CI
 #   change (tools/ci-changed-code.sh)   pull request    push to master
 #   docs                                Linux           Linux, or nothing if the PR tested it
 #   code  (boards, cli, mcp, tests...)  Linux           Linux + macOS + Windows
-#   core  (core, cpu, platform, host,   Linux + macOS   Linux + macOS + Windows
-#          build, CI, anything new)     + Windows
+#   core  (core, cpu, platform, host,   Linux + macOS   Linux + macOS + Windows -- build only,
+#          build, CI, anything new)     + Windows       no tests, if the PR tested it
 #
 # Most PRs are a board, a monitor command or a test: portable C++ above the platform layer.
 # Building those on three operating systems before the merge made every PR wait on the
@@ -41,6 +41,10 @@ on:
 # sees that (tools/ci-merge-already-tested.sh) and `build` is skipped (issue #543). A CODE merge
 # builds three legs even then: its PR may have built only Linux, and master's cache needs it.
 #
+# A CORE MERGE THAT CHANGED NO FILES BUILDS BUT DOES NOT TEST AGAIN. Its PR passed the suite on
+# all three platforms with these exact files, so the tests would prove nothing new (issue #641).
+# The build still runs, on all three, because it is what saves master's compiler cache.
+#
 # A NEWER PUSH TO A PR CANCELS THE OLDER RUN, which nobody will read. Pushes to master are
 # grouped by commit instead, so no master run ever cancels or queues behind another.
 concurrency:
@@ -57,6 +61,7 @@ jobs:
       matrix: ${{ steps.pick.outputs.matrix }}
       level: ${{ steps.pick.outputs.level }}
       tested: ${{ steps.pick.outputs.tested }}
+      build_only: ${{ steps.pick.outputs.build_only }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -118,11 +123,22 @@ jobs:
           # still has to be valid JSON even for a job that will not run -- a matrix cannot be
           # empty -- so hand over the one-leg one. A code merge is never skipped: its PR may have
           # built Linux only, and the master run is what refreshes master's compiler cache.
+          #
+          # A core merge of such a tree is not skipped either, but it builds only: its PR ran the
+          # suite on all three platforms, so the build job leaves out the tests and the binary
+          # upload and keeps the build, which saves the cache (issue #641).
           tested=false
+          build_only=false
           if [ "$level" = "docs" ]; then
             tested=$(bash tools/ci-merge-already-tested.sh "$event")
+          elif [ "$level" = "core" ]; then
+            build_only=$(bash tools/ci-merge-already-tested.sh "$event")
           fi
           echo "tested=$tested" >> "$GITHUB_OUTPUT"
+          echo "build_only=$build_only" >> "$GITHUB_OUTPUT"
+          if [ "$build_only" = "true" ]; then
+            echo "core merge of a tree its PR already tested -- build only, no tests"
+          fi
 
           if [ "$level" = "core" ] || { [ "$event" != "pull_request" ] && [ "$level" = "code" ]; }; then
             echo "$level change on $event -- Linux, macOS and Windows"
@@ -378,10 +394,15 @@ jobs:
       # longest test (`unit`) takes 18-36s. Every acceptance script works in its own scratch
       # folder under the build tree, so the tests do not share files. A test that fails only
       # when run beside others has a real bug, and gets it fixed -- never RUN_SERIAL to hide it.
+      #
+      # NOT ON A BUILD-ONLY RUN (see the scope job): the PR run passed this suite on this
+      # platform with the same files, and it holds the binary.
       - name: Test (fast)
+        if: needs.scope.outputs.build_only != 'true'
         run: ctest --test-dir build -C Release -LE slow --output-on-failure --parallel 4
 
       - name: Upload binary
+        if: needs.scope.outputs.build_only != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
