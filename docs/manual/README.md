@@ -46,12 +46,3 @@ debugger, which control the program, not the simulated hardware.
 
 To build a board of your own, you need the source and a different document, the **Developer
 Guide**. It is not in the package. It is with the source.
-
-## If you change these files
-
-- The order of the chapters is in `ORDER`, in this folder. A new chapter must be added there, or
-  it is not in the manual.
-- The pages in `ref/` are generated from the program. Do not edit them by hand. Change the
-  program, and generate the pages again. The Developer Guide tells you how.
-- The manual may name only what is in the package. A check fails if a chapter names a file that
-  the package does not have.
