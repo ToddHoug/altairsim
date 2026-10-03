@@ -454,8 +454,10 @@ Three loose ends after the board itself compiles:
   drifted nine boards behind before anyone noticed.
 
 > **When you add a board, update the prose chapter and add an `Unreleased` changelog line by
-> hand. No build will remind you.** The board also ships with its own `docs/boards/*.md` (from
-> `docs/boards/_TEMPLATE.md`) and a row in `docs/sources.md` for anything it embeds.
+> hand. No build will remind you.** A release removes the `## Unreleased` header, so add it
+> above the newest release if it is not there. The board also ships with its own
+> `docs/boards/*.md` (from `docs/boards/_TEMPLATE.md`) and a row in `docs/sources.md` for
+> anything it embeds.
 
 ## What to do next
 

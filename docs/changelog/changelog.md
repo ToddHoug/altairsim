@@ -6,8 +6,6 @@ as it is now; this document is the record of how it got there.
 
 ---
 
-## Unreleased
-
 ## 1.3.0
 
 **1.3.0 is the release that adds new boards and sound, and lets a floppy take the time of a real

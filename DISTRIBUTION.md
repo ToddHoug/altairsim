@@ -300,7 +300,9 @@ The `release-coordinator` skill has the commands. Steps 1–4 can be done ahead 
 1. **Bump the version, and write the changelog section.** `project(altairsim VERSION X.Y.Z …)`
    in `CMakeLists.txt` is the only place the number lives. The changelog section is
    **curated**: a short themed narrative built from `git log --merges <prevtag>..HEAD`, with
-   anything already shipped trimmed out. It is not the `Unreleased` block renamed.
+   anything already shipped trimmed out. It is not the `Unreleased` block renamed. The same
+   commit removes the `Unreleased` block, header included: a release leaves no empty
+   `## Unreleased` header, and the next change that needs an entry adds it again.
 2. **Merge, then wait for the PDFs.** `docs.yml` rebuilds every document on master and commits
    them as *"Rebuild the PDFs for `<sha>`"*. **Tag that commit**, not the merge, or the tagged
    tree carries a stale manual. The manual goes to `build-package.sh` with `--pdf`; the
