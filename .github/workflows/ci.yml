@@ -216,7 +216,8 @@ jobs:
           echo "  Package-facing paths in this diff:"
           printf '    %s\n' $facing
           echo
-          echo "  Add a section under '## Unreleased' saying what someone can do now that they"
+          echo "  Add a section under '## Unreleased' (add that header above the newest release if"
+          echo "  it is not there) saying what someone can do now that they"
           echo "  could not do in the last release -- a NEW DOCUMENT in the archive and an EXAMPLE"
           echo "  that now ships both count, not just code."
           echo

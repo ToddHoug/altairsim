@@ -30,8 +30,11 @@ to GitHub** — those are outward-facing and hard to undo.
   already there (a handful of entries). `## Unreleased` is a longer working scratch that also
   carries things already shipped. Build the section from `git log --merges <prevtag>..HEAD`,
   group it into themes, and drop anything already released: `git merge-base --is-ancestor
-  <sha> <prevtag>` true means it shipped. Do not trust `git log --grep` for this. Then leave a
-  fresh, empty `## Unreleased`.
+  <sha> <prevtag>` true means it shipped. Do not trust `git log --grep` for this. Then
+  **remove the `## Unreleased` header and everything under it.** A release leaves no
+  `## Unreleased` header, not an empty one either: the next change that needs an entry adds
+  the header again. If the header is not there (nothing package-facing changed since the last
+  release), there is nothing to remove.
 - It goes through the `work-task` and `ship-change` skills, as every change here: review, then
   commit approval, then PR approval, then merge on green CI.
 

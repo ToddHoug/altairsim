@@ -67,7 +67,8 @@ reads to decide a `HLT` has finished, so an idle card must let the machine stand
    implement?"
 8. **`docs/manual/boards.md`** — the summary-table row *and* a prose section. **No test guards
    this**; it once drifted nine boards behind.
-9. **`docs/changelog/changelog.md`** — a line under `Unreleased`. Also unguarded.
+9. **`docs/changelog/changelog.md`** — a line under `## Unreleased`. Add that header above
+   the newest release if it is not there. Also unguarded.
 10. **`cmake --build build --target docs-reference`**, then commit the regenerated
     `docs/manual/ref/*.md`. A ctest byte-diffs them. **Edit the emitter, never the `.md`.**
 11. **A sample machine** is a TOML in `machines/` (`base = "default"`), if the board deserves

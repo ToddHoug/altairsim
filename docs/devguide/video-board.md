@@ -115,7 +115,7 @@ Nothing gets translated.
 | `tests/test.h`, `tests/main.cpp` | the suite's declaration and its table row |
 | `machines/<name>.toml` | a sample machine |
 | `docs/boards/<name>.md` | from `_TEMPLATE.md`; Limitations and Quirks are the load-bearing sections |
-| `docs/manual/boards.md`, `docs/changelog/changelog.md` | the prose list and an `Unreleased` line — **no test guards either** |
+| `docs/manual/boards.md`, `docs/changelog/changelog.md` | the prose list and an `Unreleased` line (add the `## Unreleased` header if it is not there) — **no test guards either** |
 | `docs/manual/ref/` | regenerated: `cmake --build build --target docs-reference` |
 
 Nothing in the bus, the monitor, the TOML loader or the MCP server changes. `properties()` is
