@@ -6,7 +6,10 @@ as it is now; this document is the record of how it got there.
 
 ---
 
-## Unreleased
+## 1.3.1
+
+**1.3.1 is a small release that starts the SBC-200 in its monitor, and makes the monitor show the
+memory that the processor reads.** The `basic1` example also tells you how to start BASIC.
 
 **The SBC-200 starts in its monitor after a reset.** The `sbc` board has the auto-start circuit
 of the real board. Set `start` to a 4K boundary, and after a reset the Z80 reads the PROM there
@@ -23,6 +26,11 @@ a different answer. Now the two agree. `SHOW MACHINE` shows how each board is bu
 
 **`DISASM` and `DUMP` show the boot PROM of the Turnkey board.** Before, they showed `FF` there
 and at the Auto-Start jump, while the processor read the correct bytes.
+
+**The `basic1` example tells you how to start BASIC.** After the tape loads, the machine is
+quiet, because the loader of BASIC 1.0 does not start BASIC. The notes on the screen now tell you
+to press Ctrl-E and type `RUN 0`. They also tell you that `_` deletes a character: the Backspace
+key does not work in BASIC 1.0.
 
 ## 1.3.0
 
