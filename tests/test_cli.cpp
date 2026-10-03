@@ -3040,6 +3040,58 @@ void test_achieved_hz() {
     // The columns of SHOW BUS / ROMS / JOYSTICKS. A table is only readable if each
     // column starts in the same place on every row, so these compare where a column
     // BEGINS on the header (or the row above) with where it begins on each row.
+    // SHOW BUS MAP is the bus NOW, so it and WHO give one answer. A board's memMap() is
+    // how the board is built: SHOW MACHINE prints it, and a guest's IN must not change it.
+    SECTION("SHOW BUS MAP -- a range a board has switched out is not listed (#658)");
+    {
+        for (const char* honors : {"read", "all"}) {
+            Machine     mb;
+            Monitor     mon(mb);
+            std::string berr;
+            Board*      tk = mb.add("turnkey", "tk0", berr);
+            CHECK(tk && tk->loadSubUnit("socket", {{"at", "FF00"}, {"mount", "builtin:dbl"}}, berr),
+                  "a turnkey board with dbl at FF00");
+            auto* mb0 = dynamic_cast<MemoryBoard*>(mb.add("memory", "mem0", berr));
+            Region rg;
+            rg.kind = RegionKind::Ram;
+            rg.at   = 0;
+            rg.size = 0x10000;
+            mb0->addRegion(rg, berr);
+            CHECK(setProperty(*mb0, "honors_phantom", honors, berr), "the RAM honors PHANTOM*");
+            mb.add("8080", "cpu0", berr);
+            mb.power();
+            // Use up the Auto-Start jam, so that only the PROM window is in question.
+            for (uint16_t a = 0; a < 3; ++a) mb.bus.memRead(a);
+
+            auto ex = [&](const char* cmd) {
+                std::ostringstream o;
+                mon.exec(cmd, o);
+                return o.str();
+            };
+            const std::string machine = ex("SHOW MACHINE");
+            std::string       map     = ex("SHOW BUS MAP");
+            CHECK(map.find("FC00-FFFF  tk0") != std::string::npos,
+                  "armed: SHOW BUS MAP lists the boot PROM");
+            // RAM that honors PHANTOM* for reads only still takes the writes under the
+            // PROM, so it answers there. RAM that honors it for both does not.
+            const bool all = std::string(honors) == "all";
+            CHECK(map.find(all ? "0000-FBFF  mem0" : "0000-FFFF  mem0") != std::string::npos,
+                  "armed: the RAM row is the part of the RAM that answers");
+            CHECK(ex("WHO FF00").find("tk0") != std::string::npos, "armed: WHO FF00 says tk0");
+
+            mb.bus.ioRead(0xFF);  // the guest's IN FF switches the PROM out
+            map = ex("SHOW BUS MAP");
+            CHECK(map.find("tk0") == std::string::npos,
+                  "switched out: SHOW BUS MAP does not list the boot PROM");
+            CHECK(map.find("0000-FFFF  mem0") != std::string::npos,
+                  "switched out: all of the RAM answers");
+            CHECK(ex("WHO FF00").find("tk0") == std::string::npos,
+                  "switched out: WHO FF00 does not say tk0");
+            CHECK(ex("SHOW MACHINE") == machine,
+                  "SHOW MACHINE is how the machine is built: the IN did not change it");
+        }
+    }
+
     SECTION("SHOW BUS / SHOW ROMS -- columns line up, in hex and in octal");
     {
         auto lines = [](const std::string& t) {

@@ -54,6 +54,9 @@ public:
     bool    assertsPhantom(const BusCycle&) const override;
     uint8_t read(const BusCycle&) override;
     void    write(const BusCycle&) override;
+    // The PROM read and the Auto-Start jam have no side effect, so DISASM and DUMP can
+    // show the byte a read would get.
+    bool    peek(uint16_t addr, uint8_t& out) const override;
 
     // The autostart jam decodes address lines 0-1 within page 0, so page 0 is not
     // decode-uniform. See the note under Board::decodeIsPageUniform().
@@ -115,6 +118,9 @@ private:
     bool inPromWindow(uint16_t addr) const {
         return addr >= promBase_ && (uint32_t)addr < (uint32_t)promBase_ + kPromSize;
     }
+
+    // What a MemRead at `addr` gets from this card now: the jam byte or the PROM byte.
+    bool memByte(uint16_t addr, uint8_t& out) const;
 
     // (Re)read the socket ROMs into prom_. Called on power() and when a socket is added,
     // exactly as a memory card re-reads its ROM regions (DESIGN.md 13).

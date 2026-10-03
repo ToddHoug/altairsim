@@ -75,8 +75,9 @@ uint8_t Bus::peek(uint16_t addr) const {
     // before deciding, and peek() itself takes no cycle, so there is nothing to pass.
     if (!dirty_) {
         const Slot& s = memRead_[addr >> 8];
-        if (verify_) verifySlot(BusCycle{Cycle::MemRead, addr, 0, false}, s);
+        // A slow page has no cached answer to check -- the same order as memRead().
         if (!s.slow) {
+            if (verify_) verifySlot(BusCycle{Cycle::MemRead, addr, 0, false}, s);
             uint8_t v = 0xFF;
             if (s.who) s.who->peek(addr, v);  // false leaves 0xFF: the floating bus
             return v;

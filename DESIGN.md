@@ -471,14 +471,22 @@ So a memory board needs to be able to turn itself on and off, and there are exac
 `SHOW BUS MAP` showing it, because a board that is present but decoding nothing is otherwise
 invisible and maddening.
 
-> **NEITHER HALF SHIPPED, and this is the gap worth closing first.** `Board::enabled_` exists as
+> **THE OPERATOR'S SWITCH DID NOT SHIP.** `Board::enabled_` exists as
 > a plain C++ field with a non-virtual setter (`src/core/board.h`), reachable from no `Property`
 > — so `SET mem0 enabled=off` is refused, and `MemoryBoard::properties()` declares
 > `honors_phantom, phantom, fill, seed, pages` and no `enabled`. The
 > guest-writes-its-own-port and reset paths above are real and are exercised; only the operator's
-> switch and the display of it are missing. The argument for them still stands exactly as written.
+> switch is missing. The argument for it still stands exactly as written.
 
-What `SHOW BUS MAP` actually prints is the range, the board, what it is, and the unmapped
+**The display half shipped differently (#658), and needs no property.** `SHOW BUS MAP` takes
+each range from the board's `memMap()` and asks the bus which of its addresses the board answers
+now (`Bus::respondersTo()`, the question `WHO` asks), for a read or for a write. A PROM the guest
+has switched out has no row, and RAM that a shadow takes off the bus for reads and writes shows
+only its live part. `memMap()` stays a fixed description of how the board is built — it is what
+`SHOW MACHINE` prints, and that must not change when the guest writes a port. So no board makes
+`memMap()` follow its latch.
+
+What `SHOW BUS MAP` prints is the range, the board, what it is, and the unmapped
 remainder — no `state` column and no `notes` column:
 
 ```
