@@ -1,9 +1,23 @@
 # Altair BASIC 1.0 -- the SAME session as basic1.toml, but loaded from a WAV cassette
 # instead of a decoded .tap. This is what a real 88-ACR heard: 300-baud FSK audio.
 #
+#>***
+#>*** Altair BASIC 1.0 by Micro-Soft
+#>***
+#>*** Bill and Paul's Excellent Adventure - Party on, dudes!
+#>***
+#>*** The tape loads, then the machine goes quiet.
+#>*** Press Ctrl-E, then type RUN 0 to start BASIC.
+#>***
+#>*** Backspace does not work in BASIC 1.0. Type _ (underscore) to delete the last character.
+#>***
+#
 #     cd examples/basic1 && altairsim basic1-wav.toml
 #     -> the tape loads, the machine goes quiet; press ^E, then type: RUN 0
 #     -> MEMSIZ?
+#
+# BACKSPACE DOES NOT DELETE. BASIC 1.0 deletes the last character with _ (underscore), as the
+# Teletype did. It does not know DEL or BS, so neither Backspace key works.
 #
 # THE PATHS BELOW ARE RELATIVE TO THIS FILE (core/paths.h, docs/config.md). The tape and
 # the bootstrap are lying in this directory, so this file names them and nothing else --

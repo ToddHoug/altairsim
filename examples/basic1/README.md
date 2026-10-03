@@ -47,6 +47,11 @@ Return at `MEMSIZ?` and at `WANT SIN-COS-ATN?`.
 
 `basic1.ini` builds the same machine with monitor commands: `altairsim -s basic1.ini`.
 
+## Delete a character with `_`
+
+The Backspace key does not work in BASIC 1.0. To delete the last character that you typed, type
+`_` (underscore). This is how a Teletype did it. For example, `PRINT 5Q_` prints `5`.
+
 ## Watch the tape load
 
 The tape loads in less than one second, because the default clock runs as fast as possible. The
