@@ -428,6 +428,14 @@ Also call `spk_.clear()` in `power()`, `spk_.resync(now, level)` in `deserialize
 The Cromemco D+7A and the Newtech Model 6 are the two examples; DESIGN.md §7.4 has the rules,
 and the first is that **a machine with no crystal plays nothing**.
 
+### A board that holds READY calls `holdReady()`
+
+If the real board pulls READY low and makes the CPU wait, call `holdReady(n)` from `read()` or
+`write()`, with the hold in T-states for that cycle. The run loop adds it to the instruction's
+time. If the manual gives the hold in microseconds, convert it at `clock_->hz()`, so a faster
+CPU waits more states. Do not keep the wait count yourself, and do not advance the `Clock`
+yourself. The D+7A is the example (`analogHold()`), and DESIGN.md §7.5 has the rule.
+
 ### Regenerate the reference, ship a machine, and mind the two unguarded docs
 
 Three loose ends after the board itself compiles:

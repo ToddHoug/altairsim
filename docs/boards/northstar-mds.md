@@ -181,9 +181,11 @@ is its command interface.
   computes it. A status read does not turn the disk.
 - **The status is sampled before the command acts.** The MDS-A schematic clocks `MOTOR-SAMP`
   and `WINDOW-SAMP` on the leading edge of the read.
-- **Wait states.** The simulator cannot add wait states in a bus cycle. A read-data or
-  write-data access moves the next byte at once, as if the processor had waited. The
-  VersaFloppy does the same (`src/chips/wd17xx.h`, `setWaitSynced`).
+- **Wait states.** The board does not hold `PRDY`. A read-data or write-data access moves
+  the next byte at once, as if the processor had waited, and the wait takes no emulated time.
+  The VersaFloppy does the same (`src/chips/wd17xx.h`, `setWaitSynced`). A board can now
+  charge a wait to the clock (`Board::holdReady()`, issue #619); using it here is issue
+  #637.
 - **Media: hard-sectored, but the image holds the data only.** A `.NSI` file is the sector
   data in order: track, then sector. The preamble, the sync character and the check character
   are not in the file. On a read, the board supplies the data and then the check character,

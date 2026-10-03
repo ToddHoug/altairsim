@@ -257,6 +257,23 @@ public:
     // A board's pHOLD moved. Called by Board::holdChanged(), and by nothing else.
     void holdWireChanged(bool pulling) { holdCount_ += pulling ? 1 : -1; }
 
+    // ---- PRDY/XRDY (pins 72/3) -- READY, AND THE WAIT STATES IT COSTS ----
+    //
+    // A slow board pulls READY low in the cycle it is decoded, and the CPU idles in Tw
+    // between T2 and T3 until the board lets go: the cycle finishes as normal, just
+    // later (a D+7A holds it 5.5 us on every analog cycle so its A/D can convert). The
+    // instruction then took more T-states than the core's table says, and the core
+    // cannot know it -- only the board knows how long it held the line.
+    //
+    // So the board PUSHES the count from inside its own read()/write()
+    // (Board::holdReady()), the bus sums it for the cycles in flight, and the run loop
+    // takes the sum at the boundary and charges it to the Clock with the instruction
+    // (DESIGN.md 7.5). Like pINT and pHOLD, nobody is asked: a board that never holds
+    // READY -- all of RAM -- costs nothing. The bus carries the count and decides
+    // nothing. Not serialized: it is zero at every instruction boundary.
+    void addWaitStates(uint32_t n) { wait_ += n; }
+    uint32_t takeWaitStates() { uint32_t w = wait_; wait_ = 0; return w; }
+
     // ---- VI0-VI7 (pins 4-11) -- EIGHT MORE WIRES, CARRIED AND NOT ARBITRATED ----
     //
     // The bus does for these exactly what it does for pin 73 and NOT ONE THING MORE:
@@ -463,6 +480,10 @@ private:
     // by holdWireChanged(); read once per instruction as holdPending(), so a machine
     // with no DMA card in it pays a single integer test and never a per-board poll.
     int holdCount_ = 0;
+
+    // READY wait states pushed by the boards for the cycles of the instruction in
+    // flight (addWaitStates()); the run loop drains it at the boundary.
+    uint32_t wait_ = 0;
 
     // The same, eight times over, for VI0-VI7 -- plus the bitmask an 88-VI actually
     // reads, kept in step so that viLines() is a load and not a loop.

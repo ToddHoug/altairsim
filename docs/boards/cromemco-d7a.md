@@ -152,6 +152,18 @@ restart both speakers at the restored level.
   0); the A/D shadows are re-read from the host on the next `pump()`. Straps and joystick
   assignments survive. A speaker hears its output go to 0 V at the moment of the reset.
 
+### The READY hold
+
+A real board holds the S-100 READY line low for 5.5 µs on every analog `IN` and `OUT`
+(`reference/D+7A.md` §4): the A/D converts, or the D/A's sample-and-hold settles. The CPU
+waits in Tw states until the board lets go. The parallel port, `BASE+0`, has no hold.
+
+`read()` and `write()` call `Board::holdReady()` on an analog cycle, with 5.5 µs in
+T-states at the machine's clock, rounded up: 11 at 2 MHz, 22 at 4 MHz. The bus adds up the
+holds (`Bus::addWaitStates()`), and the run loop charges them to the `Clock` with the
+instruction (`DESIGN.md` §7.5). So `OUT 19` takes 21 T-states at 2 MHz, and a tone loop
+plays at the pitch a real board gives. With `clock_hz = 0` the divisor is 2 MHz, so 11.
+
 ## Quirks reproduced
 
 | Quirk | If you get it wrong |
@@ -166,11 +178,6 @@ restart both speakers at the restored level.
 - **Sound needs a crystal.** With the default flat-out clock (`clock_hz = 0`) the speakers
   are silent, and `SHOW` says so. Nothing throttles the machine to make sound possible;
   set `clock_hz` (the `dazzler` machine sets 4 MHz).
-- **The 5.5 µs / 11-wait-state READY hold on analog cycles is not modeled** (issue #619).
-  `read()`/`write()` are pure over state and the bus does not charge per-cycle wait states
-  to the `Clock`. A real board holds the CPU on each analog `IN` and `OUT`, which
-  lengthens a sample-output loop. So a tight tone loop plays **sharp** here: the loop in
-  [Verification](#verification) gives 1025 Hz, and a real board gives a lower pitch.
 - **No volume control and no device choice.** The gain is fixed at about a quarter of full
   scale for a full-swing square wave, and the sound goes to the host's default playback
   device. The host's own volume control serves.
@@ -209,7 +216,11 @@ restart both speakers at the restored level.
   crystal reaches the stub at the right frequency; flat out pushes nothing and
   `statusLines()` names the reason; `speaker1 = none` pushes nothing and `speaker2 = 2`
   routes port `1A`; a channel that is not a speaker pushes nothing; a deep queue drops the
-  slice; pushes happen in `pump()` only; a bus reset returns the level to 0.
+  slice; pushes happen in `pump()` only; a bus reset returns the level to 0. For the
+  READY hold (a real 8080 through the debugger's run loop): an analog `IN`/`OUT` is 10 + 11
+  T-states at 2 MHz and the parallel port 10; 22 at 4 MHz, 17 at 3 MHz, 11 flat out; a
+  monitor `OUT` between runs costs the next instruction nothing; and a CPU tone loop
+  renders at the pitch the hold gives it.
 - **`tests/test_level_pcm.cpp`**: a constant level, a square wave's zero crossings per
   second, no drift in the sample count across many small renders, and the weighted average
   of an edge inside a sample.
@@ -226,7 +237,8 @@ restart both speakers at the restored level.
   ```
 
   The loop writes `40`, then `BF`, to port `19`, with a half period of
-  31 + 15 × 128 = 1951 T-states: a steady **1025 Hz** square wave. `SHOW d7a0` says
+  31 + 22 + 15 × 128 = 1973 T-states (the 22 is the READY hold at 4 MHz): a steady
+  **1014 Hz** square wave. `SHOW d7a0` says
   `-> playing`. After `SET cpu0 clock_hz=0`, `RUN 0` is silent and `SHOW d7a0` gives the
   no-crystal reason on both speaker lines.
 

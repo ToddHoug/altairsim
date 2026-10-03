@@ -63,9 +63,17 @@ bool D7aBoard::decodes(const BusCycle& c) const {
     return p >= base_ && p < (uint8_t)(base_ + 8);
 }
 
+// An analog cycle, in or out, holds READY low for 5.5 us: the A/D converting, or the
+// D/A's sample-and-hold settling. The parallel port has no hold.
+uint32_t D7aBoard::analogHold() const {
+    long long hz = clock_ ? clock_->hz() : 2000000;
+    return (uint32_t)((hz * 11 + 1999999) / 2000000);
+}
+
 uint8_t D7aBoard::read(const BusCycle& c) {
     int off = c.port() - base_;
     if (off == 0) return parIn_;      // parallel input byte (JS-1 buttons)
+    holdReady(analogHold());
     return analogIn_[off - 1];        // analog channel A/D
 }
 
@@ -75,6 +83,7 @@ void D7aBoard::write(const BusCycle& c) {
         parOut_ = c.data;             // parallel output latch
         return;
     }
+    holdReady(analogHold());
     // Analog channel D/A latch. A JS-1 speaker port is written here in a timed loop, so
     // a CHANGE on a speaker's channel is recorded with the time it happened. That is all
     // a bus cycle does; pump() makes the sound.

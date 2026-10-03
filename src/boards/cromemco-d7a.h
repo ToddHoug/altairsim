@@ -119,6 +119,11 @@ private:
     // change, and after a RESTORE moved the clock under it.
     void resync(Jack& sp);
 
+    // The READY hold on an analog cycle: 5.5 us (reference/D+7A.md §4), in T-states at
+    // the machine's clock, rounded up -- 11 at 2 MHz, 22 at 4 MHz. The board's one-shot
+    // times it in microseconds, so a faster CPU waits more states, not fewer.
+    uint32_t analogHold() const;
+
     // ---- Straps ----
     uint8_t base_ = 0x18;   // the 8-port block: BASE+0 parallel, BASE+1..7 analog
 
