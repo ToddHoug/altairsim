@@ -33,10 +33,10 @@ CI builds the PDFs and commits them. If you run `build-docs.sh`, restore the PDF
 
 | File | What it does |
 |---|---|
-| `ci-changed-code.sh` | Tells CI if a change is documentation only. A documentation change runs on Linux only. |
-| `ci-merge-already-tested.sh` | Tells CI if the tree of a merge commit was already tested. |
+| `ci-changed-code.sh` | Tells CI if a change is documentation, code or core. A PR runs all three platforms only for a core change. |
+| `ci-merge-already-tested.sh` | Tells CI if the tree of a documentation merge was already tested. |
 | `ci-apt-install.sh` | Installs packages on a Linux runner with a timeout. |
-| `fetch-ci-binaries.sh` | Waits for a CI run, then downloads the three platform binaries into `artifacts/`. |
+| `fetch-ci-binaries.sh` | Waits for a CI run, then downloads the binaries it built into `artifacts/`. |
 
 ## Media
 

@@ -122,27 +122,35 @@ conditionals — and that portability is now proven, not asserted: Linux (Ubuntu
 Apple Silicon (and on Intel, built natively there rather than in CI), and Windows on MSVC all
 build and pass the suite. The Windows platform layer, once merely written, is field-proven.
 
-**CI runs the suite on every push.** GitHub Actions builds and tests on all three platforms —
-Linux, macOS, and Windows are each a required check — so a regression on any of them shows up
-before it merges. The tests still run locally the same way, when someone types `ctest`.
+**CI runs the suite on every push — on as many platforms as the change needs.**
+`tools/ci-changed-code.sh` sorts a change into one of three kinds, and `ci.yml` picks the legs:
 
-**A merge does not rebuild what its PR already tested.** Merging an up-to-date PR makes a commit
-whose files are identical to the PR head CI just passed, so the run on `master` skips the build
-and is green with nothing to download. When the merge did bring in something new — PDFs the
-docs bot committed while the PR was open, a resolved conflict — only that difference is judged,
-so a PDF-only difference runs the single documentation leg. For the binaries of a merged
-change, fetch them from its PR.
+| Change | Pull request | Push to `master` |
+|---|---|---|
+| **docs** — `docs/`, `reference/`, `.claude/`, a top-level `.md`, any `README.md` | Linux | Linux, or nothing if the PR tested the same files |
+| **code** — `src/boards`, `chips`, `cli`, `mcp`, `tests/`, the data the tests read, `tools/` | Linux | Linux, macOS, Windows |
+| **core** — `src/core`, `cpu`, `isa`, `platform`, `host`, `config`, `util`, `main.cpp`, the build, CI, any path not listed | Linux, macOS, Windows | Linux, macOS, Windows |
 
-Each of those jobs uploads the binary it built, so a green run leaves three executables on
-GitHub — including the two you cannot produce on your own machine. To fetch them:
+A `CMakeLists.txt` change that only adds non-core sources, comments and `add_test` blocks — what
+a new board does — counts as code, not core. Run the script against any commit to predict a
+run: `bash tools/ci-changed-code.sh <base>`.
+
+Most PRs are code: a board, a command, a test. Those are portable C++ above the platform layer,
+so the PR builds them on Linux, and the run on `master` after the merge builds all three. That
+run keeps `master`'s compiler cache warm — a PR can only read its own cache and `master`'s — and
+it is where an MSVC- or Clang-only warning in a board appears: minutes after the merge, not at
+the release. **A red leg on `master` is fixed before the next change merges.** A core change
+builds all three before the merge, because that is where the platforms really differ.
+
+Each leg uploads the binary it built. To fetch them:
 
 ```sh
 tools/fetch-ci-binaries.sh          # newest CI run on the current branch
 tools/fetch-ci-binaries.sh 42       # ...on PR 42
 ```
 
-It **waits** for the run if it is still going and refuses to download from a red one, which
-makes it a reasonable last step before merging: three files means three platforms passed. They
+It **waits** for the run if it is still going and refuses to download from a red one. A run
+that built only Linux leaves one file; the `master` run after a code merge leaves all three. They
 land in `./artifacts` (git-ignored, replaced on every fetch) with the executable bit restored,
 since the artifact zip does not carry POSIX modes. Nothing in the build or the tests reads from
 there — these are CI's binaries, kept for running or handing to someone, not a build output of
@@ -151,7 +159,7 @@ this tree.
 ## The tests
 
 ```sh
-ctest --test-dir build -LE slow     # unit + acceptance. About 30 seconds.
+ctest --test-dir build -LE slow -j 8   # unit + acceptance, in parallel. Under a minute.
 ctest --test-dir build              # ...plus 8080EXM, the full exerciser.
 ctest --test-dir build -L hw        # a real null-modem cable, and a real TNFS server.
 ```

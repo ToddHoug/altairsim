@@ -18,7 +18,9 @@ whether or not a skill is loaded:
 4. **Docs are updated before the commit**, as part of the change under review.
 5. **No commit until the maintainer has reviewed and approved it.** Stop and report the diff.
 6. **No PR until the maintainer approves opening one.** More commits may come first.
-7. **No merge until CI is green** on all three platforms. Then merge without asking again.
+7. **No merge until CI is green** on every leg it ran — all three platforms for a core change,
+   Linux for anything else. Then merge without asking again. After a code merge, `master`
+   builds all three; a red leg there is fixed before anything else merges.
 8. **After the merge, comment on the related issues.** Who closes one depends on who opened
    it: an issue opened by `deltecent` is closed by `Fixes #N` in the PR. Anyone else's is never
    closed by us — `Refs #N`, no closing keyword — and the person who opened it closes it.
@@ -124,15 +126,16 @@ needs no environment at all.
 ./build/altair_tests <names>        # local loop: the suites for the subsystem you touched
                                     #   e.g. ./build/altair_tests pmmi modemline lines
                                     #   ./build/altair_tests --list  to see the names
-ctest --test-dir build -LE slow     # optional full local run  (~30 tests, under a minute)
-ctest --test-dir build              # optional; adds the slow CPU gate  (~4 minutes)
+ctest --test-dir build -LE slow -j 8   # optional full local run  (~60 tests, under a minute)
+ctest --test-dir build -j 8            # optional; adds the slow CPU gate  (~4 minutes)
 ```
 
 **Local cadence: run the unit suites for what you changed, then commit — CI runs the full
 suite.** `altair_tests <names>` runs only the named suites (no args = the full suite,
 exactly as `ctest` invokes it); a mistyped name is a hard error, not an empty pass. There is
-no required full local run before a commit: CI runs `-LE slow` on three platforms on every
-push and is the backstop. Selection rests on *your* judgment of what a change touches, so
+no required full local run before a commit: CI runs `-LE slow` on every push and is the
+backstop — on Linux for a PR, on all three platforms for a core PR and on `master` after every
+code merge (`docs/devguide/building.md` has the table). Selection rests on *your* judgment of what a change touches, so
 the impacted-test list can be wrong — that is what CI catches. Run the full local `ctest`
 yourself when you want the answer before pushing (a wide or cross-cutting change), or for
 release-ish work where the slow CPU gate matters.
@@ -142,8 +145,8 @@ release-ish work where the slow CPU gate matters.
 to success if you are only checking for the word "error".
 
 **Warnings fail CI (all three toolchains).** Every CI leg configures with `-DWERROR=on`, which
-adds `-Werror` on GCC/Clang and `/WX` on MSVC, so a warning on any of them reds a PR before
-merge. It is off by default locally; reproduce the gate before pushing a code change with
+adds `-Werror` on GCC/Clang and `/WX` on MSVC, so a warning on any of them reds the leg — before
+the merge for a core PR, on `master` just after it for any other. It is off by default locally; reproduce the gate before pushing a code change with
 `cmake -B build -DWERROR=on && cmake --build build -j`. GCC/Clang run `-Wall -Wextra -Wpedantic
 -Wshadow` (plus `-Wshadow-uncaptured-local` on Clang, so a Mac build catches the lambda-local
 shadowing GCC flags); MSVC runs `/W4` with two intentional classes suppressed tree-wide (`/wd4244 /wd4267`,

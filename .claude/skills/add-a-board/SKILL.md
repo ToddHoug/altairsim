@@ -54,7 +54,7 @@ reads to decide a `HLT` has finished, so an idle card must let the machine stand
    (the summary must fit the `SHOW BOARDS` column — `test_cli` checks 78 columns),
    and the factory line.
 3. **`tools/gen-reference.cpp` → `boardCategory()`** — **an uncategorized board is a hard error**
-   that reds all three CI legs, and the failure names a doc target, not your board.
+   that reds every CI leg, and the failure names a doc target, not your board.
 4. **The endpoint resolver, in BOTH composition roots** — `src/main.cpp` *and* `tests/main.cpp` —
    if the board has a line. Only `main.cpp` and every test that `CONNECT`s it gets a null
    resolver and fails somewhere unhelpful.
