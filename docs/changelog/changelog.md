@@ -8,229 +8,162 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
-### Floppy controllers can take the time of a real disk
+## 1.3.0
 
-A new board setting, `timing`, on the `tarbell`, `tarbelldd`, `versafloppy`, `16fdc`, `64fdc`,
-`mdsa` and `mdsad`. These boards make the processor wait until the disk has the next byte. With
-`full` (the default), the wait takes no time, as before. With `real`, it takes as long as on the
-real machine: a seek takes its step time, and each byte comes at the speed of the disk. Set it
-with `SET fdc0 timing=real`, or `timing = "real"` in the machine file. The Boards chapter of the
-*User Manual* describes it.
+**1.3.0 is the release that adds new boards and sound, and lets a floppy take the time of a real
+disk.** The North Star MDS-A and MDS-A-D controllers, the CADzilla graphics board and the Newtech
+music board are new. The Cromemco D+7A plays the JS-1 speaker. A guest can paste a file, and an
+AI assistant can let a guest run between calls.
 
-On the `tarbelldd`, bit 7 of port `FD` now shows that a disk command is still running. Before,
-it always showed that the command was done.
+### New boards
 
-### The North Star floppy controllers
-
-Two new boards: `mdsa`, the North Star MDS-A single-density controller, and `mdsad`, the
-MDS-A-D double-density controller. Each one has its own boot PROM, and each one boots CP/M and
-North Star DOS from a 5¼″ North Star disk image (`.NSI`). The `mdsad` reads and writes
-single-density, double-density and two-sided disks.
-
-These boards have no ports. A board decodes a 1 K block of memory at `E800`, and a program
-gives a command when it reads an address in the block.
-
-Two new machines have the boards: `northstar` and `northstardd`. Their drives start empty.
+**The North Star floppy controllers.** `mdsa` is the MDS-A single-density controller, and `mdsad`
+is the MDS-A-D double-density controller. Each one has its own boot PROM, and each one boots CP/M
+and North Star DOS from a 5¼″ North Star disk image (`.NSI`). The `mdsad` reads and writes
+single-density, double-density and two-sided disks. These boards have no ports. A board decodes a
+1 K block of memory at `E800`, and a program gives a command when it reads an address in the
+block. The machines `northstar` and `northstardd` have the boards. Their drives start empty.
 Mount your image in `fd0:drive0`, then type `RUN E900` on `northstar` or `RUN E800` on
-`northstardd`. The Boards chapter of the *User Manual* describes the boards.
+`northstardd`.
 
-### A JS-1 tone plays at the correct pitch
+**The CADzilla graphics board.** `cadzilla` is a new design built from two chips of the mid 1980s.
+The Hitachi **HD63484 ACRTC** is a CRT controller with a drawing processor and 2 MB of its own
+frame memory. The Brooktree **Bt453** is a RAMDAC: a color table of 256 entries. The board uses
+one block of 8 I/O ports and no memory. The guest writes drawing commands into the ACRTC's FIFO,
+and the board does every command of the chip: lines, rectangles, polygons, circles, ellipses,
+arcs, area paint, patterns and block copies. The picture has 8 bits for each pixel. It shows on a
+fixed-frequency VESA monitor that you select with `mode`: `640x480`, `800x600` or `1024x768` (the
+default).
 
-A real Cromemco D+7A makes the CPU wait 5.5 µs on every `IN` or `OUT` to an analog port. The
-`d7a` now does this too. Before, a tone loop that writes a JS-1 speaker played too high, and a
-game that reads the joysticks ran slightly too fast. An analog `OUT` now takes 21 T-states at
-2 MHz, not 10.
+The `draw_rate` strap sets the drawing speed. With `full`, the default, each command completes
+immediately. With `real`, each command takes the time that the HD63484 data sheet gives it. Use
+`real` for a game or any guest that is sensitive to time. The `interrupt` strap connects the
+ACRTC's IRQ\* to `int` or `vi0`..`vi7`. It is `none` by default. `SHOW <id>` has a `wiring` line.
+It tells you when the guest set the ACRTC in a way that the board is not wired for.
 
-### `R` no longer puts a space in a CP/M name
+For developers, a test can now check the whole picture of a video board as a text grid. When the
+check fails, it writes what the board drew as a `.ppm` file that you can open. The Developer
+Guide chapter *Writing a video board* shows how.
 
-`R *.TXT` copied a host file such as `my notes.txt` to a CP/M file with a space in its name.
-You cannot type that name at `A>`, so `TYPE`, `ERA` and `REN` could not find the file. `R` now
-removes a space, as it removes the other characters that CP/M cannot have in a name. The disks
-in `examples` have the new `R`, which shows `(1.2)` in its help.
+**The Newtech Model 6 Music Board.** `music6` has one output port, a 6-bit D/A converter and a
+speaker. A program writes the port in a timed loop, and you hear the result on the sound output of
+your computer. The default port is `24`, and the board also answers at `25`, `26` and `27`, as the
+real board does. The `port` setting takes `04`, `14`, `24` and so on to `F4`.
 
-The manual gave a wrong example of this change of name, and the steps in the wrong sequence.
-*Moving files in and out* now has the correct steps and the list of the characters that `R`
-removes.
+### Sound
 
-### Skills for the programs that run in the machine
+The Cromemco D+7A (`d7a`) now plays the speaker of each JS-1 joystick. A guest that writes a
+waveform to the speaker port is heard on the sound output of your computer. Two new settings,
+`speaker1` and `speaker2`, give the analog channel of each speaker: `none`, or `1` to `7`. The
+defaults are channel `1` (port `19`) and channel `3` (port `1B`).
 
-The package has four new Agent Skills in `skills/`, for an AI assistant. Each one has the rules
-for one subject: `altairsim-mbasic` (typing a program into MBASIC), `altairsim-cpm-build`
-(`ASM` and `LOAD`, `M80` and `L80`), `altairsim-cpm-text` (CR/LF line ends in a file for CP/M)
-and `altairsim-hostbridge` (`R`, `W` and `HDIR`). The assistant loads a skill only when the task
-needs it.
+The `d7a` also makes the processor wait 5.5 µs on every `IN` or `OUT` to an analog port, as the
+real board does. An analog `OUT` now takes 21 T-states at 2 MHz, not 10. Before, a tone played too
+high, and a game that reads the joysticks ran slightly too fast.
 
-`DRIVING-WITH-AI.md` no longer has the steps to build a CP/M program. It names the skill files
-instead. If your assistant does not read skills, give it the `skills` folder with
-`DRIVING-WITH-AI.md`.
+Sound needs a crystal. At full speed (`clock_hz = 0`, the default), a sound board plays nothing.
+Set the speed, for example `SET cpu0 clock_hz=2000000` for the `music6` (Newtech's programs are
+timed for 2 MHz) or `4000000` for the `d7a`. `SHOW` on the board tells you if the speaker plays
+and, if it is silent, the reason.
 
-### The Newtech Model 6 Music Board
+### Boards that do what the real board did
 
-A new board, `music6`: the Newtech Model 6 Music Board of 1977. It has one output port, a 6-bit
-D/A converter and a speaker. A program makes the sound: it writes the port in a timed loop, and
-you hear the result on the sound output of your computer.
+**Floppy controllers can take the time of a real disk.** A new board setting, `timing`, is on the
+`tarbell`, `tarbelldd`, `versafloppy`, `16fdc`, `64fdc`, `mdsa` and `mdsad`. These boards make the
+processor wait until the disk has the next byte. With `full` (the default), the wait takes no
+time, as before. With `real`, it takes as long as on the real machine: a seek takes its step
+time, and each byte comes at the speed of the disk. Set it with `SET fdc0 timing=real`, or
+`timing = "real"` in the machine file. On the `tarbelldd`, bit 7 of port `FD` now shows that a
+disk command is still running. Before, it always showed that the command was done.
 
-The default port is `24`, and the board also answers at `25`, `26` and `27`, as the real board
-does. The `port` setting takes `04`, `14`, `24` and so on to `F4`.
+**Cromemco's GOTCHA runs.** The status port of the Dazzler (`dazzler`, `IN 0E`) read 0 on its six
+unused bits. They now read 1, as on the board. The odd/even line bit (D7) also stays 0 during the
+vertical blank, and the port reads `3F` for the full 4 ms between frames. GOTCHA times each move
+on that value: before, it drew its picture and then stopped. A joystick on the `d7a` pushed all
+the way gave half of the range of the A/D converter (`3F` and `C0`). It now gives the full range
+(`7F` and `81`), so GOTCHA can be steered right and up. Dazzle Doodle draws only when the stick is
+in the middle half of its range: push the stick more than half and Doodle stops the line until the
+stick comes back.
 
-Sound needs a crystal. At full speed (`clock_hz = 0`, the default), the board plays nothing.
-Newtech's programs are timed for 2 MHz: `SET cpu0 clock_hz=2000000`. `SHOW` on the board tells
-you if the speaker plays and, if it is silent, the reason.
+**A guest at a prompt keeps the time of its crystal.** With a crystal set, a guest that waited at
+a prompt after `RUN` ran at about 1.3 times its crystal, and a guest that counted a timeout while
+it waited for a key counted it too fast. At full speed, nothing changes: `idle` still lets the
+processor rest at a prompt.
 
-### A short message when two machine files name each other
+### Driving a machine from the monitor and over `--mcp`
 
-When two machine files name each other as `base`, the message is now one short line: the file
-that you loaded, the line of its `base`, and the cause. Before, the file and line were there
-once for each of the 8 levels.
+- **`PASTE <file>`** sends a host file to the keyboard of the guest, as if you pasted it from the
+  clipboard. The file can be of any size and no character is lost. Use it in a `startup` list to
+  enter a program that the guest reads from its keyboard, for example a SOLOS `ENTER` script or an
+  Intel HEX file for `PIP`. `NOPASTE` stops a paste that is not finished. The Sol-20 keyboard now
+  gives the guest the next key when the guest looks for it, so text pasted into a Sol-20 no longer
+  arrives very slowly.
+- **`TYPE` sends a quote and a control key.** `TYPE "PRINT \"HI\"\r"` typed only `PRINT \`.
+  `TYPE` now sends the full line. It also has two new escapes: `\^X` is the key Ctrl-X (`\^C`,
+  `\^Z`, `\^[` for ESC), and `\xHH` is the byte with the hex value `HH`. If your text had `\x` and
+  two hex digits, or `\^` and a letter, write the backslash as `\\`.
+- **The guest can run between MCP calls.** Two new MCP tools, `start` and `stop`. `start` starts
+  the guest and returns at once. The guest then runs between tool calls until `stop`, a `HLT` or
+  a breakpoint. All the other tools still work while it runs, and `status` tells if it still
+  runs. Use it for a server on the guest that must answer its clients in time, for two machines
+  that talk to each other, and to let a person take over the console through `--mirror`.
+- **A trace started by an assistant is written to its file.** `TRACE ON <file>`, sent through the
+  MCP `monitor` tool, now writes the trace to the file. Before, the file stayed empty or the
+  simulator stopped with an error on the next `run`. Through MCP, `TRACE ON` with no file is
+  refused: give a file, or use the `bus_trace` tool.
+- **`R` no longer puts a space in a CP/M name.** `R *.TXT` copied a host file such as
+  `my notes.txt` to a CP/M file with a space in its name, which you cannot type at `A>`. `R` now
+  removes a space, as it removes the other characters that CP/M cannot have in a name. The disks
+  in `examples` have the new `R`, which shows `(1.2)` in its help.
+- **Skills for the programs that run in the machine.** The package has four new Agent Skills in
+  `skills/`, for an AI assistant: `altairsim-mbasic`, `altairsim-cpm-build`, `altairsim-cpm-text`
+  and `altairsim-hostbridge`. The assistant loads a skill only when the task needs it.
+  `DRIVING-WITH-AI.md` names the skill files in place of the steps to build a CP/M program.
 
-### The manual shows a machine file that starts from a machine file
+### Machine files
 
-The configuration chapter has a new example: one machine file that uses a second machine file
-as its `base`, and that second file starts from a built-in machine. The example shows what the
-first file gets from the second, and the message that you see when two files name each other.
+- **Errors give the line.** Each error in a machine file now gives the line number:
+  `mine.toml: line 7: ...`.
+- **A table written two times is an error.** A file that has `[machine]`, `[console]`,
+  `[display]` or `[terminal]` two times does not load. The same is true for a
+  `[board.unit.<name>]` written two times below one `[[board]]`, and for a key written two times
+  in one table. The error gives both lines. A key above the first table, text after a table
+  header, and a `startup` list with no closing `]` are also errors now. **A machine file that
+  loaded before can be refused now**; the error tells you which line to remove.
+- **Two files that name each other as `base`** now give one short line: the file that you loaded,
+  the line of its `base`, and the cause. Before, the file and line were there once for each of the
+  8 levels.
 
-### The D+7A plays the JS-1 speaker
+### The documents
 
-The Cromemco D+7A board (`d7a`) now plays the speaker of each JS-1 joystick. A guest that writes
-a waveform to the speaker port is heard on the sound output of your computer. This is the first
-sound that the simulator makes.
-
-Sound needs a crystal. At full speed (`clock_hz = 0`, the default), the board plays nothing. Set
-the speed, for example `SET cpu0 clock_hz=4000000`. The `dazzler` machine sets 4 MHz already.
-
-Two new settings, `speaker1` and `speaker2`, give the analog channel of each speaker: `none`, or
-`1` to `7`. The defaults are channel `1` (port `19`) and channel `3` (port `1B`). `SHOW` on the
-board has a line for each speaker. The line tells you if the speaker plays and, if it is silent,
-the reason.
-
-A tone from a tight loop plays at a higher pitch than on a real board, because the board does
-not hold the processor on an analog read or write.
-
-### Cromemco's GOTCHA runs: the Dazzler status port and the joystick range
-
-Two corrections let GOTCHA, from the Cromemco Dazzler Games disk, run as it did on the
-hardware.
-
-The status port of the Dazzler (`dazzler`, `IN 0E`) read 0 on its six unused bits. They now read
-1, as on the board. The odd/even line bit (D7) also stays 0 during the vertical blank. The port
-reads `3F` for the full 4 ms between frames. GOTCHA times each move on that value: before, it
-drew its picture and then stopped.
-
-A joystick on the D+7A (`d7a`) pushed all the way gave half of the range of the A/D converter
-(`3F` and `C0`). It now gives the full range (`7F` and `81`). GOTCHA accepts only a large
-movement, so before it could not be steered right or up.
-
-**Dazzle Doodle changes.** Doodle draws only when the stick is in the middle half of its range.
-Push the stick more than half and Doodle stops the line until the stick comes back.
-
-### A guest at a prompt keeps the time of its crystal
-
-With a crystal set (`SET cpu0 clock_hz=2000000`), a guest that waited at a prompt after `RUN`
-ran at about 1.3 times its crystal. A guest that counted a timeout while it waited for a key
-counted it too fast. The guest now keeps the time of its crystal at a prompt. At full speed
-(`clock_hz = 0`, the default), nothing changes: `idle` still lets the processor rest at a prompt.
-
-### Machine-file errors give the line, and a table written two times is an error
-
-Each error in a machine file now gives the line number: `mine.toml: line 7: ...`.
-
-A file that has `[machine]`, `[console]`, `[display]` or `[terminal]` two times does not load.
-The same is true for a `[board.unit.<name>]` written two times below one `[[board]]`, and for a
-key written two times in one table. The error gives both lines. Before, the second copy won
-silently, or the program reported a different problem. A key above the first table, text after
-a table header, and a `startup` list with no closing `]` are also errors now. **A machine file
-that loaded before can be refused now**; the error tells you which line to remove.
-
-### The manual shows the machine-file form of `CONNECT` and `MOUNT`
-
-The serial and disks chapters of the User Manual showed monitor commands only. They now show the
-same setting in a machine file, below the command, under the words "In a machine file:". The
-serial chapter has a new section, "The same in a machine file", with a complete file that puts
-the console of the `default` machine on a `telnet:` port. The disks chapter has a table that
-gives the key for each part of a `MOUNT` command.
-
-The samples in the configuring chapter that change a board of the base now leave the `type` out.
-A `[[board]]` with a `type` replaces the board, and it loses the settings of the base.
-
-### `TYPE` sends a quote and a control key
-
-`TYPE "PRINT \"HI\"\r"` typed only `PRINT \`, because the text stopped at the first `\"`.
-`TYPE` now sends the full line.
-
-`TYPE` also has two new escapes. `\^X` is the key Ctrl-X: `\^C` is Ctrl-C, `\^Z` is Ctrl-Z
-and `\^[` is ESC. `\xHH` is the byte with the hex value `HH`. Thus `TYPE` can send each key
-that a keyboard can. This helps an AI client that cannot put a carriage return or a control
-byte in the `input` of an MCP `run`: it can send them with `TYPE`.
-
-If your text had `\x` and two hex digits, or `\^` and a letter, write the backslash as `\\`.
-
-### Paste a file into the guest
-
-A new monitor command, `PASTE <file>`, sends a host file to the keyboard of the guest, as if you
-pasted it from the clipboard. The file can be of any size and no character is lost. `TYPE` is
-still the command for a line or two, and a `TYPE` after a `PASTE` arrives after the file. Use it
-in a `startup` list to enter a program that the guest reads from its keyboard, for example a
-SOLOS `ENTER` script or an Intel HEX file for `PIP`. `NOPASTE` stops a paste that is not finished.
-A key that you press during a paste goes to the guest before the remainder of the file, and
-`Ctrl-E` stops the machine as usual.
-
-The Sol-20 keyboard now gives the guest the next key when the guest looks for it. Before, it gave
-one key in each time slice of the host, and text pasted into a Sol-20 arrived very slowly.
-
-### A trace started by an assistant is written to its file
-
-`TRACE ON <file>`, sent through the MCP `monitor` tool, now writes the trace to the file. Before,
-the file stayed empty or the simulator stopped with an error on the next `run`. Through MCP,
-`TRACE ON` with no file is refused, because an assistant has no console for the trace: give a
-file, or use the `bus_trace` tool.
-
-### The guest can run between MCP calls
-
-Two new MCP tools, `start` and `stop`. `start` starts the guest and returns at once. The guest
-then runs between tool calls, as it does after `RUN` at the monitor, until `stop`, a `HLT` or a
-breakpoint. All the other tools still work while it runs, and `status` tells if it still runs.
-Use it for a server on the guest that must answer its clients in time, for two machines that talk
-to each other, and to let a person take over the console through `--mirror`.
+- The serial and disks chapters of the User Manual now show the machine-file form of `CONNECT`
+  and `MOUNT`, below the command, under the words "In a machine file:". The serial chapter has a
+  new section, "The same in a machine file". The disks chapter has a table that gives the key for
+  each part of a `MOUNT` command.
+- The configuration chapter has a new example of a machine file that uses a second machine file as
+  its `base`, and it shows the message for two files that name each other. The samples that change
+  a board of the base now leave the `type` out: a `[[board]]` with a `type` replaces the board,
+  and it loses the settings of the base.
+- The chapter *Moving files in and out* has the correct steps for `R` and the list of the
+  characters that `R` removes.
 
 ### Fewer examples in the package, and more at altairsim.com
 
 The package now has five examples: `cpm`, `basic4k`, `basic1`, `debugger` and `ai-mcp`. `basic4k`
-and `basic1` replace `basic`. `basic4k` has Altair 4K BASIC 3.1 as a `.tap` and as audio, and the
-worked-examples chapter and the tapes chapter use it. `basic1` has Altair BASIC 1.0, the first
-one, as a `.tap` and as audio. More examples, with their media and more documentation, are at
-https://altairsim.com.
+and `basic1` replace `basic`. `basic4k` has Altair 4K BASIC 3.1 as a `.tap` and as audio, and
+`basic1` has Altair BASIC 1.0, the first one, as a `.tap` and as audio. More examples, with their
+media and more documentation, are at https://altairsim.com.
 
 The `cpm` example no longer has the two FDC+ machine files, `cpm22-fdcplus.toml` and
 `cpm22-fdcplus-hdf.toml`, and the 1.5 MB disk `CPM22-48K-HDF.dsk`. The boards chapter still tells
-you how to set up the FDC+ in the `default` machine.
+you how to set up the FDC+ in the `default` machine. The `recipes/` folder is removed from the
+package, and the worked-examples chapter no longer has the BASIC 1.0, 88-HDSK and Disk BASIC
+walkthroughs.
 
-The `recipes/` folder is removed from the package. The worked-examples chapter no longer has the
-BASIC 1.0, 88-HDSK and Disk BASIC walkthroughs.
+### Smaller things
 
-### The CADzilla graphics board
-
-A new board, `cadzilla`: a new design built from two chips of the mid 1980s. The Hitachi
-**HD63484 ACRTC** is a CRT controller with a drawing processor and 2 MB of its own frame memory.
-The Brooktree **Bt453** is a RAMDAC: a color table of 256 entries. The board uses one block of 8
-I/O ports and no memory.
-
-The guest writes drawing commands into the ACRTC's FIFO. The board does every command of the
-chip, in every operation, color and area mode. The commands draw lines, rectangles, polygons,
-circles, ellipses, arcs, area paint, patterns and block copies. The picture has 8 bits for each
-pixel. It shows on a fixed-frequency VESA monitor that you select with `mode`: `640x480`,
-`800x600` or `1024x768` (the default). The window is the same kind as the Dazzler's and the
-VDM-1's.
-
-The `draw_rate` strap sets the drawing speed. With `full`, the default, each command completes
-immediately. With `real`, each command takes the time that the HD63484 data sheet gives it. The
-write FIFO fills, and the command-end bit comes late, as on the real board. Use `real` for a game
-or any guest that is sensitive to time. The `interrupt` strap connects the ACRTC's IRQ\* to `int`
-or `vi0`..`vi7`. It is `none` by default. `SHOW <id>` has a `wiring` line. It tells you when the
-guest set the ACRTC in a way that the board is not wired for.
-
-For developers, a test can now check the **whole picture** of a video board as a text grid. When
-the check fails, it writes what the board drew as a `.ppm` file that you can open. The new
-Developer Guide chapter *Writing a video board* shows how.
+- `SHOW BUS`, `SHOW ROMS` and `SHOW JOYSTICKS` now line up their columns.
+- In `HELP`, an example remark starts with `;` and the remarks line up.
 
 ## 1.2.0
 
