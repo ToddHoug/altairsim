@@ -8,6 +8,18 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+### Floppy controllers can take the time of a real disk
+
+A new board setting, `timing`, on the `tarbell`, `tarbelldd`, `versafloppy`, `16fdc`, `64fdc`,
+`mdsa` and `mdsad`. These boards make the processor wait until the disk has the next byte. With
+`full` (the default), the wait takes no time, as before. With `real`, it takes as long as on the
+real machine: a seek takes its step time, and each byte comes at the speed of the disk. Set it
+with `SET fdc0 timing=real`, or `timing = "real"` in the machine file. The Boards chapter of the
+*User Manual* describes it.
+
+On the `tarbelldd`, bit 7 of port `FD` now shows that a disk command is still running. Before,
+it always showed that the command was done.
+
 ### The North Star floppy controllers
 
 Two new boards: `mdsa`, the North Star MDS-A single-density controller, and `mdsad`, the

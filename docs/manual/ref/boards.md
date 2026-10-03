@@ -240,6 +240,7 @@ Cromemco 16FDC: WD FD1793 soft-sector floppy (single + double density), up to 4 
 |---|---|---|---|---|
 | `bootstrap` | bool | `true` | `on` \| `off` | The BOOT/MON strap. On (default): the RDOS ROM is mapped at C000 and ¬BOOT reads low, so RDOS boots the disk. Off: the ROM still answers but ¬BOOT reads high (the monitor prompt instead of an auto-boot) |
 | `drives` | int | `4` | `1` .. `4` | Drives on the controller (A-D, one-hot select DS4-DS1) |
+| `timing` | enum | `full` | `full` \| `real` | Disk timing. full: a disk access completes at once. real: with Auto Wait armed, IN 34 holds READY until DRQ or the end of the command, so seek, head settle and byte times take emulated time, as on the board |
 
 #### Unit `tty` — `[board.unit.tty]`
 
@@ -273,6 +274,7 @@ Cromemco 64FDC: the 16FDC's 1983 successor -- same FD1793 + TMS 5501, carrying a
 |---|---|---|---|---|
 | `bootstrap` | bool | `true` | `on` \| `off` | The BOOT/MON strap. On (default): the RDOS ROM is mapped at C000 and ¬BOOT reads low, so RDOS boots the disk. Off: the ROM still answers but ¬BOOT reads high (the monitor prompt instead of an auto-boot) |
 | `drives` | int | `4` | `1` .. `4` | Drives on the controller (A-D, one-hot select DS4-DS1) |
+| `timing` | enum | `full` | `full` \| `real` | Disk timing. full: a disk access completes at once. real: with Auto Wait armed, IN 34 holds READY until DRQ or the end of the command, so seek, head settle and byte times take emulated time, as on the board |
 
 #### Unit `tty` — `[board.unit.tty]`
 
@@ -473,6 +475,7 @@ North Star MDS-A: single-density 5.25" hard-sector floppy, up to 3 drives. No po
 | `drives` | int | `3` | `1` .. `3` | Drives on the cable |
 | `interrupt` | enum | `none` | `none` \| `int` \| `vi0` \| `vi1` \| `vi2` \| `vi3` \| `vi4` \| `vi5` \| `vi6` \| `vi7` | Where the sector-pulse interrupt is jumpered (lower left of the board) *(interrupt strap)* |
 | `motor` | enum | `free` | `free` \| `real` | free: the motors run until they are stopped (default). real: they stop by themselves after the board's count of revolutions |
+| `timing` | enum | `full` | `full` \| `real` | Disk timing. full: a read-data or write-data access completes at once. real: it holds READY until the byte is under the head, so a sector transfer takes emulated time, as on the board |
 
 
 ### `mdsad`
@@ -499,6 +502,7 @@ North Star MDS-A-D: double-density 5.25" hard-sector floppy (single, double and 
 | `drives` | int | `4` | `1` .. `4` | Drives on the cable |
 | `interrupt` | enum | `none` | `none` \| `int` \| `vi0` \| `vi1` \| `vi2` \| `vi3` \| `vi4` \| `vi5` \| `vi6` \| `vi7` | Where the sector-pulse interrupt is jumpered (lower left of the board) *(interrupt strap)* |
 | `motor` | enum | `free` | `free` \| `real` | free: the motors run until they are stopped (default). real: they stop by themselves after the board's count of revolutions |
+| `timing` | enum | `full` | `full` \| `real` | Disk timing. full: a read-data or write-data access completes at once. real: it holds READY until the byte is under the head, so a sector transfer takes emulated time, as on the board |
 
 
 ### `tarbell`
@@ -523,6 +527,7 @@ Tarbell #1011: single-density WD FD1771 floppy, up to 4 drives. Eight ports at B
 | `port` | int | `0xF8` | `0x0` .. `0xF8` | Base address. The board decodes eight ports: BASE+0 .. BASE+7 (default F8) |
 | `drives` | int | `4` | `1` .. `4` | Drives on the controller (binary select 0-3) |
 | `interrupt` | enum | `none` | `none` \| `int` \| `vi0` \| `vi1` \| `vi2` \| `vi3` \| `vi4` \| `vi5` \| `vi6` \| `vi7` | Where the card's interrupt is soldered *(interrupt strap)* |
+| `timing` | enum | `full` | `full` \| `real` | Disk timing. full: a disk access completes at once. real: the wait port holds READY until the next byte or the end of the command, so seek, head settle and byte times take emulated time, as on the board |
 
 
 ### `tarbelldd`
@@ -547,6 +552,7 @@ Tarbell #2022: double-density WD FD1791 floppy (mixed-density media, SD track 0)
 | `port` | int | `0xF8` | `0x0` .. `0xF8` | Base address. The board decodes eight ports: BASE+0 .. BASE+7 (default F8) |
 | `drives` | int | `4` | `1` .. `4` | Drives on the controller (binary select 0-3) |
 | `interrupt` | enum | `none` | `none` \| `int` \| `vi0` \| `vi1` \| `vi2` \| `vi3` \| `vi4` \| `vi5` \| `vi6` \| `vi7` | Where the card's interrupt is soldered *(interrupt strap)* |
+| `timing` | enum | `full` | `full` \| `real` | Disk timing. full: a disk access completes at once. real: the wait port holds READY until the next byte or the end of the command, so seek, head settle and byte times take emulated time, as on the board |
 | `dmaport` | int | `0xE0` | `0x0` .. `0xF0` | Base of the on-card 8257 DMA controller's 16-port register block (default E0). The DMA-mode CBIOS programs ADR/WCT here; the SD2DD strap is E0 |
 
 
@@ -573,6 +579,7 @@ SD Systems VersaFloppy I/II: WD FD177x soft-sector floppy, up to 4 drives. Eight
 | `port` | int | `0x60` | `0x0` .. `0xF8` | Base address. The board decodes eight ports: BASE+0 .. BASE+7 (60H) |
 | `drives` | int | `4` | `1` .. `4` | Drives on the controller (one-hot select D0-D3) |
 | `interrupt` | enum | `none` | `none` \| `int` \| `vi0` \| `vi1` \| `vi2` \| `vi3` \| `vi4` \| `vi5` \| `vi6` \| `vi7` | Where the card's interrupt is soldered *(interrupt strap)* |
+| `timing` | enum | `full` | `full` \| `real` | Disk timing. full: a disk access completes at once. real: the data port holds READY until the next byte or the end of the command (while the wait-state circuit is enabled), so seek, head settle and byte times take emulated time, as on the board |
 
 
 ## Serial

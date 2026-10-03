@@ -142,6 +142,7 @@ protected:
     int       sel_      = 0;   // default drive 0 -- the strapped single-drive card never writes FC
     int       side_     = 0;
     long long dataRate_ = 250000;
+    bool      timingReal_ = false;  // `timing = real`: the wait port holds READY (#637)
 
     // ---- the boot PROM / PHANTOM* half ----
     uint8_t prom_[32]  = {};

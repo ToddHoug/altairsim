@@ -947,6 +947,38 @@ For most of these controllers, the package has a built-in machine but no disk im
 starts with empty drives, and you supply the image. The disks chapter tells you how to mount
 one.
 
+### Disk timing: `timing`
+
+Some of these controllers stop the processor with **wait states** until the disk has the next
+byte. They are the `tarbell`, `tarbelldd`, `versafloppy`, `16fdc`, `64fdc`, `mdsa` and `mdsad`.
+The `timing` setting of the board sets how long the wait takes:
+
+- **`full`** (the default): the byte is ready at once, and the wait takes no time. A seek also
+  takes no time. Disk access is as fast as possible.
+- **`real`**: the wait takes as long as on the real machine. A seek takes the step time of each
+  track, and each byte comes at the speed of the disk. The processor loses that time, as it did
+  on the real machine.
+
+The bytes on the disk are the same with both settings. Use `real` for a guest that measures
+time with the disk, or to see how fast the machine really was:
+
+```
+altairsim> SET fdc0 timing=real
+```
+
+In a machine file:
+
+```toml
+[[board]]
+type   = "tarbell"
+id     = "fdc0"
+timing = "real"
+```
+
+With `real`, the processor must be fast enough for the disk, as on the real machine. On the
+`tarbelldd`, a double-density disk without DMA needs a 4 MHz processor (`clock_hz = 4000000`). At
+2 MHz, the guest loses data and reports a disk error.
+
 ### `dcdd`: MITS 88-DCDD
 
 The **8″ hard-sector floppy controller**. It has up to sixteen drives, and three ports at `08`,

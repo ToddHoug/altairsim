@@ -238,7 +238,10 @@ void CromemcoFdcBoard::writeAux(uint8_t v) {
 
 uint8_t CromemcoFdcBoard::readPort34() {
     Clock&     k        = clk();
-    chip_->poll(k);
+    // With Auto Wait armed this access holds READY until DRQ or EOJ. Under `timing = real`
+    // that wait is charged to the clock; under `full` the chip is wait-synced and it is not.
+    if (timingReal_ && (control_ & 0x80)) holdReady(chip_->holdUntilReady(k));
+    else chip_->poll(k);
     // Port 34 IN (16FDC/64FDC): D7 DRQ, D6 ¬BOOT, D5 SELECT REQUEST, D4 ¬INHIBIT INIT,
     // D3 MOTOR ON, D2 MOTOR TIMEOUT, D1 AUTOWAIT TIMEOUT, D0 EOJ (reference §4).
     //   * D5 SELECT REQUEST -- the glue asserts this when the selected drive is ready to be
@@ -272,7 +275,10 @@ void CromemcoFdcBoard::writePort34(uint8_t v) {
     // parks on each pending DRQ (Read phase early-return) and readData() consumes it, one byte
     // per IN 34. Toggling it off between the two accesses (the old per-IN-34 flip) made the INI
     // poll see it clear, mis-fire Lost Data, and hand back the next byte -- an FD1793 Err-B 06.
-    chip_->setWaitSynced((v & 0x80) != 0);
+    //
+    // That is `timing = full`. Under `timing = real` the chip stays on the clock, and the
+    // IN 34 holds READY for the time the stall takes instead (readPort34).
+    chip_->setWaitSynced(!timingReal_ && (v & 0x80) != 0);
 
     // DATA RATE IS MAXI x DDEN, NOT DDEN ALONE (reference §1, the RCLK table keyed on
     // MAXI/DDEN): ONLY 8" double density is 500 kbit/s; 8" SD, 5.25" SD and 5.25" DD are
@@ -531,6 +537,27 @@ std::vector<Property> CromemcoFdcBoard::properties() {
             drive_.resize((size_t)n);
             wireClocks();      // new drives need the angular clock too
             applySelection();  // the vector may have moved -- re-attach
+            return true;
+        };
+        p.push_back(std::move(x));
+    }
+    {
+        Property x;
+        x.name    = "timing";
+        x.help    = "Disk timing. full: a disk access completes at once. real: with Auto Wait "
+                    "armed, IN 34 holds READY until DRQ or the end of the command, so seek, head "
+                    "settle and byte times take emulated time, as on the board";
+        x.kind    = Kind::Enum;
+        x.choices = {"full", "real"};
+        x.get     = [this] { return Value::ofStr(timingReal_ ? "real" : "full"); };
+        x.set     = [this](const Value& v, std::string& err) {
+            if (v.s() != "full" && v.s() != "real") {
+                err = "timing is full or real";
+                return false;
+            }
+            timingReal_ = v.s() == "real";
+            chip_->setWaitSynced(!timingReal_ && (control_ & 0x80) != 0);
+            refresh();  // a timed chip has deadlines to arm; a wait-synced one has none
             return true;
         };
         p.push_back(std::move(x));

@@ -66,6 +66,7 @@ void Wd17xx::deserialize(StateReader& r) {
     prevReady_  = r.boolean();
     prevIndex_  = r.boolean();
     raCursor_   = (int)r.u32();
+    ahead_      = 0;  // never serialized: see holdUntilReady()
 }
 
 namespace {
@@ -175,14 +176,14 @@ uint64_t Wd17xx::headSettleTStates(const Clock& clk) const {
 
 // HLD, pin 28. Remember WHEN, because HLT is 10 ms after it -- see headEngaged().
 void Wd17xx::loadHead(bool on, const Clock& clk) {
-    if (on && !headLoaded_) hldAt_ = clk.now();
+    if (on && !headLoaded_) hldAt_ = now(clk);
     headLoaded_ = on;
 }
 
 // S5, and it is the AND of two pins. The head is not engaged the instant the chip asks
 // for it; the drive takes 10 ms to get it there, and HLT is what says it arrived.
 bool Wd17xx::headEngaged(const Clock& clk) const {
-    return headLoaded_ && clk.now() >= hldAt_ + headSettleTStates(clk);
+    return headLoaded_ && now(clk) >= hldAt_ + headSettleTStates(clk);
 }
 
 // ---------------------------------------------------------------------------
@@ -211,6 +212,7 @@ void Wd17xx::powerOn(const Clock& clk) {
     idx_ = 0;
     prevReady_ = ready();
     prevIndex_ = drive_ && drive_->index();
+    ahead_     = 0;  // power resets the clock to zero, and the chip's own time with it
     (void)clk;
 }
 
@@ -439,7 +441,7 @@ void Wd17xx::startTypeI(uint8_t cmd, const Clock& clk) {
         return;
     }
     phase_ = Phase::Settle;
-    due_   = clk.now() + stepTStates(clk);
+    due_   = now(clk) + stepTStates(clk);
 }
 
 // ---- TYPE II: Read Sector, Write Sector ------------------------------------
@@ -495,7 +497,7 @@ void Wd17xx::headLoadThen(bool wanted, const Clock& clk) {
     if (wanted) {
         loadHead(true, clk);
         phase_ = Phase::HeadSettle;
-        due_   = clk.now() + headSettleTStates(clk);
+        due_   = now(clk) + headSettleTStates(clk);
         return;
     }
     // E=0: "Head is assumed Engaged and there is no 10 msec Delay." The head is ALREADY
@@ -557,7 +559,7 @@ void Wd17xx::afterHeadSettle(const Clock& clk) {
             idx_   = 0;
             end_   = Ending::Plain;
             phase_ = Phase::Read;
-            due_   = clk.now() + byteTStates(clk);
+            due_   = now(clk) + byteTStates(clk);
             return;
         }
 
@@ -576,7 +578,7 @@ void Wd17xx::afterHeadSettle(const Clock& clk) {
             idx_   = 0;
             end_   = Ending::Plain;
             phase_ = Phase::Read;
-            due_   = clk.now() + byteTStates(clk);
+            due_   = now(clk) + byteTStates(clk);
             return;
         }
 
@@ -607,7 +609,7 @@ void Wd17xx::afterHeadSettle(const Clock& clk) {
             end_    = Ending::CommitTrack;
             phase_  = Phase::WriteWait;
             drq_    = true;
-            due_    = clk.now() + (uint64_t)n * byteTStates(clk);
+            due_    = now(clk) + (uint64_t)n * byteTStates(clk);
             return;
         }
     }
@@ -713,7 +715,7 @@ void Wd17xx::beginTypeII(const Clock& clk) {
         idx_   = 0;
         end_   = flagM(command_) ? Ending::NextRecord : Ending::Plain;
         phase_ = Phase::Read;
-        due_   = clk.now() + byteTStates(clk);
+        due_   = now(clk) + byteTStates(clk);
         return;
     }
 
@@ -750,7 +752,7 @@ void Wd17xx::beginTypeII(const Clock& clk) {
     end_   = Ending::CommitSector;
     phase_ = Phase::WriteWait;
     drq_   = true;
-    due_   = clk.now() + 11 * byteTStates(clk);
+    due_   = now(clk) + 11 * byteTStates(clk);
 }
 
 void Wd17xx::commitSector(const Clock& clk) {
@@ -776,7 +778,7 @@ void Wd17xx::commitSector(const Clock& clk) {
             buf_.reserve((size_t)next.size);
             phase_ = Phase::WriteWait;
             drq_   = true;
-            due_   = clk.now() + 11 * byteTStates(clk);
+            due_   = now(clk) + 11 * byteTStates(clk);
             return;
         }
         // ...AND THAT EXIT IS *RECORD NOT FOUND*. See the note in the read path below --
@@ -897,7 +899,7 @@ void Wd17xx::poll(const Clock& clk) {
     // pending FOR or FROM the guest, poll() stops and waits for readData()/writeData() to
     // service it, so exactly one byte moves per access and Lost Data never fires (the
     // wait-state hardware is precisely what makes it unreachable). See setWaitSynced().
-    while (phase_ != Phase::Idle && (waitSynced_ || clk.now() >= due_)) {
+    while (phase_ != Phase::Idle && (waitSynced_ || now(clk) >= due_)) {
         switch (phase_) {
             case Phase::Settle: {
                 stepOnce();
@@ -1130,7 +1132,25 @@ uint64_t Wd17xx::nextEdge(const Clock& clk) const {
     // run, not one to wake up for -- and arming a timer for now() would fire inside the
     // drain loop that is running us, and arm it again, and never stop. (Mc6850::nextEdge
     // says the same thing at more length, and for the same reason.)
-    return (due_ > clk.now()) ? due_ : clk.now() + 1;
+    return (due_ > now(clk)) ? due_ : now(clk) + 1;
+}
+
+// `timing = real`: the access the board's wait-state logic holds. The CPU sits in Tw until
+// DRQ comes up or the command ends, and every deadline it sits through is one the chip
+// crosses here -- in order, each at its own time, exactly as poll() would if the clock were
+// running. Then the board holds READY for what it took.
+uint32_t Wd17xx::holdUntilReady(const Clock& clk) {
+    poll(clk);
+    if (waitSynced_) return 0;  // that model takes no time at all
+
+    const uint64_t from = now(clk);
+    while (!drq_ && phase_ != Phase::Idle) {
+        if (due_ == 0) break;              // no deadline: nothing will ever raise DRQ
+        if (due_ > ahead_) ahead_ = due_;  // the CPU waits until the next deadline...
+        poll(clk);                         // ...and the chip does what happens there
+    }
+    const uint64_t held = now(clk) - from;
+    return held > UINT32_MAX ? UINT32_MAX : (uint32_t)held;
 }
 
 } // namespace altair

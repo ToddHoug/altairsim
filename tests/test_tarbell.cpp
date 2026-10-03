@@ -160,6 +160,39 @@ std::vector<uint8_t> ddTrack(int trackNum) {
     return s;
 }
 
+// `timing = real` (issue #637): a whole machine -- 64K RAM, the card with its boot PROM off,
+// an 8080 at 2 MHz -- because a READY hold is charged by the run loop, at the instruction
+// boundary, and nowhere else.
+struct TimedRig {
+    Machine            m;
+    TarbellBoardBase*  fdc = nullptr;
+    TimedRig(const char* type, const char* timing, const std::vector<uint8_t>& code) {
+        std::string err;
+        auto* mem = dynamic_cast<MemoryBoard*>(m.add("memory", "mem0", err));
+        Region r;
+        r.kind = RegionKind::Ram;
+        r.at   = 0x0000;
+        r.size = 0x10000;
+        mem->addRegion(r, err);
+        setProperty(*mem, "fill", "zero", err);
+        fdc = dynamic_cast<TarbellBoardBase*>(m.add(type, "fdc0", err));
+        setProperty(*fdc, "bootstrap", "off", err);
+        setProperty(*fdc, "timing", timing, err);
+        Board* cpu = m.add("8080", "cpu0", err);
+        setProperty(*cpu, "clock_hz", "2000000", err);
+        m.power();
+        fdc->mount("drive0", "ramp.dsk", false, err);
+        for (size_t i = 0; i < code.size(); ++i) m.bus.memWrite((uint16_t)i, code[i]);
+        m.cpu()->setPc(0);
+    }
+    // The T-states one instruction took, READY holds included.
+    uint64_t step() {
+        uint64_t t0 = m.clock.now();
+        m.debug.run(1);
+        return m.clock.now() - t0;
+    }
+};
+
 } // namespace
 
 void test_tarbell() {
@@ -467,9 +500,10 @@ void test_tarbell() {
         out(b, CMD, 0x88);
         CHECK(pollRead(b).size() == 128, "...and clearing D5:D4 reselected drive 0");
 
-        // Port FD IN is the DMA-busy check: bit7 = 0 means "complete", so PIO code that
-        // polls it never hangs.
-        CHECK((in(b, EXT) & 0x80) == 0, "port FD reports DMA complete (bit7 = 0)");
+        // Port FD IN is the DMA-busy check: bit7 follows INTRQ, 0 once the command is over.
+        CHECK((in(b, EXT) & 0x80) == 0, "port FD reports the finished read complete (bit7 = 0)");
+        (void)in(b, CMD);
+        CHECK((in(b, EXT) & 0x80) != 0, "...and busy again once a status read resets INTRQ");
 
         // EVERY sector of the SD track 0 (26) and a DD track (51) delivers exactly 128
         // bytes and completes -- a mixed-density boot reads straight down track 0.
@@ -576,6 +610,123 @@ void test_tarbell() {
         // pHOLD is released: the channel disabled itself at terminal count, so nobody is
         // still asking for the bus once the burst is done.
         CHECK(!fdc->requestsBus(), "the 8257 dropped its bus request at terminal count");
+    }
+
+    // ---- `timing = real`: the WAIT port holds READY (issue #637) ----
+    //
+    // The Tarbell PROM's RLOOP, run by a real 8080. Under `real` each IN FC holds READY until
+    // the FD1771 has the next byte, so the loop runs at the disk's pace; under `full` it runs
+    // at the CPU's.
+    SECTION("boards/tarbell: timing = real -- the wait port holds READY");
+    {
+        // 00 IN FC ; MVI A,1 ; OUT FA ; MVI A,8C ; OUT F8 ; LXI H,2000
+        // 0D L: IN FC ; ORA A ; JP 1A ; IN FB ; MOV M,A ; INX H ; JMP L
+        // 1A HLT
+        const std::vector<uint8_t> rloop = {
+            0xDB, CTL, 0x3E, 0x01, 0xD3, SECR, 0x3E, 0x8C, 0xD3, CMD, 0x21, 0x00, 0x20,
+            0xDB, CTL, 0xB7, 0xF2, 0x1A, 0x00, 0xDB, DAT, 0x77, 0x23, 0xC3, 0x0D, 0x00,
+            0x76};
+        const uint64_t settle = 20000;  // 10 ms at 2 MHz
+        const uint64_t byte   = 64;     // 32 us at 250 kbit/s
+
+        withRampDisk(77ull * 26 * 128);
+        {
+            TimedRig g("tarbell", "real", rloop);
+            CHECK(g.step() == 10,
+                  "the first IN FC holds nothing: a Restore already at track 0 ends at once");
+            g.step();  // MVI
+            g.step();  // OUT FA
+            g.step();  // MVI
+            uint64_t t = g.step() + g.step() + g.step();  // OUT F8 ; LXI ; IN FC
+            CHECK(t == 10 + settle + byte,
+                  "from the Read Sector OUT, the first IN FC ends after the settle and one byte time");
+            t = 0;
+            for (int i = 0; i < 7; ++i) t += g.step();  // ORA JP IN-FB MOV INX JMP IN-FC
+            CHECK(t == byte, "each later pass of the loop takes one byte time");
+        }
+        {
+            TimedRig g("tarbell", "real", rloop);
+            const uint64_t t0 = g.m.clock.now();
+            RunResult rr = g.m.debug.run(2000000);
+            CHECK(rr.why == StopReason::Halted, "the timed RLOOP reaches its HLT");
+            bool ramp = true;
+            for (int i = 0; i < 128; ++i)
+                if (g.m.bus.memRead((uint16_t)(0x2000 + i)) != (uint8_t)i) ramp = false;
+            CHECK(ramp, "...with track 0 sector 1 in RAM, in order");
+            CHECK(g.m.bus.memRead(0x2080) == 0, "...and not one byte more");
+            CHECK((in(*g.fdc, CMD) & 0x04) == 0, "...and no Lost Data");
+            CHECK(g.m.clock.now() - t0 >= settle + 128 * byte,
+                  "...and it took the disk's time: the settle and 128 byte times");
+        }
+        {
+            TimedRig g("tarbell", "full", rloop);
+            CHECK(g.step() == 10, "under timing = full an IN FC is the 8080's 10 T-states");
+            const uint64_t t0 = g.m.clock.now();
+            RunResult rr = g.m.debug.run(2000000);
+            CHECK(rr.why == StopReason::Halted && g.m.bus.memRead(0x2005) == 5,
+                  "...and the same loop reads the same sector");
+            CHECK(g.m.clock.now() - t0 < settle, "...in less time than the head settle alone");
+        }
+    }
+
+    // ---- `timing = real` on the DD card: the 8257 steals one cycle per DRQ ----
+    //
+    // The chip is no longer wait-synced, so DRQ comes up once a byte time and the 8257 takes
+    // each byte as it comes -- cycle stealing, with the CPU running in between. The program
+    // spins in a delay loop instead of halting, because a halted 8080 under this test's run
+    // loop would stop before the disk has turned.
+    {
+        withRampDisk(26ull * 128 + 76ull * 51 * 128);
+        const uint8_t ADR0 = dmaBase + 0, WCT0 = dmaBase + 1, CMND = dmaBase + 8;
+        TimedRig g("tarbelldd", "real", {
+            0xAF, 0xD3, CMND,                // XRA A ; OUT CMND
+            0x3E, 0x7F, 0xD3, WCT0,          // count low  (128 - 1)
+            0x3E, 0x40, 0xD3, WCT0,          // count high + mode 01 (read)
+            0x3E, 0x00, 0xD3, ADR0,          // address low
+            0x3E, 0x2C, 0xD3, ADR0,          // address high (-> 0x2C00)
+            0x3E, 0x41, 0xD3, CMND,          // enable ch0 + TC-STOP
+            0x3E, 0x00, 0xD3, TRK,           // track 0
+            0x3E, 0x01, 0xD3, SECR,          // sector 1
+            0xDB, CTL,                       // IN FC: wait out the power-on Restore first
+            0x3E, 0x88, 0xD3, CMD,           // Read Sector
+            0x01, 0x00, 0x04,                // LXI B,0400
+            0x0B, 0x78, 0xB1, 0xC2, 0x28, 0x00,  // 28 D: DCX B ; MOV A,B ; ORA C ; JNZ D
+            0x76});                          // HLT
+        const uint64_t t0 = g.m.clock.now();
+        RunResult rr = g.m.debug.run(2000000);
+        CHECK(rr.why == StopReason::Halted, "the CPU runs its delay loop to the HLT");
+        bool landed = true;
+        for (int i = 0; i < 128; ++i)
+            if (g.m.bus.memRead((uint16_t)(0x2C00 + i)) != (uint8_t)i) landed = false;
+        CHECK(landed, "the whole sector was DMA'd into RAM at 0x2C00");
+        CHECK(g.m.bus.memRead(0x2C80) == 0, "...and nothing past it");
+        CHECK((in(*g.fdc, CMD) & 0x05) == 0, "the command completed with no Lost Data");
+        CHECK(g.m.clock.now() - t0 >= 128 * 64, "...and the transfer took 128 byte times");
+    }
+
+    // ---- Port FD waits out a Seek: the DMA CBIOS's completion poll ----
+    //
+    // The DMA build of the tracked CBIOS issues a Seek and then spins `IN FD ; RLC ; JC` before
+    // it reads status -- no DMA armed at all. So FD bit 7 is the FD1791's INTRQ, not the 8257's
+    // terminal count. Under `real` the Seek takes 5 x 10 ms; a FD that said "complete" at once
+    // would hand the CBIOS a status with BUSY still set.
+    for (const char* timing : {"real", "full"}) {
+        withRampDisk(26ull * 128 + 76ull * 51 * 128);
+        TimedRig g("tarbelldd", timing, {
+            0x3E, 0x05, 0xD3, DAT,             // MVI A,5 ; OUT FB  (target track)
+            0x3E, 0x12, 0xD3, CMD,             // MVI A,12 ; OUT F8 (Seek, 10 ms steps)
+            0xDB, EXT, 0x07, 0xDA, 0x08, 0x00, // 08 L: IN FD ; RLC ; JC L
+            0xDB, CMD, 0x32, 0x00, 0x30,       // IN F8 ; STA 3000
+            0x76});                            // HLT
+        const uint64_t t0 = g.m.clock.now();
+        RunResult rr = g.m.debug.run(2000000);
+        const bool real = std::string(timing) == "real";
+        CHECK(rr.why == StopReason::Halted, real ? "timing = real: the FD poll ends at the HLT"
+                                                 : "timing = full: the FD poll ends at the HLT");
+        CHECK((g.m.bus.memRead(0x3000) & 0x01) == 0 && in(*g.fdc, TRK) == 5,
+              "...with the Seek done when FD said so: BUSY clear, on track 5");
+        if (real)
+            CHECK(g.m.clock.now() - t0 >= 5 * 20000, "...after the five 10 ms steps");
     }
 
     // The DD card READS a single-density-sized image too -- the DD controller is a superset,

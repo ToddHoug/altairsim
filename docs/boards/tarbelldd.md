@@ -11,7 +11,7 @@ with `altairsim tarbelldd` (mount a disk).
 
 Read [`tarbell-sd.md`](tarbell-sd.md) first — this card is `TarbellDdBoard : TarbellBoard`, and it
 inherits the whole single-density card: the 8-port block at **F8**, the FD177x register file at
-F8-FB, the wait-synced data transfer, the 32-byte boot PROM that shadows 0000 over PHANTOM\*, the
+F8-FB, the wait port and its `timing` property, the 32-byte boot PROM that shadows 0000 over PHANTOM\*, the
 automatic boot, and the drive table. The double-density card (Tarbell Electronics #2022, 1979-80)
 changes these things, and nothing else.
 
@@ -19,7 +19,7 @@ changes these things, and nothing else.
 |---|---|---|
 | **FDC** | WD **FD1771** (single density, FM) | WD **FD1791** (single *and* double density, FM/MFM) |
 | **`OUT FC`** | function decoder; drive select is the **complement** of D5:D4 (the CBIOS does `CMA`) | plain **bitmap latch**: D3 density (0=SD, 1=DD), D5:D4 binary drive, D6 side |
-| **Port FD** | unused | **DMA-busy** (read, bit 7 = complete) / **extended-address latch** A16-A23 (write) |
+| **Port FD** | unused | **busy** (read, bit 7 = 1 until the FD1791's INTRQ) / **extended-address latch** A16-A23 (write) |
 | **DMA** | none | an **on-card Intel 8257** at a second port block (base **0xE0**), mastering the bus when the CBIOS drives it |
 | **Media** | uniform single density | **mixed density** — SD track 0, DD tracks 1-76 (and it reads plain SD disks, and formats a blank with `DFORMAT`) |
 
@@ -87,31 +87,54 @@ assembled `DMACNTL=TRUE` moves a sector like this:
 The 8257's register block sits at a second decoded window, base **0xE0** by default (the `dmaport`
 board property; SD2DD straps it E0, so it can be omitted). When channel 0 is armed the board pulls
 pHOLD; the run loop (`Debugger::serviceDma`) grants the bus at the next instruction boundary and the
-board's `Mover` steals one byte per grant — the FD1791 is wait-synced, so each grant does one
-`readData`/`writeData` — advancing the 8257's address and count until terminal count, when it drops
-pHOLD. The stolen T-states are charged to the clock, so the CPU genuinely loses the time (the
-unit test in `tests/test_tarbell.cpp` reads the exact theft back out of `clock.now()`).
+board's `Mover` moves one byte per DRQ — one `readData`/`writeData` — advancing the 8257's address
+and count until terminal count, when it drops pHOLD. The stolen T-states are charged to the clock, so
+the CPU genuinely loses the time (the unit test in `tests/test_tarbell.cpp` reads the exact theft back
+out of `clock.now()`).
+
+How the bytes spread out in time is the `timing` property:
+
+- **`timing = full`** (the default): the FD1791 is wait-synced, so DRQ is up again the moment a byte
+  is taken. pHOLD stays high and the whole sector drains in **one grant**, at the instruction boundary
+  right after the `Read`/`Write` command.
+- **`timing = real`**: the chip delivers one byte per byte time (32 µs SD, 16 µs DD). DRQ, and so
+  pHOLD, rises once per byte; each grant moves that byte and gives the bus back. That is cycle
+  stealing, as on the card, and the CPU runs between bytes.
 
 `tests/media/tarbell/TARBELLDD-CPM22-SSDD-48K-DMA.DSK` is such a disk: its CBIOS is `DMACNTL=TRUE`, so
 every post-boot sector read (DIR, warm boot) flows through the 8257. Its **cold boot loader stays
 PIO** — RESET reads SD track 0 the proven way, and the DMA path takes over once CP/M is up.
 `acceptance-tarbelldd-dma` boots it to `A>` and reads a directory through the on-card 8257.
 
-## Port FD, and why it never hangs
+## Port FD
 
-Because the FD1791 is wait-synced, a DMA burst completes at the instruction boundary right after the
-`Read`/`Write` command is issued — *before* the CBIOS reaches its port-FD poll. So port FD stays two
-simple registers: `IN FD` returns **0x00** (bit 7 = 0, "DMA complete") so both the DMA poll and any
-PIO code that checks the flag fall straight through, and `OUT FD` stores the A16-A23 extended-address
-latch (consumed by the DMA `Mover` as the high address bits; 0, hence no effect, in a 64K machine).
+- **`IN FD`**: bit 7 is **1 while the FD1791 command runs** and **0 once INTRQ is up**. The manual
+  says only *"bit 7 = 0 means the DMA transfer is complete"*; it does not say what drives the bit.
+  INTRQ is our reading, and the tracked CBIOSes agree with it. The DMA build polls FD after a **Seek**,
+  with no DMA armed, before it reads status — so the bit must follow the command, not the 8257. The
+  PIO build's Read Address recovery drains ID bytes while bit 7 is set. The 1791 has no BUSY pin, so
+  INTRQ is the one end-of-command line the card could gate here. Reading status resets INTRQ, so FD
+  reads busy again after a status read, until the next command ends — as the pin would. The other
+  bits read 0.
+- **`OUT FD`** stores the A16-A23 extended-address latch, used by the DMA `Mover` as the high address
+  bits (0, hence no effect, in a 64K machine).
+
+Under `timing = full` every command has ended before the CBIOS reaches its poll, so the poll falls
+straight through. Under `real` it waits out the seek or the transfer.
+
+## Double density under `timing = real` needs a 4 MHz CPU
+
+An 8-inch DD disk delivers a byte every **16 µs**: 32 T-states at 2 MHz. The tracked PIO CBIOS's
+read loop takes 56 T-states a byte, so at 2 MHz under `real` the chip sets **Lost Data** and the CBIOS
+prints its error — as the hardware would. Run the PIO build at `clock_hz = 4000000` under `real`. The
+DMA build does not care: the 8257 takes each byte on its own DRQ.
 
 ## Limitations
 
 - **Format-time DMA is not modelled.** The 8257 moves **sectors** (the `Read`/`Write` data path the
   CBIOS uses); `DFORMAT`'s optional DMA-during-`Write Track` is a different path we do not drive, so
   answer **N** to *Use DMA?* when formatting (see above).
-- **Burst, not cycle-steal.** The card holds pHOLD for the whole sector and drains in one grant,
-  which is what the guest's completion poll expects; true interleaved cycle-stealing is a refinement
-  the mechanism already allows (DESIGN.md §4.5) but this board does not use.
-- Everything the #1011 doc lists under *Limitations* applies here too — the wait port never stalls
-  the CPU, `IN base+4` bits 6..0 float, and so on.
+- **Burst under `timing = full`.** The sector drains in one grant; `real` steals one cycle per byte.
+- **Port FD's busy bit is our reading of the card**, not the manual's (see *Port FD*).
+- Everything the #1011 doc lists under *Limitations* applies here too — the wait port stalls only
+  under `timing = real`, `IN base+4` bits 6..0 float, and so on.

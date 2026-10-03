@@ -13,6 +13,8 @@
 // command. No filesystem: MemoryMedia through setMediaResolver.
 
 #include "boards/northstar-mds.h"
+#include "boards/s100-memory.h"
+#include "core/debug.h"
 #include "core/machine.h"
 #include "core/statefile.h"
 #include "host/media.h"
@@ -83,6 +85,34 @@ struct Rig {
     // Run to the next sector pulse of the kind the board is counting now.
     void toPulse(uint64_t per = kSector) { m.clock.advance(per - m.clock.now() % per); }
 };
+
+// `timing = real` (issue #637). A READY hold is charged by the run loop, at the instruction
+// boundary, so these tests run code: RAM at 0000, the 8080 at its PC, `n` copies of an
+// LDA from `addr` -- the PROM's own way into the board -- then HLT.
+void loadLdas(Rig& g, uint16_t addr, int n) {
+    auto* mem = dynamic_cast<MemoryBoard*>(g.m.add("memory", "mem0", g.err));
+    Region r;
+    r.kind = RegionKind::Ram;
+    r.at   = 0x0000;
+    r.size = 0x8000;
+    mem->addRegion(r, g.err);
+    mem->power();
+    uint16_t pc = 0;
+    for (int i = 0; i < n; ++i) {
+        g.m.bus.memWrite(pc++, 0x3A);  // LDA addr
+        g.m.bus.memWrite(pc++, (uint8_t)addr);
+        g.m.bus.memWrite(pc++, (uint8_t)(addr >> 8));
+    }
+    g.m.bus.memWrite(pc, 0x76);  // HLT
+    g.m.cpu()->setPc(0);
+}
+
+// The T-states one instruction took, READY holds included.
+uint64_t step(Rig& g) {
+    const uint64_t t0 = g.m.clock.now();
+    g.m.debug.run(1);
+    return g.m.clock.now() - t0;
+}
 
 // ---- the MDS-A, in the PROM's own names -------------------------------------------------
 constexpr uint16_t CTLDS1 = 0xEB01, CTLWRT = 0xEB04, CTLSTC = 0xEB08, CTLSTS = 0xEB09;
@@ -891,5 +921,57 @@ void test_northstar() {
 
         CHECK(g.rd(CTLCMD | DMRD) == pat((size_t)((35 + 34) * 10 + sec) * 512 + 300),
               "side 2 is still selected, and the read resumes at byte 300");
+    }
+
+    // ---- `timing = real`: a data access holds READY until the byte is under the head ----
+    SECTION("North Star -- timing = real: a read holds READY for each byte's time under the head");
+    {
+        const uint64_t sdByte = 128;  // 64 us
+        Rig g("mdsa");
+        g.mount("drive0", image(kSD));
+        CHECK(g.set("timing", "real"), "timing = real is accepted");
+        sdReady(g);
+        g.toPulse();
+        g.m.clock.advance(kBody);  // the sync character has just gone by
+        loadLdas(g, CTLRD | CTLNOP, 4);
+        CHECK(step(g) == 13 + sdByte, "the first data byte is one byte time after the sync");
+        bool each = true;
+        for (int i = 0; i < 3; ++i) each = each && step(g) == sdByte;
+        CHECK(each, "...and each LDA after it waits one byte time");
+
+        Rig f("mdsa");
+        f.mount("drive0", image(kSD));
+        sdReady(f);
+        f.toPulse();
+        f.m.clock.advance(kBody);
+        loadLdas(f, CTLRD | CTLNOP, 2);
+        CHECK(step(f) == 13 && step(f) == 13, "under timing = full an LDA of the data is 13 T-states");
+    }
+    {
+        const uint64_t ddByte = 64;  // 32 us
+        Rig g("mdsad");
+        g.mount("drive0", image(kDD));
+        g.set("timing", "real");
+        ddReady(g);
+        g.toPulse();
+        g.m.clock.advance(kBody);
+        loadLdas(g, CTLCMD | DMRD, 3);
+        CHECK(step(g) == 13 + ddByte, "MDS-A-D, double density: the first byte is 32 us after the sync");
+        CHECK(step(g) == ddByte && step(g) == ddByte, "...and each next one 32 us after that");
+    }
+
+    SECTION("North Star -- timing = real: a write holds READY for the shift register");
+    {
+        const uint64_t sdByte = 128;
+        Rig g("mdsa");
+        g.mount("drive0", image(kSD));
+        g.set("timing", "real");
+        sdReady(g);
+        g.toPulse();
+        g.rd(CTLWRT);  // in the window: Begin Write
+        loadLdas(g, SDWD | 0x00, 3);
+        CHECK(step(g) == 13 + kWindow + sdByte,
+              "the first byte waits out the window and the zero the board writes itself");
+        CHECK(step(g) == sdByte && step(g) == sdByte, "...and each next byte one byte time");
     }
 }

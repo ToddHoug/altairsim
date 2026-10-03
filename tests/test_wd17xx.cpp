@@ -887,6 +887,76 @@ void test_wd17xx() {
         CHECK(f.drainLog().empty(), "no complaint -- the drive accepted the format");
     }
 
+    // ---- `timing = real`: the READY hold (issue #637) ----
+    //
+    // holdUntilReady() is the access the board's wait-state logic stalls: it returns the
+    // T-states until DRQ or the end of the command. The test then charges them to the clock,
+    // as the run loop does at the instruction boundary, and takes the byte.
+    SECTION("chips/wd17xx: holdUntilReady -- the READY hold for timing = real");
+    {
+        Clock clk;
+        FakeDrive d;
+        Wd1771    f("fdc");
+        f.attach(&d);
+        f.powerOn(clk);
+        d.format(0, 26, 128);
+
+        const uint64_t settle = clk.hz() * 10 / 1000;  // 10 ms head settle at CLK = 2 MHz
+        const uint64_t byte   = clk.tStatesPer(250000 / 8);
+
+        f.writeSectorReg(3);
+        f.writeCommand(0x8C, clk);  // Read Sector, E=1: the 10 ms settle first
+        uint32_t h = f.holdUntilReady(clk);
+        CHECK(h == settle + byte, "the first byte holds READY for the head settle and one byte time");
+        CHECK(f.drq(), "...and DRQ is up at the end of it");
+        clk.advance(h);
+        CHECK(f.readData(clk) == 0xA3, "...and the byte is sector 3's first");
+
+        bool every = true, right = true;
+        for (int i = 1; i < 128; ++i) {
+            h = f.holdUntilReady(clk);
+            if (h != byte) every = false;
+            clk.advance(h);
+            if (f.readData(clk) != 0xA3) right = false;
+        }
+        CHECK(every, "each later byte holds exactly one byte time");
+        CHECK(right, "...and each is the next byte of the sector");
+
+        clk.advance(10);  // the guest spent 10 T-states on its own between two accesses
+        h = f.holdUntilReady(clk);
+        CHECK(h == byte - 10, "time the guest spent itself is not held a second time");
+        clk.advance(h);
+        CHECK(!f.busy() && !f.drq(), "after the last byte the hold ends at the end of the command");
+        CHECK((f.readStatus(clk) & 0x04) == 0, "...with no Lost Data");
+        CHECK(f.holdUntilReady(clk) == 0, "an idle chip holds nothing");
+    }
+    {
+        Clock clk;
+        FakeDrive d;
+        Wd1771    f("fdc");
+        f.attach(&d);
+        f.powerOn(clk);
+        f.writeTrackReg(0);
+        f.writeData(5, clk);
+        f.writeCommand(0x10, clk);  // Seek, no verify, r=0: 6 ms a step on the 1771
+        const uint32_t h = f.holdUntilReady(clk);
+        CHECK(h == 5 * (clk.hz() * 6 / 1000), "a five-track seek holds five step times");
+        CHECK(d.head == 5 && !f.busy(), "...and the seek is done at the end of it");
+    }
+    {
+        Clock clk;
+        FakeDrive d;
+        Wd1771    f("fdc");
+        f.attach(&d);
+        f.powerOn(clk);
+        f.setWaitSynced(true);  // timing = full
+        d.format(0, 26, 128);
+        f.writeSectorReg(1);
+        f.writeCommand(0x8C, clk);
+        CHECK(f.holdUntilReady(clk) == 0, "a wait-synced chip holds nothing");
+        CHECK(f.drq() && f.readData(clk) == 0xA1, "...and the byte is there at once, as before");
+    }
+
     // ---- THE FD1791 -- the same register file, four things different (wd17xx.h) ----
     SECTION("chips/wd17xx: the FD1791 (VersaFloppy II)");
 

@@ -45,7 +45,7 @@ these addresses), plus the RDOS PROM's memory reads.
 | 30 | FD1793 command | FD1793 status |
 | 31 | FD1793 track | FD1793 track |
 | 32 | FD1793 sector | FD1793 sector |
-| 33 | FD1793 data (**never** wait-synced) | FD1793 data (**never** wait-synced) |
+| 33 | FD1793 data (never waits) | FD1793 data (never waits) |
 | 34 | disk control (below) | disk flags (below) |
 | 40 | bank the RDOS ROM out until RESET | — |
 
@@ -85,7 +85,7 @@ it carries. It combines two idioms already in the tree:
   interrupt-address register *are* modeled (RDOS 3.12's disk-read timeout guard arms Timer 1 and
   polls `IN 03`), but interrupt **delivery** to the backplane is deferred.
 - **DMA:** none — an S-100 slave.
-- **Properties:** `bootstrap` (the BOOT/MON strap), `drives` (1–4). One serial unit `tty` plus
+- **Properties:** `bootstrap` (the BOOT/MON strap), `drives` (1–4), `timing` (below). One serial unit `tty` plus
   `drive0..3`; `[[board.drive]]` for `unit`/`mount`/`readonly`.
 
 ### Media geometries
@@ -100,6 +100,18 @@ mounts as a **formattable blank** — every access RNFs until the guest's DFORMA
 
 The **data rate is MAXI × DDEN**, not DDEN alone: only 8″ double density is 500 kbit/s; 8″ SD,
 5¼″ SD and 5¼″ DD are all 250 kbit/s.
+
+### AUTO WAIT and `timing`
+
+With AUTO WAIT (port 34 OUT `D7`) set, an `IN 34` holds the processor until the FD1793 has a byte
+(DRQ) or the command ends (EOJ). Port 33 never waits. How long that takes is the `timing` property:
+
+| `timing` | What it does |
+|---|---|
+| `full` (default) | With AUTO WAIT set, the chip is wait-synced: each byte is ready the moment it is asked for, and the wait costs nothing. With AUTO WAIT clear, the chip is polled on the clock as usual. |
+| `real` | The chip always runs its byte-timed model on the clock — step rate, head settle, one byte per byte time. With AUTO WAIT set, `IN 34` holds READY until DRQ or EOJ, and the hold is charged to the CPU as wait states. The `IN 34 / INI` idiom then reads one byte per byte time, as on the machine. |
+
+The AUTO WAIT timeout (`D1`, about 4 s) never fires under either setting: every command ends.
 
 ### Reset
 

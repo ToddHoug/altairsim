@@ -223,12 +223,19 @@ Both the PROM and Tarbell's drivers test it with `ORA A` and the **sign flag**, 
 > never states a value and no Tarbell code ever reads them. **Do not model them as zero** — that is a
 > value nobody promised, and returning it would let software depend on it.
 
-**It genuinely stalls the CPU, and we do not.** The real card drags XRDY low and holds the processor
-until DRQ or INTRQ (**p.12**; pad E48→E46 on an Altair, **p.25**). The manual's own checkout says so
-out loud: *"Front panel lights 'WO' and 'WAIT' should be on"* (**p.20**) — that is a machine sitting in
-a wait state on the PROM's first instruction. **We buffer whole sectors, so DRQ is always immediately
-ready and the port never stalls.** Same bytes, same order; only the elapsed T-states differ, and no
-software can see it. Recorded under Limitations.
+**It genuinely stalls the CPU.** The real card drags XRDY low and holds the processor until DRQ or
+INTRQ (**p.12**; pad E48→E46 on an Altair, **p.25**). The manual's own checkout says so out loud:
+*"Front panel lights 'WO' and 'WAIT' should be on"* (**p.20**) — that is a machine sitting in a wait
+state on the PROM's first instruction. How long the stall takes is the board's `timing` property:
+
+- **`timing = full`** (the default): the FD1771 is wait-synced. Each byte is ready the moment it is
+  asked for, so the port never stalls and the stall costs no time.
+- **`timing = real`**: the chip runs its byte-timed model on the clock — step rate, head settle, one
+  byte every 32 µs (8-inch SD) — and `IN base+4` holds READY until DRQ or INTRQ. The hold is charged
+  to the CPU as wait states (`Board::holdReady`), so the instruction takes as long as it did on the
+  machine. The data port `base+3` never waits, as on the card.
+
+Same bytes, same order either way; only the elapsed T-states differ.
 
 ## `OUT base+4` — the control port, and it is NOT a bitmap
 
@@ -361,8 +368,9 @@ follows the select latch), **E52→E41** (the second select bit reaches the 1-of
 
 ## Limitations
 
-- **The wait port never stalls the CPU.** Real: XRDY drags the processor to a halt until DRQ/INTRQ.
-  Ours: sectors are buffered, so DRQ is always ready. Same bytes, same order, fewer T-states.
+- **The wait port stalls only under `timing = real`.** With the default `full`, DRQ is always ready
+  and a disk transfer takes fewer T-states than on the machine. Either way, no sector is found later
+  than head settle: the chip models no rotational latency.
 - **`IN base+4` bits 6..0 float** and we return them undefined, because that is what the bus does.
 - **Function `001` (the fast-step back door) moves the head behind the chip's back.** The manual is
   explicit that *"the program must keep track of the number of pulses"* — the FD1771's track register

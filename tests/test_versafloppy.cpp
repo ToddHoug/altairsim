@@ -4,8 +4,11 @@
 // boot cannot see: the wait-synced (PRDY) transfer that moves a whole sector on `IN (67H)`
 // with no DRQ polling, the 63H control latch, and the format probe.
 
+#include "boards/s100-memory.h"
 #include "boards/sd-versafloppy.h"
 #include "core/clock.h"
+#include "core/debug.h"
+#include "core/machine.h"
 #include "host/media.h"
 #include "test.h"
 
@@ -158,6 +161,37 @@ bool allE5(const std::vector<uint8_t>& v, int sectorSize) {
     for (uint8_t x : v) if (x != 0xE5) return false;
     return true;
 }
+
+// `timing = real` (issue #637): a whole machine -- 64K RAM, the board, an 8080 at 4 MHz (the
+// clock the board's Z80 runs at) -- because a READY hold is charged by the run loop, at the
+// instruction boundary, and nowhere else.
+struct TimedRig {
+    Machine           m;
+    VersaFloppyBoard* fdc = nullptr;
+    TimedRig(const char* timing, const std::vector<uint8_t>& code) {
+        std::string err;
+        auto* mem = dynamic_cast<MemoryBoard*>(m.add("memory", "mem0", err));
+        Region r;
+        r.kind = RegionKind::Ram;
+        r.at   = 0x0000;
+        r.size = 0x10000;
+        mem->addRegion(r, err);
+        setProperty(*mem, "fill", "zero", err);
+        fdc = dynamic_cast<VersaFloppyBoard*>(m.add("versafloppy", "fdc0", err));
+        setProperty(*fdc, "timing", timing, err);
+        Board* cpu = m.add("8080", "cpu0", err);
+        setProperty(*cpu, "clock_hz", "4000000", err);
+        m.power();
+        fdc->mount("drive0", "ramp.dsk", false, err);
+        for (size_t i = 0; i < code.size(); ++i) m.bus.memWrite((uint16_t)i, code[i]);
+        m.cpu()->setPc(0);
+    }
+    uint64_t step() {
+        uint64_t t0 = m.clock.now();
+        m.debug.run(1);
+        return m.clock.now() - t0;
+    }
+};
 
 } // namespace
 
@@ -435,5 +469,62 @@ void test_versafloppy() {
         out(b, CMD, 0x88);  // Read Sector on side B of drive 1
         for (int i = 0; i < 128; ++i) in(b, DAT);
         CHECK((in(b, CMD) & 0x10) == 0, "media=8sd-ds (f1, two sides): side B reads, no RNF");
+    }
+
+    // ---- `timing = real`: 67H holds READY while the wait-state circuit is on (issue #637) ----
+    //
+    // The DDBIOS read loop on a real CPU. Under `real` each IN (67H) holds READY until the
+    // FD1791 has the next byte -- 16 us at double density, 64 T-states at 4 MHz.
+    SECTION("boards/sd-versafloppy: timing = real -- 67H holds READY");
+    {
+        // 00 MVI A,~C1 ; OUT 63   drive 0 + DD (D6) + wait enable (D7), negative-true
+        // 04 MVI A,1 ; OUT 66 ; MVI A,88 ; OUT 64 ; LXI H,2000 ; MVI B,0
+        // 11 L: IN 67 ; MOV M,A ; INX H ; DCR B ; JNZ L
+        // 19 HLT
+        auto prog = [](uint8_t ctl) {
+            return std::vector<uint8_t>{
+                0x3E, (uint8_t)~ctl, 0xD3, SEL, 0x3E, 0x01, 0xD3, SECR, 0x3E, 0x88, 0xD3, CMD,
+                0x21, 0x00, 0x20, 0x06, 0x00,
+                0xDB, DAT, 0x77, 0x23, 0x05, 0xC2, 0x11, 0x00,
+                0x76};
+        };
+        const uint64_t byte = 64;  // 16 us at 500 kbit/s, at 4 MHz
+
+        withRampDisk(77ull * 26 * 256);
+        {
+            TimedRig g("real", prog(0xC1));
+            for (int i = 0; i < 5; ++i) g.step();  // MVI OUT MVI OUT MVI
+            uint64_t t = 0;
+            for (int i = 0; i < 4; ++i) t += g.step();  // OUT 64 ; LXI ; MVI B ; IN 67
+            CHECK(t == 10 + byte, "from the Read Sector OUT, the first IN 67H ends one byte time on");
+            t = 0;
+            for (int i = 0; i < 5; ++i) t += g.step();  // MOV INX DCR JNZ IN
+            CHECK(t == byte, "each later pass of the loop takes one byte time");
+        }
+        {
+            TimedRig g("real", prog(0xC1));
+            const uint64_t t0 = g.m.clock.now();
+            RunResult rr = g.m.debug.run(2000000);
+            CHECK(rr.why == StopReason::Halted, "the timed read loop reaches its HLT");
+            bool ramp = true;
+            for (int i = 0; i < 256; ++i)
+                if (g.m.bus.memRead((uint16_t)(0x2000 + i)) != (uint8_t)i) ramp = false;
+            CHECK(ramp, "...with track 0 sector 1 in RAM, in order");
+            CHECK((in(*g.fdc, CMD) & 0x05) == 0, "...the command over, and no Lost Data");
+            CHECK(g.m.clock.now() - t0 >= 256 * byte, "...and it took 256 byte times");
+        }
+        {
+            TimedRig g("real", prog(0x41));  // the wait-state circuit OFF
+            for (int i = 0; i < 8; ++i) g.step();
+            CHECK(g.step() == 10, "with the wait-state circuit off, IN 67H holds nothing");
+        }
+        {
+            TimedRig g("full", prog(0xC1));
+            for (int i = 0; i < 8; ++i) g.step();
+            CHECK(g.step() == 10, "under timing = full, IN 67H is the 8080's 10 T-states");
+            RunResult rr = g.m.debug.run(2000000);
+            CHECK(rr.why == StopReason::Halted && g.m.bus.memRead(0x2005) == 5,
+                  "...and the same loop reads the same sector");
+        }
     }
 }

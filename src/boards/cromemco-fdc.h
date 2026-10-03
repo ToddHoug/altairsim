@@ -195,6 +195,7 @@ protected:
     bool      maxi_     = true;   // MAXI: true = 8", false = 5.25" (port-34 D4)
     long long dataRate_ = 250000; // the media bit rate (MAXI x DDEN -- see writePort34)
     uint8_t   control_  = 0;      // the port-34 OUT latch (Auto-Wait arm is D7)
+    bool      timingReal_ = false;  // `timing = real`: IN 34 holds READY under Auto Wait (#637)
     uint8_t   aux_      = 0xFF;   // the port-04 OUT latch (active-low; idle high = no-op)
 
     // ---- the console UART half (embedded directly, like the SBC's 8251) ----
