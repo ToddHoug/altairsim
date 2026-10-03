@@ -129,7 +129,7 @@ build and pass the suite. The Windows platform layer, once merely written, is fi
 |---|---|---|
 | **docs** — `docs/`, `reference/`, `.claude/`, a top-level `.md`, any `README.md` | Linux | Linux, or nothing if the PR tested the same files |
 | **code** — `src/boards`, `chips`, `cli`, `mcp`, `tests/`, the data the tests read, `tools/` | Linux | Linux, macOS, Windows |
-| **core** — `src/core`, `cpu`, `isa`, `platform`, `host`, `config`, `util`, `main.cpp`, the build, CI, any path not listed | Linux, macOS, Windows | Linux, macOS, Windows |
+| **core** — `src/core`, `cpu`, `isa`, `platform`, `host`, `config`, `util`, `main.cpp`, the build, CI, any path not listed | Linux, macOS, Windows | Linux, macOS, Windows — build only, no tests, if the PR tested the same files |
 
 A `CMakeLists.txt` change that only adds non-core sources, comments and `add_test` blocks — what
 a new board does — counts as code, not core. Run the script against any commit to predict a
@@ -142,6 +142,11 @@ it is where an MSVC- or Clang-only warning in a board appears: minutes after the
 the release. **A red leg on `master` is fixed before the next change merges.** A core change
 builds all three before the merge, because that is where the platforms really differ.
 
+When a core merge changes no files — its tree is the PR head that CI passed — the run on
+`master` builds all three platforms but does not run the tests or upload the binaries. The PR
+run already passed the suite on each platform with those files; the build is kept because it
+saves `master`'s compiler cache.
+
 Each leg uploads the binary it built. To fetch them:
 
 ```sh
@@ -150,7 +155,8 @@ tools/fetch-ci-binaries.sh 42       # ...on PR 42
 ```
 
 It **waits** for the run if it is still going and refuses to download from a red one. A run
-that built only Linux leaves one file; the `master` run after a code merge leaves all three. They
+that built only Linux leaves one file; the `master` run after a code merge leaves all three. A
+build-only run leaves none, and the script tells you to fetch from the PR. They
 land in `./artifacts` (git-ignored, replaced on every fetch) with the executable bit restored,
 since the artifact zip does not carry POSIX modes. Nothing in the build or the tests reads from
 there — these are CI's binaries, kept for running or handing to someone, not a build output of
