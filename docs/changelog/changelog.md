@@ -8,6 +8,13 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+**The package has two scripts that watch a mirror.** `tools/mirror-watch.sh` (macOS and Linux)
+and `tools/mirror-watch.ps1` (Windows) show the console of the machine in a second window while
+an AI assistant controls it through `--mcp --mirror socket:2323`. A script waits for the mirror,
+and connects again after the simulator starts again. Windows had no viewer before, because it
+installs neither `nc` nor `telnet`. The scripts are by trgeuy. `tools/README.pdf` gives the
+commands.
+
 **The mirror text names `nc`.** A new Mac has `nc` but no `telnet`, and `nc localhost PORT` shows
 a mirror correctly. The manual, the `CONNECT` help and `DRIVING-WITH-AI.md` now give `nc` first
 and `telnet` second.

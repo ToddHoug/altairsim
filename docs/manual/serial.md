@@ -480,6 +480,11 @@ altairsim> CONNECT sio0:a console|socket:2323?ro
 A slow watcher never slows the guest. The watcher loses some output, and the guest loses no
 bytes. `SHOW` prints the mirror, and `CONFIG SAVE` writes it.
 
+`nc` and `telnet` stop when the simulator stops, and Windows installs neither. The scripts
+`tools/mirror-watch.sh` and `tools/mirror-watch.ps1` in the package watch a mirror, and connect
+again when the simulator starts again. They only watch. The chapter *The MCP server* describes
+them.
+
 ## An endpoint that `CONNECT` does not understand is an error
 
 If the program cannot read your endpoint, it **refuses, and lists the forms that it accepts**:

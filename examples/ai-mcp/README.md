@@ -48,6 +48,8 @@ that confusion never starts.
 localhost 2323`) in another window while the assistant runs. You see the same console it is
 driving, character by character, and can type onto the line to take the keyboard yourself. `--mirror socket:2323?ro` watches
 without touching it. `DRIVING-WITH-AI.md` explains it under *Watching over its shoulder*.
+On Windows, or to keep one window open while the simulator restarts, use the scripts in the
+package's `tools/` folder: `mirror-watch.sh` or `mirror-watch.ps1`.
 
 The rest of this file is the session that unfolds, so you can follow along or check its work.
 

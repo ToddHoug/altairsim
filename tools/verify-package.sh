@@ -401,6 +401,38 @@ while [ "$rec_i" -lt "$nrec" ]; do
   esac
 done
 
+# THE USER TOOLS. The manual and tools/README.pdf tell a reader to run tools/mirror-watch.sh
+# (or .ps1), so both must be in the archive, with their README and their license. And where the
+# archive carries modes -- a tarball -- the .sh must be executable AND must run: a script that
+# refuses a bad port with its usage line has got as far as bash parsing all of it. Starting a
+# mirror for it to watch is the acceptance suite's job (tests/acceptance/mirror-watch.sh).
+total=$((total + 1))
+_tools_ok=1
+for _f in mirror-watch.sh mirror-watch.ps1 README.pdf LICENSE-mirror-watch.txt; do
+  if [ ! -f "$base/tools/$_f" ]; then
+    echo "verify-package: FAIL -- tools/$_f is not in the package." >&2
+    _tools_ok=0
+  fi
+done
+case $archive in
+  *.tar.gz)
+    if [ "$_tools_ok" -eq 1 ]; then
+      if [ ! -x "$base/tools/mirror-watch.sh" ]; then
+        echo "verify-package: FAIL -- tools/mirror-watch.sh is not executable." >&2
+        _tools_ok=0
+      else
+        _usage=$("$base/tools/mirror-watch.sh" not-a-port 2>&1) && _rc=0 || _rc=$?
+        case "$_rc:$_usage" in
+          1:*'is not a port number'*) ;;
+          *) echo "verify-package: FAIL -- tools/mirror-watch.sh not-a-port gave ($_rc): $_usage" >&2
+             _tools_ok=0 ;;
+        esac
+      fi
+    fi ;;
+esac
+if [ "$_tools_ok" -eq 1 ]; then passed=$((passed + 1)); echo "  PASS tools/ has the mirror-watch scripts"
+else failed=$((failed + 1)); echo "  ---- FAIL tools/ (the mirror-watch scripts)"; fi
+
 echo
 # A claimed test that runs nothing is worse than no test (issue #308's whole point), so an
 # empty extraction is itself a failure -- the extractor or the manual's fence layout changed.

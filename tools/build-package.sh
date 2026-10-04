@@ -20,6 +20,7 @@
 #   examples/debugger/        /
 #   examples/ai-mcp/         /
 #   skills/altairsim/        SKILL.md + the briefing again, for a client that reads skills
+#   tools/                   the mirror-watch scripts, for a person who watches a --mirror
 #
 # ONE ARCHIVE, FOR ONE PLATFORM, BUILT ON THAT PLATFORM. --target names it and picks the
 # format; it does not cross-compile, because nothing here does. See DISTRIBUTION.md 1 and 4.2.
@@ -476,6 +477,39 @@ if [ -n "$missing" ]; then
   for d in $missing; do echo "    $d" >&2; done
   echo "Each one is tracked; restore it with: git checkout -- examples/" >&2
   exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# THE USER TOOLS -- two things the DIR copy can get wrong without a word.
+#
+# THE EXECUTE BIT. cp -R keeps it and so does tar, but a checkout that lost it (a copy through a
+# filesystem with no modes, a core.fileMode=false clone) would ship a script that answers
+# "permission denied" to the first command in its own README. A .zip carries no modes at all,
+# and Windows does not run the .sh, so the check is for the tarballs only.
+#
+# THE README. The DIR loop strips README.md and expects its rendered sibling to ship in its
+# place. docs.yml builds and commits tools/user/README.pdf; a tree without it would ship the
+# scripts with no instructions, and the Windows ones are not guessable.
+# ---------------------------------------------------------------------------
+if [ -d "$pkg/tools" ]; then
+  if [ ! -f "$pkg/tools/README.pdf" ]; then
+    echo "build-package: NOT PACKAGED -- tools/user/README.pdf is missing." >&2
+    echo "CI builds and commits it (docs.yml). Pull master, or run tools/build-docs.sh." >&2
+    exit 1
+  fi
+  case "$target" in
+  windows-*) ;;
+  *)
+    for s in "$pkg"/tools/*.sh; do
+      [ -e "$s" ] || continue
+      if [ ! -x "$s" ]; then
+        echo "build-package: NOT PACKAGED -- tools/user/$(basename "$s") is not executable." >&2
+        echo "Restore it with: chmod +x tools/user/$(basename "$s")" >&2
+        exit 1
+      fi
+    done
+    ;;
+  esac
 fi
 
 # ---------------------------------------------------------------------------

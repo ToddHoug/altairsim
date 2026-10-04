@@ -100,6 +100,23 @@ wildcard:
 $ altairsim examples/cpm/cpm22-buffered.toml --mcp --mirror 'socket:2323?ro'
 ```
 
+### A watcher that connects again
+
+`nc` and `telnet` stop each time the assistant starts the simulator again, and Windows installs
+neither. The package has two scripts in `tools/` that do not have these problems:
+
+- `tools/mirror-watch.sh`, for macOS and Linux. It needs only bash.
+- `tools/mirror-watch.ps1`, for Windows. It needs only PowerShell.
+
+Run one script in a second window. It waits for the mirror, shows its output, and connects
+again after the simulator starts again. With no argument it watches `localhost:2323`. Give a
+port, or a host and a port, to watch a different mirror. `tools/README.pdf` gives the commands,
+and tells you how to let Windows run the script.
+
+The scripts only watch. They do not send the keys that you type. One watcher can connect at a
+time, and the mirror accepts a watcher only while the guest runs. Until then, the script shows
+`Connected` and nothing more.
+
 Without the quotes, the shell tries to find a file called `socket:2323?ro`, and fails before
 `altairsim` sees it. (zsh reports `no matches found`.) One watcher can connect at a time.
 
