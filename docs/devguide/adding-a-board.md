@@ -273,6 +273,7 @@ altairsim> SHOW BOARD lamp
   --------  ------------------------------------------------------------------
   port      the port this card latches. Write-only -- an IN here is not ours
             values: 0x0 .. 0xFF
+            default: 0xFF
   lamps     what the guest last wrote -- the eight LEDs
 ```
 

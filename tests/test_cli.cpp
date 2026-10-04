@@ -1015,6 +1015,11 @@ void test_cli() {
         CHECK(cAt != std::string::npos, "the connect property is listed");
         CHECK(s.find("values:", cAt) == std::string::npos,
               "a free-form string property advertises no values line of its own");
+        // Every settable property shows the value it has when a machine file leaves it out,
+        // in its own radix. The free-form string has no `values:` line but still has a default.
+        CHECK(s.find("default: 0x") != std::string::npos, "a port's default is shown in hex");
+        CHECK(s.find("default: ", cAt) != std::string::npos,
+              "a property with no values line still shows its default");
     }
 
     // -----------------------------------------------------------------------
