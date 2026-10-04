@@ -375,6 +375,59 @@ void test_sol() {
         CHECK(g.sol->tape(2)->pos() == 1, "...and deck 2 stayed where it stopped");
     }
 
+    SECTION("Sol cassette -- a second tape starts at its own first byte");
+    {
+        // Issue #671. The CUTS UART takes the next byte as soon as it has room, so after
+        // a partial load it holds one the guest never read. It came off the OLD tape.
+        withTape("AAAA");
+        Rig         g;
+        std::string err;
+        CHECK(g.sol->mount("tape1", "old.tap", false, err), "MOUNT sol0:tape1");
+        g.out(STAPT, MOTOR1);
+        g.tapeTime();
+        CHECK(g.in(TDATA) == 'A', "part of the first tape is read");
+        g.tapeTime();
+        CHECK((g.in(STAPT) & TDR) != 0, "...and the UART has taken the byte after it");
+
+        withTape("BCD");
+        CHECK(g.sol->mount("tape1", "new.tap", false, err), "a second tape goes in deck 1");
+        g.tapeTime();
+        CHECK(g.in(TDATA) == 'B', "the first byte read is the NEW tape's first byte");
+        g.tapeTime();
+        CHECK(g.in(TDATA) == 'C', "...then its second");
+    }
+    {
+        // ...and an empty deck has nothing to say.
+        withTape("AAAA");
+        Rig         g;
+        std::string err;
+        CHECK(g.sol->mount("tape1", "t.tap", false, err), "MOUNT sol0:tape1");
+        g.out(STAPT, MOTOR1);
+        g.tapeTime();
+        CHECK((g.in(STAPT) & TDR) != 0, "a byte is waiting");
+
+        CHECK(g.sol->unmount("tape1", err), "the tape comes out");
+        g.tapeTime();
+        CHECK((g.in(STAPT) & TDR) == 0, "no data is waiting once the tape is gone");
+    }
+    {
+        // THE OTHER DECK IS NOT TOUCHED. One UART serves both transports, so a tape that
+        // goes into deck 2 while deck 1 is loading must not cost that load a byte.
+        withTape("ABCD");
+        Rig         g;
+        std::string err;
+        CHECK(g.sol->mount("tape1", "one.tap", false, err), "MOUNT sol0:tape1");
+        g.out(STAPT, MOTOR1);
+        g.tapeTime();
+        CHECK(g.in(TDATA) == 'A', "deck 1 is loading");
+        g.tapeTime();
+
+        CHECK(g.sol->mount("tape2", "two.tap", false, err), "a tape goes in deck 2 meanwhile");
+        CHECK(g.in(TDATA) == 'B', "deck 1's next byte is still there");
+        g.tapeTime();
+        CHECK(g.in(TDATA) == 'C', "...and the one after it");
+    }
+
     SECTION("Sol cassette -- RECORD writes through to the host file");
     {
         withTape("");

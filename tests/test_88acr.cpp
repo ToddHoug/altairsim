@@ -225,6 +225,36 @@ void test_88acr() {
               "INVERTED: with a byte waiting, bit 0 reads ZERO");
         CHECK((in(*r.acr, 0x06) & 0x80) == 0, "and bit 7 CLEAR means ready to transmit");
     }
+    {
+        // A SECOND CASSETTE STARTS AT ITS OWN FIRST BYTE (issue #671). The UART takes the
+        // next byte as soon as it has room, so after a partial load it holds one the guest
+        // never read. That byte came off the OLD tape, and MOUNT must not hand it on as
+        // the first byte of the new one -- a bootstrap loader stores it and runs off.
+        withTape("AAAA");
+        Rig r;
+        r.mount("old.tap");
+        uint8_t b = 0;
+        CHECK(r.getByte(b) && b == 'A', "part of the first tape is read");
+        CHECK(r.getByte(b) && b == 'A', "...and the UART has taken the byte after it");
+
+        withTape("BCD");
+        CHECK(r.mount("new.tap"), "a second cassette goes in over the first");
+        CHECK(r.getByte(b) && b == 'B', "the first byte read is the NEW tape's first byte");
+        CHECK(r.getByte(b) && b == 'C', "...then its second");
+    }
+    {
+        // ...and a recorder with NO cassette in it has nothing to say: the byte the UART
+        // took off the tape goes out with the tape.
+        withTape("AAAA");
+        Rig r;
+        r.mount("t.tap");
+        uint8_t b = 0;
+        CHECK(r.getByte(b) && b == 'A', "part of the tape is read");
+
+        std::string err;
+        CHECK(r.acr->unmount("tape", err), "the cassette comes out");
+        CHECK((in(*r.acr, 0x06) & 0x01) != 0, "no data is waiting once the tape is gone");
+    }
 
     // -----------------------------------------------------------------------
     // 3. PLAY. A tape reads back the bytes that were recorded on it, in order, and

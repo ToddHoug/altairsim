@@ -218,6 +218,20 @@ void test_88uio() {
         CHECK(r.getCassetteByte(b) && b == 'A', "the first byte off the tape is the first on it");
         CHECK(r.getCassetteByte(b) && b == 'B', "then the second");
     }
+    {
+        // A second cassette starts at its own first byte (issue #671): the byte the UART
+        // took off the old tape does not survive the MOUNT.
+        withTape("AAAA");
+        Rig r;
+        r.mount("old.tap");
+        uint8_t b = 0;
+        CHECK(r.getCassetteByte(b) && b == 'A', "part of the first tape is read");
+
+        withTape("BCD");
+        CHECK(r.mount("new.tap"), "a second cassette goes in over the first");
+        CHECK(r.getCassetteByte(b) && b == 'B', "the first byte read is the NEW tape's first byte");
+        CHECK(r.getCassetteByte(b) && b == 'C', "...then its second");
+    }
 
     // -----------------------------------------------------------------------
     // 3. MOTOR CONTROL -- the thing the plain 88-ACR does not have.

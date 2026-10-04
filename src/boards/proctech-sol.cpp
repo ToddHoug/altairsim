@@ -383,12 +383,28 @@ bool SolBoard::mount(const std::string& unit, const std::string& path, bool ro,
     d->audio = dynamic_cast<AudioTapeMedia*>(media.get());
 
     tapeUart_.disconnect();  // ...before the old tape goes out from under the stream
+
+    // ...and the byte the CUTS UART pulled off the OLD tape goes with it, exactly as it
+    // does in stageAt(). Left in the receiver, it is the first thing the guest reads off
+    // the new cassette. Unless the OTHER deck is the one turning: then the byte is that
+    // deck's, and a tape going into this one must not cost a load in progress a byte.
+    if (!otherDeckTurning(d)) (void)tapeUart_.readData();
+
     d->tape = std::make_unique<TapeImage>(std::move(media));
     d->path = path;
     d->detected = detected;
     applyEncoding(d);
     retape();
     return true;
+}
+
+// Is the deck that is NOT `d` the one on the UART's line? Then whatever the UART holds
+// came off that tape, not this one. The same choice retape() makes: deck 1 wins when both
+// are turning.
+bool SolBoard::otherDeckTurning(const Deck* d) const {
+    const bool one = deck1_.motor && deck1_.tape;
+    const bool two = deck2_.motor && deck2_.tape;
+    return (d == &deck1_) ? (two && !one) : one;
 }
 
 void SolBoard::applyEncoding(Deck* d) {
@@ -493,6 +509,7 @@ bool SolBoard::unmount(const std::string& unit, std::string& err) {
 
     commitTape(d);
     tapeUart_.disconnect();  // the line dies BEFORE the tape does
+    if (!otherDeckTurning(d)) (void)tapeUart_.readData();  // its byte in flight -- see mount()
     d->tape.reset();
     d->audio = nullptr;  // it died with the tape -- never leave this dangling
     d->path.clear();
