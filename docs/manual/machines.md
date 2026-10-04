@@ -122,6 +122,49 @@ what you want, save it, and edit the file.
 You can also start *from* a built-in machine with `base`, and write only what is different.
 The configuring chapter tells you how.
 
+## How the machine is wired: `SHOW BUS`
+
+`SHOW MACHINE` tells you which boards are in the machine. `SHOW BUS` tells you how they are
+wired together. It shows what answers at each memory address, what answers at each port, and
+what happens on an interrupt. Use it first on a machine that you built. For example, type
+`altairsim basic4k -x 'SHOW BUS'`, or type `SHOW BUS` at the prompt:
+
+```
+altairsim> SHOW BUS
+MEMORY
+  0000-0FFF  mem0     ram
+  unmapped: 1000-FFFF  (floats to FF)
+I/O
+  FF         fp0      IN  --     SENSE switches SA8..SA15 -> D0..D7
+  00         sio0     IN  OUT    COM2502 -- status / interrupt enables
+  01         sio0     IN  OUT    COM2502 -- data
+  06         acr0     IN  OUT    88-SIO B UART -- status / interrupt enables
+  07         acr0     IN  OUT    88-SIO B UART -- data, via the modem, to the cassette
+INTERRUPTS
+  CPU     INTE off         interrupts are DISABLED; nothing will be acknowledged
+  pINT    idle             pin 73
+  88-VI   (none)           nothing watches VI0-VI7; an acknowledged interrupt
+                           floats to FF, which the 8080 executes as RST 7
+```
+
+The output has three sections:
+
+- **`MEMORY`** lists each range and the board that answers it. A range with no board is
+  `unmapped`. This is not an error: a read from it returns `FF`, the same as an empty socket on
+  a real backplane. A boot PROM that the program has switched out is not in the list.
+- **`I/O`** lists each port and the board that answers it. The `IN` and `OUT` columns show which
+  direction the board answers. `--` means that the board does not answer that direction. A port
+  that is not in the list returns `FF` on an `IN`.
+- **`INTERRUPTS`** is the short form of `SHOW BUS IRQ`. It shows whether the processor accepts
+  interrupts, whether the interrupt pin is asserted, and whether an 88-VI board is there to
+  read lines VI0 to VI7. It lists each line that has a board set to it. A board that is set to a
+  line that nothing reads does not give an error. The machine runs, and it never gets the
+  interrupt. A `WARNINGS` part shows you this fault.
+
+To see only one section, or more detail, add a view: `SHOW BUS MAP`, `SHOW BUS IO` or
+`SHOW BUS IRQ`. `SHOW BUS CONTENTION` shows two boards that answer the same address or port. The
+boards chapter has an example. The Monitor document has the full list of views.
+
 ## The empty backplane: `-n`
 
 ```

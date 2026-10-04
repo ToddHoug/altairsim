@@ -280,6 +280,7 @@ decodes, and what is in its units.
 | `SHOW CONSOLE` | which unit has your keyboard, and which transforms apply to its bytes |
 | `SHOW DISPLAY` | the video window: whether the window or the terminal has the keyboard, and whether the CRT look is on |
 | `SHOW JOYSTICKS` | the host game controllers that a D+7A can read (needs an SDL3 build) |
+| `SHOW BUS` | the whole backplane at one time: `MEMORY`, `I/O` and a short `INTERRUPTS` summary |
 | `SHOW BUS MAP` | which board decodes each address, and which addresses float |
 | `SHOW BUS IO` | which board decodes each port |
 | `SHOW BUS IRQ` | which board is strapped to each interrupt line, and which board asserts it |

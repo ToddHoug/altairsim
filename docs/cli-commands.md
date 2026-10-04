@@ -225,7 +225,7 @@ ACR: ambiguous -- acr0 acr1. Name the one you mean.
 
 ## SHOW BUS IRQ is the only window onto the interrupt wiring
 
-`SHOW BUS` has four views: `MAP` (memory), `IO` (ports), `CONTENTION` (who collides), and `IRQ`. The first three describe things you could find out another way — a wrong decode collides, or reads `FF`, and either way *something happens*. **The interrupt wiring is different: it is eight wires and a pin, none of them addressable, and getting it wrong fails in total silence.**
+`SHOW BUS` has four views: `MAP` (memory), `IO` (ports), `CONTENTION` (who collides), and `IRQ`. With no view it prints `MAP`, `IO` and a short `IRQ` together. The first three describe things you could find out another way — a wrong decode collides, or reads `FF`, and either way *something happens*. **The interrupt wiring is different: it is eight wires and a pin, none of them addressable, and getting it wrong fails in total silence.**
 
 ```
 altairsim> SHOW BUS IRQ

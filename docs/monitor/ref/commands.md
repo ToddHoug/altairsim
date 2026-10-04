@@ -1078,23 +1078,26 @@ SHOW <id>|BOARDS|BOARD <type> [UNITS]|MACHINES|MACHINE [<name>]|BUS [MAP|IO|IRQ|
 ```
 
 ```
-SHOW mem0       ; regions and properties
-SHOW BOARDS     ; the board types you can add
-SHOW BOARD sol  ; one type's description and properties (add UNITS for just those)
-SHOW MACHINES   ; the built-in machines you can boot
-SHOW MACHINE    ; the current machine (add a name for a built-in's detail)
-SHOW BUS MAP    ; who decodes what, and what floats
-SHOW BUS IRQ    ; VI0-VI7: who is strapped where, who is pulling, who wins
-SHOW MOUNTS     ; every disk, tape and ROM in the machine, and what is in it
-SHOW PATHS      ; what a path resolves against -- and there is more than one answer
-SHOW CONSOLE    ; which unit holds the keyboard, and its transforms
-SHOW DISPLAY    ; the host video window: keyboard focus, and the CRT look
-SHOW TERMINAL   ; the built-in terminal's transforms (strip7out, cr, bsdel, ...)
-SHOW JOYSTICKS  ; the host game controllers a D+7A can read (SDL builds)
-SHOW SYMBOLS    ; the loaded symbols (SHOW SYMBOLS SIO* filters); load them with SYMBOLS
-SHOW CLOCK      ; emulated time: T-states since POWER, and what they are in seconds
-SHOW ROMS       ; the ROM images built into this binary, and where each came from
-SHOW VERSION    ; which build this is, and the commit it was built from
+SHOW mem0           ; regions and properties
+SHOW BOARDS         ; the board types you can add
+SHOW BOARD sol      ; one type's description and properties (add UNITS for just those)
+SHOW MACHINES       ; the built-in machines you can boot
+SHOW MACHINE        ; the current machine (add a name for a built-in's detail)
+SHOW BUS            ; the whole backplane: MEMORY, I/O, and a short INTERRUPTS summary
+SHOW BUS MAP        ; who decodes what, and what floats
+SHOW BUS IO         ; who decodes each port, and whether it answers IN, OUT or both
+SHOW BUS IRQ        ; VI0-VI7: who is strapped where, who is pulling, who wins
+SHOW BUS CONTENTION ; two boards that answer the same address or port
+SHOW MOUNTS         ; every disk, tape and ROM in the machine, and what is in it
+SHOW PATHS          ; what a path resolves against -- and there is more than one answer
+SHOW CONSOLE        ; which unit holds the keyboard, and its transforms
+SHOW DISPLAY        ; the host video window: keyboard focus, and the CRT look
+SHOW TERMINAL       ; the built-in terminal's transforms (strip7out, cr, bsdel, ...)
+SHOW JOYSTICKS      ; the host game controllers a D+7A can read (SDL builds)
+SHOW SYMBOLS        ; the loaded symbols (SHOW SYMBOLS SIO* filters); load them with SYMBOLS
+SHOW CLOCK          ; emulated time: T-states since POWER, and what they are in seconds
+SHOW ROMS           ; the ROM images built into this binary, and where each came from
+SHOW VERSION        ; which build this is, and the commit it was built from
 ```
 
 
