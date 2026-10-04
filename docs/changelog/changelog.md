@@ -6,6 +6,15 @@ as it is now; this document is the record of how it got there.
 
 ---
 
+## Unreleased
+
+**A single-density disk boots on the SD Systems VersaFloppy.** The DDBIOS PROM finds the type
+of a disk by a read of an address at each density, double density first. The `versafloppy`
+board gave a good address at each density, so the PROM used a single-density disk as a
+double-density disk and stopped with `COLD BOOT ERROR`. Now a read at the wrong density gives
+Record Not Found, as on the hardware, and the PROM finds the correct type. Double-density disks
+boot as before.
+
 ## 1.3.2
 
 **1.3.2 puts a serial line or the mirror of the console on a pseudo-terminal, adds a text log of

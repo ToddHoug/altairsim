@@ -85,6 +85,9 @@ void VersaFloppyBoard::buildChip() {
     if (variant_ == Variant::Vf1) chip_ = std::make_unique<Wd1771>("fdc");
     else                          chip_ = std::make_unique<Wd1791>("fdc");
     chip_->setWaitSynced(!timingReal_);
+    // The DDBIOS finds the disk type by trying each density until Read Address succeeds
+    // (DDB200.ASM, USL1), so the wrong density has to FAIL here as it does on the part.
+    chip_->setDensityChecked(true);
     if (clock_) chip_->powerOn(*clock_);
     selectFromControl();  // re-attach whatever the control latch had selected
 }
@@ -120,9 +123,10 @@ void VersaFloppyBoard::selectFromControl() {
 
     const int side = (control_ >> 4) & 1;
 
-    // VF-II density (D6): double density doubles the media bit rate. Under the wait-synced
-    // model the byte rate is not observable, but the strap is set so it is right for anyone
-    // who ever reads it (and for a future DRQ-polling sibling).
+    // VF-II density (D6): double density doubles the media bit rate. The chip checks it
+    // against the density each track is recorded at (setDensityChecked, buildChip), so a
+    // disk read at the wrong density is Record Not Found. The VF-I has no such bit: its
+    // FD1771 stays at the single-density rate.
     if (variant_ == Variant::Vf2 && chip_)
         chip_->dataRateBits = ((control_ >> 6) & 1) ? 500000 : 250000;
 

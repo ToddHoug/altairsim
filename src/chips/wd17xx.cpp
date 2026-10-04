@@ -535,10 +535,23 @@ void Wd17xx::afterHeadSettle(const Clock& clk) {
                 finish(clk);
                 return;
             }
+            // The next ID field the chip can SEE. One recorded at the other density is not
+            // an ID field to this chip (setDensityChecked()), and a track of nothing else is
+            // the same answer as a track of nothing.
             FloppyDrive::SectorId id{};
             const int n = drive_->sectorCount();
-            drive_->sectorIdAt(raCursor_ % n, id);
-            raCursor_ = (raCursor_ + 1) % n;
+            bool found = false;
+            for (int i = 0; i < n && !found; ++i) {
+                const int at = (raCursor_ + i) % n;
+                if (!drive_->sectorIdAt(at, id) || !legible(id)) continue;
+                raCursor_ = (at + 1) % n;
+                found     = true;
+            }
+            if (!found) {
+                status_ |= kNotFound;
+                finish(clk);
+                return;
+            }
 
             uint8_t f[5] = {0xFE, (uint8_t)id.track, readAddressSide(), (uint8_t)id.sector,
                             (uint8_t)id.lengthCode};
@@ -650,6 +663,7 @@ void Wd17xx::doVerify(const Clock& clk) {
     for (int i = 0; i < n; ++i) {
         FloppyDrive::SectorId id{};
         if (!drive_->sectorIdAt(i, id)) continue;
+        if (!legible(id)) continue;  // the other density: no address mark to find
         if (!id.idCrcOk) {
             crcSeen = true;
             continue;  // a rotten ID field is not an answer; read the next one
@@ -680,6 +694,7 @@ bool Wd17xx::findSector(FloppyDrive::SectorId& out) {
     for (int i = 0; i < n; ++i) {
         FloppyDrive::SectorId id{};
         if (!drive_->sectorIdAt(i, id)) continue;
+        if (!legible(id)) continue;  // the other density: no address mark to find
         if (!id.idCrcOk) {
             status_ |= kCrcError;  // S3: "an error is found in one or more ID fields"
             continue;
