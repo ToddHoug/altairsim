@@ -31,10 +31,11 @@ class Pty {
 public:
     virtual ~Pty() = default;
 
-    // Look at the line: is a program on the slave side? Call it from pump(). On the
-    // edge where a program arrives, the slave is put in RAW mode before anything is
-    // sent -- a freshly opened slave echoes, and an echo of the guest's output would
-    // come back as typed keys.
+    // Look at the line: is a program on the slave side? Call it from pump(). While a
+    // program is there, a slave found in echo or line mode is put in RAW mode -- a
+    // freshly opened slave echoes, and an echo of the guest's output would come back as
+    // typed keys. It is checked on every call, not on the edge where a program arrives:
+    // a close and a reopen between two calls show no edge (issue #687).
     virtual void poll() = 0;
 
     // A program has the slave side open (as of the last poll()).

@@ -548,6 +548,36 @@ void test_mirror() {
         }
     }
 
+    SECTION("mirror pty: a reopen the mirror never saw happen still leaves the line raw");
+    {
+        // Issue #687. A program that closes the slave and opens it again between two
+        // pumps shows the mirror no "nobody there" in between -- and macOS has put the
+        // line back in echo mode. Echo would send the guest's output back as typed keys.
+        const std::string link = ptyLink("altairsim-test-fast-reopen");
+        std::string       err;
+        auto              s  = resolveEndpoint("scripted|pty:" + link, err);
+        auto*             ms = dynamic_cast<MirrorStream*>(s.get());
+        CHECK(ms != nullptr, "the mirror resolves");
+        if (ms) {
+            auto w = std::make_unique<Watcher>(link);
+            CHECK(pumpUntil(*ms, true), "the first watcher is on the line");
+            w.reset();
+            Watcher w2(link);  // no pump between the close and this open
+            ms->pump();
+            CHECK(ms->watching(), "the mirror never saw the line empty");
+            CHECK(!w2.echoes(), "and the reopened line is raw all the same");
+
+            put(*ms, "LINE\n");
+            std::string seen;
+            CHECK(waitFor([&] { ms->pump(); w2.drain(seen); return seen.size() >= 5; }),
+                  "the watcher sees the guest");
+            CHECK(seen == "LINE\n", "unchanged");
+            for (int i = 0; i < 20; ++i) ms->pump();
+            uint8_t b[16];
+            CHECK(ms->read(b, sizeof b) == 0, "and none of it came back as typed keys");
+        }
+    }
+
     SECTION("mirror pty: a watcher that does not read never stalls the guest");
     {
         const std::string link = ptyLink("altairsim-test-slow");

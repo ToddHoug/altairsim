@@ -164,7 +164,9 @@ third class and one branch in the resolver.
 whose slave was never opened reads `EAGAIN`, the same as "open and quiet", so `openPty()` opens
 and closes the slave once; after that `POLLHUP` means nobody is there. (2) macOS puts the slave
 back in cooked mode with echo at every reopen, and an echo would return the guest's output as
-typed keys, so `poll()` sets raw mode through the master on every edge where a program arrives.
+typed keys, so `poll()` reads the settings through the master on every call while a program is
+attached, and sets raw mode when it finds echo or line mode. It does not wait for the edge where
+a program arrives: a close and a reopen between two polls show no edge (issue #687).
 (3) The name is a symbolic link claimed with `symlink()`, which fails if the name exists, so two
 simulators cannot take the same `/tmp/altairsim{n}`. A test reaches the slave side through
 `platform::openPtyPeer`, because the platform lint covers `tests/` too.
