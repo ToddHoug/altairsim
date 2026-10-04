@@ -46,11 +46,12 @@ namespace altair {
 class TeeStream : public ByteStream {
 public:
     // The three layouts, all fed from one internal event stream (see the .cpp). The
-    // resolver maps `fmt=dump|cols|jsonl` onto these.
+    // resolver maps `fmt=dump|cols|jsonl|text` onto these.
     enum class Fmt {
         Dump,   // strictly chronological, one hex row per line -- greppable (default)
         Cols,   // TX left, RX right, time-ordered -- a request/response reads down
         Jsonl,  // one JSON record per transfer -- for diffing and scripting
+        Text,   // NOT a trace: the guest's output bytes as written -- a transcript to tail
     };
     // Timestamp style: elapsed since the first event, host wall-clock, or none.
     enum class Ts { Elapsed, Wall, None };
@@ -84,6 +85,13 @@ public:
     // The data path -- the ONLY bytes logged are real transfers, never empty polls:
     //   write -> log a TX event, then forward.
     //   read  -> forward, then log an RX event of what actually arrived (got > 0).
+    //
+    // fmt=text IS THE EXCEPTION, because it answers a different question: not "what
+    // crossed the wire" but "what did the guest print". It writes the bytes the line
+    // ACCEPTED, raw, and flushes at once so `tail -f` follows the session live. No
+    // header, no timestamps, no pins and no read side -- the guest echoes what it
+    // reads, as on a real terminal, so logging RX too would double every typed key
+    // (the same reasoning as MirrorStream, host/mirror_stream.h).
     size_t read(uint8_t* buf, size_t n) override;
     size_t write(const uint8_t* buf, size_t n) override;
 
@@ -116,6 +124,10 @@ public:
     // The connect banner is the terminal server's, not guest traffic: it goes straight
     // to the wrapped socket and never into the capture.
     void greet(const std::string& owner) override { inner_->greet(owner); }
+
+    // Reach the wrapped line -- for the --mcp console, which is a scripted line under a
+    // `--log` tap and must still be fed and read directly (MirrorStream::inner()'s twin).
+    ByteStream* inner() { return inner_.get(); }
 
 private:
     // --- formatting (all const: they only touch the mutable logging state below, so

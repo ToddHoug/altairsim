@@ -8,6 +8,7 @@
 #include "host/filter.h"
 #include "host/mirror_stream.h"
 #include "host/stream.h"
+#include "host/tee_stream.h"
 #include "mcp/server.h"
 #include "platform/socket.h"
 #include "util/json.h"
@@ -124,10 +125,10 @@ std::map<int, Json> repliesById(const std::string& text) {
 }
 
 std::map<int, Json> runScript(Machine& m, const std::string& script,
-                              const std::string& mirror = "") {
+                              const std::string& mirror = "", const std::string& log = "") {
     std::istringstream in(script);
     std::ostringstream out;
-    runMcp(m, in, out, mirror);
+    runMcp(m, in, out, mirror, log);
 
     return repliesById(out.str());
 }
@@ -160,6 +161,7 @@ MirrorStream* consoleMirror(Machine& m, ScriptedStream** innerOut = nullptr) {
             if (u.kind != UnitKind::Serial) continue;
             ByteStream* s = b->unitStream(u.name);
             if (auto* f = dynamic_cast<FilterStream*>(s)) s = f->inner();  // peel the console filter
+            if (auto* t = dynamic_cast<TeeStream*>(s)) s = t->inner();     // and a --log tap
             if (auto* mir = dynamic_cast<MirrorStream*>(s)) {
                 if (innerOut) *innerOut = dynamic_cast<ScriptedStream*>(mir->inner());
                 return mir;
@@ -652,6 +654,105 @@ void test_mcp() {
             CHECK(up, "the mirror accepts a connection with no send/recv/run in between");
         }
         std::filesystem::remove(toml);
+    }
+
+    SECTION("MCP: --log writes what the guest prints to a text file, across a CONFIG LOAD");
+    {
+        // Issue #666. The log is a text tap on the console the tools drive. console() runs
+        // again after a CONFIG LOAD, so it must open the file to APPEND: a truncating open
+        // there would wipe the transcript of the session so far.
+        const std::string toml = tmpPath("altair_mcp_log.toml");
+        const std::string log  = tmpPath("altair_mcp_session.log");
+        std::error_code   ec;
+        std::filesystem::remove(log, ec);
+
+        auto slurp = [](const std::string& p) {
+            std::ifstream     f(p, std::ios::binary);
+            std::stringstream ss;
+            ss << f.rdbuf();
+            return ss.str();
+        };
+        auto count = [](const std::string& hay, const std::string& needle) {
+            int n = 0;
+            for (size_t at = hay.find(needle); at != std::string::npos;
+                 at        = hay.find(needle, at + needle.size()))
+                ++n;
+            return n;
+        };
+        const char* boot =
+            R"({"name":"run","arguments":{"from":63488,"until":"ALTMON","timeout_ms":4000}})";
+
+        {
+            Machine m;
+            if (!loadAltmon(m)) return;
+            {
+                Monitor            mon(m);
+                std::ostringstream os;
+                mon.exec("CONFIG SAVE " + toml, os);
+                CHECK(!mon.failed(), ("CONFIG SAVE writes the machine: " + os.str()).c_str());
+            }
+
+            std::ostringstream s;
+            int                id = 0;
+            auto req = [&](const char* method, const std::string& params) {
+                s << R"({"jsonrpc":"2.0","id":)" << ++id << R"(,"method":")" << method
+                  << R"(","params":)" << params << "}\n";
+            };
+            req("initialize", "{}");
+            req("tools/call", boot);
+            req("tools/call", R"({"name":"monitor","arguments":{"command":)" +
+                                  Json("CONFIG LOAD " + toml).dump() + "}}");
+            req("tools/call", boot);
+            auto rep = runScript(m, s.str(), "", log);
+
+            const std::string first = rep[2].at("result").at("structuredContent").at("output").str();
+            CHECK(first.find("ALTMON") != std::string::npos,
+                  "the assistant's run still reads the banner through the tap");
+            CHECK(rep.count(3) && !rep[3].at("result").has("isError"), "CONFIG LOAD succeeded");
+            CHECK(rep.count(4) && rep[4].at("result").at("structuredContent").at("output").str().find(
+                                      "ALTMON") != std::string::npos,
+                  "and the reloaded machine boots under the same session");
+
+            const std::string text = slurp(log);
+            CHECK(text.find(first) != std::string::npos,
+                  "the log holds the guest's output exactly as the run returned it");
+            CHECK(count(text, "ALTMON") == 2,
+                  "both boots are in the log: the reload did not wipe what came before");
+
+            bool described = false;
+            for (const auto& b : m.boards())
+                for (const auto& u : b->units())
+                    if (ByteStream* st = b->unitStream(u.name))
+                        if (st->describe() == "scripted|" + log + "?fmt=text&append")
+                            described = true;
+            CHECK(described, "the console unit describes itself as scripted|FILE?fmt=text&append");
+        }  // the machine closes the log here; only then can Windows delete it
+
+        // With --mirror as well: the tap sits on the mirror, and both are there.
+        std::filesystem::remove(log, ec);
+        {
+            Machine m;
+            if (!loadAltmon(m)) return;
+            uint16_t port = freePort();
+            CHECK(port != 0, "the OS hands us a free port");
+            const std::string mirror = "socket:" + std::to_string(port);
+
+            std::ostringstream s;
+            s << R"({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}})" << "\n";
+            s << R"({"jsonrpc":"2.0","id":2,"method":"tools/call","params":)" << boot << "}\n";
+            auto rep = runScript(m, s.str(), mirror, log);
+
+            ScriptedStream* inner = nullptr;
+            MirrorStream*   mir   = consoleMirror(m, &inner);
+            CHECK(mir != nullptr && inner != nullptr,
+                  "under the log tap the console is still a mirror over the scripted line");
+            CHECK(rep[2].at("result").at("structuredContent").at("output").str().find("ALTMON") !=
+                      std::string::npos,
+                  "the assistant reads the banner through tap and mirror");
+            CHECK(slurp(log).find("ALTMON") != std::string::npos, "and the log has it too");
+        }
+        std::filesystem::remove(log, ec);
+        std::filesystem::remove(toml, ec);
     }
 
     SECTION("MCP: the console stand-in carries the machine's [console] transforms");

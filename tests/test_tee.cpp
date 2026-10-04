@@ -3,6 +3,7 @@
 #include "host/endpoint.h"
 #include "host/stream.h"
 #include "host/tee_stream.h"
+#include "platform/socket.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -293,6 +294,137 @@ void test_tee() {
         CHECK(resolveEndpoint("loopback|" + tf.str() + "?nope=1", err) == nullptr,
               "an unknown option is refused");
         CHECK(has(err, "fmt") && has(err, "width") && has(err, "pins"), "and the error lists the options");
+    }
+
+    // ---- fmt=text: a transcript, not a trace ----
+
+    SECTION("tee: fmt=text holds exactly what the guest wrote -- no header, no hex, no RX");
+    {
+        TmpFile     tf("text.log");
+        std::string err;
+        auto        s = resolveEndpoint("scripted|" + tf.str() + "?fmt=text", err);
+        CHECK(s != nullptr, "scripted|FILE?fmt=text resolves");
+        if (s) {
+            CHECK(slurp(tf.str()).empty(), "a transcript starts empty: no header line");
+            put(*s, "A>DIR\r\n");
+            CHECK(slurp(tf.str()) == "A>DIR\r\n",
+                  "the bytes are on disk while the line is still open (tail -f is live)");
+
+            // What the guest READS is not in a transcript: the guest echoes it, or it does not.
+            auto* tee = dynamic_cast<TeeStream*>(s.get());
+            CHECK(tee != nullptr, "the tap is a TeeStream");
+            if (tee) {
+                auto* inner = dynamic_cast<ScriptedStream*>(tee->inner());
+                CHECK(inner != nullptr, "inner() reaches the wrapped scripted line");
+                if (inner) {
+                    inner->feed("secret\r");
+                    CHECK(get(*s, 16) == "secret\r", "the guest still reads its input");
+                    CHECK(inner->out() == "A>DIR\r\n", "and the wrapped line got the output");
+                }
+            }
+            (void)s->status();  // a pin poll writes nothing into a transcript
+            s->pump();
+            put(*s, "ok");
+            CHECK(slurp(tf.str()) == "A>DIR\r\nok", "only guest output, in order, nothing else");
+        }
+        s.reset();  // close before the file is removed (Windows)
+    }
+
+    SECTION("tee: fmt=text is 8-bit clean -- every byte value lands unchanged");
+    {
+        TmpFile     tf("bin.log");
+        std::string err, all;
+        for (int i = 0; i < 256; ++i) all += (char)i;
+        auto s = resolveEndpoint("null|" + tf.str() + "?fmt=text", err);
+        CHECK(s != nullptr, "null|FILE?fmt=text resolves");
+        if (s) {
+            put(*s, all);
+            CHECK(slurp(tf.str()) == all,
+                  "0x00..0xFF byte for byte: LF is not made CR LF, 0x1A does not end the file");
+        }
+        s.reset();
+    }
+
+    SECTION("tee: append adds to the log; without it a capture starts over");
+    {
+        TmpFile     tf("app.log");
+        std::string err;
+        {
+            auto s = resolveEndpoint("null|" + tf.str() + "?fmt=text", err);
+            if (s) put(*s, "one ");
+        }
+        {
+            std::string spec = "null|" + tf.str() + "?fmt=text&append";
+            auto        s    = resolveEndpoint(spec, err);
+            CHECK(s != nullptr, "the append option parses");
+            if (s) {
+                put(*s, "two");
+                CHECK(s->describe() == spec, "and describe() round-trips it");
+            }
+        }
+        CHECK(slurp(tf.str()) == "one two", "append kept what the file held");
+        {
+            auto s = resolveEndpoint("null|" + tf.str() + "?fmt=text", err);
+            if (s) put(*s, "three");
+        }
+        CHECK(slurp(tf.str()) == "three", "the default truncates");
+
+        err.clear();
+        CHECK(resolveEndpoint("null|" + tf.str() + "?append=maybe", err) == nullptr,
+              "a bad append value is refused");
+        CHECK(has(err, "append"), "and the error names the option");
+    }
+
+    SECTION("tee: fmt=text refuses the hex-layout options instead of ignoring them");
+    {
+        TmpFile tf("opts.log");
+        for (const char* opt : {"width=8", "gap=100", "ts=wall", "pins=off"}) {
+            std::string err;
+            CHECK(resolveEndpoint("null|" + tf.str() + "?fmt=text&" + opt, err) == nullptr,
+                  "a layout option with fmt=text is refused");
+            CHECK(has(err, "fmt=text"), "and the error says why");
+            err.clear();
+            // Order must not matter: the option before fmt is refused as well.
+            CHECK(resolveEndpoint("null|" + tf.str() + "?" + opt + "&fmt=text", err) == nullptr,
+                  "whichever side of fmt it is on");
+        }
+        std::string err;
+        CHECK(resolveEndpoint("null|" + tf.str() + "?fmt=bogus", err) == nullptr, "a bad fmt");
+        CHECK(has(err, "text"), "the fmt error names text among the formats");
+    }
+
+    SECTION("tee: a tap goes on a mirror -- the spec splits on the LAST bar");
+    {
+        TmpFile     tf("chain.log");
+        std::string err;
+        // A free port, found the way the mirror suite finds one: bind 0, read it back.
+        uint16_t port = 0;
+        {
+            std::string e;
+            if (auto probe = platform::listenTcp(0, e)) port = probe->port();
+        }
+        CHECK(port != 0, "a free port for the mirror");
+        std::string spec =
+            "scripted|socket:" + std::to_string(port) + "|" + tf.str() + "?fmt=text";
+        auto s = resolveEndpoint(spec, err);
+        CHECK(s != nullptr, "scripted|socket:PORT|FILE?fmt=text resolves");
+        if (s) {
+            CHECK(s->describe() == spec, "describe() reads back in the same order");
+            auto* tee = dynamic_cast<TeeStream*>(s.get());
+            CHECK(tee != nullptr, "the LAST sink, the file, is the outermost decorator");
+            put(*s, "hello");
+            CHECK(slurp(tf.str()) == "hello", "the tap logs what passes to the mirror");
+            if (tee) {
+                CHECK(tee->inner()->describe() == "scripted|socket:" + std::to_string(port),
+                      "and what it wraps is the mirror on the scripted line");
+            }
+        }
+        s.reset();
+
+        auto rebase = [](const std::string& p) { return "/cfg/" + p; };
+        CHECK(rebaseEndpointPaths("in:t.tap|socket:2323|s.log?fmt=text", rebase) ==
+                  "in:/cfg/t.tap|socket:2323|/cfg/s.log?fmt=text",
+              "rebase: the inner path and the log path move, the socket sink does not");
     }
 
     SECTION("tee: an unopenable log path is a failed CONNECT, not a half-built tap");

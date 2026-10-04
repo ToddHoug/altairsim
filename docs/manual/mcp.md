@@ -126,6 +126,38 @@ while the guest is stopped waits on the line. To take over the console, ask the 
 monitor, and it answers what you type at once. The assistant can still use its other tools. The
 guest runs until the assistant uses `stop`.
 
+## Keep a text log: `--log`
+
+Add `--log FILE` with `--mcp`, and the program writes each character that the guest prints to
+`FILE`, at the time that the guest prints it:
+
+```
+$ altairsim examples/cpm/cpm22-buffered.toml --mcp --log session.log
+```
+
+The file holds the text that a terminal shows, with nothing added. It is an ordinary text file,
+and you can use it as you use any other file: show it with `cat` or `type`, open it in an
+editor, search it, or copy it. You can do this while the session continues.
+
+One use is to follow the session in a second window while the guest prints:
+
+```
+$ tail -f session.log
+PS> Get-Content -Wait session.log
+```
+
+The first command is for macOS and Linux, and the second is for PowerShell on Windows.
+
+- The log holds the full session, from the first character.
+- The log only records. To type at the guest, use `--mirror`. You can give `--mirror` and
+  `--log` together.
+- The program empties the file each time that `altairsim` starts.
+- A file name with no folder is in the folder where you start `altairsim`.
+- If the program cannot open the file, it stops with an error before the session starts.
+
+This is the `fmt=text` tap that the monitor has (`<endpoint>|FILE?fmt=text`, see the chapter
+*Serial ports, sockets and telnet*).
+
 ## Start a project of your own
 
 When you want to write your own software, start in the same way as the example. **Make a folder

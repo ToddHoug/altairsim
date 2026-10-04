@@ -24,6 +24,7 @@
 #include "host/imd.h"    // convertImdToRaw -- MOUNT foo.imd converts to a raw sibling .dsk
 #include "host/joystick.h"  // SHOW JOYSTICKS -- the host game controllers
 #include "host/media.h"  // writeHostFile -- MOUNT ... CREATE makes an empty file
+#include "host/tee_stream.h"    // TeeStream -- peeled the same way, under --log
 #include "host/mirror_stream.h" // MirrorStream -- peeled to reach the --mcp scripted console
 #include "host/terminal/stream.h"  // [terminal] transforms + the banner's console label
 #include "isa/isa.h"
@@ -293,8 +294,9 @@ static bool octalMode() {
 //
 // Under --mcp there is no terminal, so the server rebinds the console serial unit to a
 // ScriptedStream (mcp/server.cpp): Console::instance() is no longer wired to the guest.
-// Peel whatever decorates the line -- the console's transform FilterStream (always) and,
-// under --mirror, a MirrorStream (Filter -> [Mirror ->] Scripted) -- to reach the same
+// Peel whatever decorates the line -- the console's transform FilterStream (always), a
+// TeeStream under --log and a MirrorStream under --mirror (Filter -> [Tee ->] [Mirror ->]
+// Scripted) -- to reach the same
 // scripted line the send/run tools feed(). One scripted console per machine, so the first
 // match is the one.
 static ScriptedStream* mcpScriptedConsole(Machine& m) {
@@ -306,6 +308,7 @@ static ScriptedStream* mcpScriptedConsole(Machine& m) {
                 if (auto* ss  = dynamic_cast<ScriptedStream*>(s)) return ss;
                 if (auto* f   = dynamic_cast<FilterStream*>(s))  { s = f->inner();   continue; }
                 if (auto* mir = dynamic_cast<MirrorStream*>(s))  { s = mir->inner(); continue; }
+                if (auto* tee = dynamic_cast<TeeStream*>(s))     { s = tee->inner(); continue; }
                 break;
             }
         }

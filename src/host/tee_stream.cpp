@@ -71,6 +71,7 @@ const char* fmtName(TeeStream::Fmt f) {
         case TeeStream::Fmt::Dump: return "dump";
         case TeeStream::Fmt::Cols: return "cols";
         case TeeStream::Fmt::Jsonl: return "jsonl";
+        case TeeStream::Fmt::Text: return "text";
     }
     return "dump";
 }
@@ -89,6 +90,13 @@ TeeStream::TeeStream(std::unique_ptr<ByteStream> inner, std::string fileSpec, Pa
       hostNs_(hostNs ? std::move(hostNs) : steadyNs), log_(std::move(log)) {
     wallBaseSecs_ = wallBase ? wallBase : std::time(nullptr);
     wallBaseNs_   = hostNs_();
+
+    // A transcript is the guest's bytes and nothing else: no header to scroll past, and
+    // no pin edges or line-rate records breaking into the text.
+    if (p_.fmt == Fmt::Text) {
+        p_.pins = false;
+        return;
+    }
 
     // The header. dump/cols get a `#` comment banner (and cols a column legend);
     // jsonl gets a JSON meta record so the file stays valid JSONL end to end.
@@ -129,12 +137,23 @@ TeeStream::~TeeStream() {
 }
 
 size_t TeeStream::write(const uint8_t* buf, size_t n) {
+    if (p_.fmt == Fmt::Text) {
+        // What the line TOOK, as it took it, on disk now -- see the header.
+        size_t w = inner_->write(buf, n);
+        if (w && log_) {
+            log_.write((const char*)buf, (std::streamsize)w);
+            log_.flush();
+            if (!log_) log_msgs_.push_back("capture: write to log file failed");
+        }
+        return w;
+    }
     if (n) emitData(true, buf, n);
     return inner_->write(buf, n);
 }
 
 size_t TeeStream::read(uint8_t* buf, size_t n) {
     size_t got = inner_->read(buf, n);
+    if (p_.fmt == Fmt::Text) return got;  // a transcript has no read side
     if (got) emitData(false, buf, got);  // only what actually arrived, never an empty poll
     return got;
 }

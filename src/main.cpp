@@ -122,6 +122,8 @@ static void usage(std::ostream& o) {
          "      --mcp          MCP server on stdio (for Claude).\n"
          "      --mirror <sock>  with --mcp: mirror the console to socket:PORT so a person\n"
          "                     can telnet in to watch and take over. Add ?ro for watch-only.\n"
+         "      --log <file>   with --mcp: write what the guest prints to a text file, as\n"
+         "                     it prints it. An ordinary file; starts empty each run.\n"
          "  -v, --version      print the version and exit.\n"
          "  -h, --help         print this help and exit.\n";
 }
@@ -145,6 +147,7 @@ int main(int argc, char** argv) {
     bool mcp = false, none = false, interactive = false;
     std::string script;
     std::string mirror;  // --mirror socket:PORT[?ro]: a live console mirror (issue #381)
+    std::string log;     // --log FILE: a text transcript of the console under --mcp (#666)
     std::vector<std::string> exec;
 
     // Three ways in, and only one of them guesses. `positional` is the friendly
@@ -178,6 +181,9 @@ int main(int argc, char** argv) {
             if (!need(i, "a socket (--mirror socket:2323)")) return 2;
             // Accept a bare port for convenience: `--mirror 2323` is `socket:2323`.
             mirror = a[i].rfind("socket:", 0) == 0 ? a[i] : "socket:" + a[i];
+        } else if (s == "--log") {
+            if (!need(i, "a file (--log session.log)")) return 2;
+            log = a[i];
         } else if (s == "-n" || s == "--none") {
             none = true;
         } else if (s == "-i" || s == "--interactive") {
@@ -216,6 +222,28 @@ int main(int argc, char** argv) {
                      "Without --mcp, mirror a line from the monitor: CONNECT <u> <ep>|"
                      "socket:PORT\n";
         return 2;
+    }
+
+    // --log is the same kind of modifier: a transcript of the console the MCP tools drive.
+    // Without --mcp the console is the operator's own terminal, which already shows it.
+    if (!log.empty() && !mcp) {
+        std::cerr << "--log needs --mcp (it logs the console the MCP tools drive).\n"
+                     "Without --mcp, log a line from the monitor: CONNECT <u> <ep>|"
+                     "FILE?fmt=text\n";
+        return 2;
+    }
+
+    // START THE LOG EMPTY, ONCE, AND REFUSE NOW IF WE CANNOT. The MCP server re-binds its
+    // console after every CONFIG LOAD, so it opens this file to APPEND -- a truncating open
+    // there would wipe the session so far. That leaves the fresh start to be made here. And
+    // a path that cannot be written is said before the session starts: a person who asked
+    // for a log and tails an empty file would otherwise find out an hour in.
+    if (!log.empty()) {
+        std::ofstream probe(log, std::ios::out | std::ios::trunc | std::ios::binary);
+        if (!probe) {
+            std::cerr << "--log: cannot open '" << log << "' for writing\n";
+            return 2;
+        }
     }
 
     // Say which one you meant. Silently preferring one over another is how a
@@ -445,7 +473,7 @@ int main(int argc, char** argv) {
 
     // MCP and the monitor sit on the SAME Machine. Not a wrapper, not a second
     // model of the world -- the same object, reached two ways (DESIGN.md 11).
-    if (mcp) return runMcp(m, std::cin, std::cout, mirror);
+    if (mcp) return runMcp(m, std::cin, std::cout, mirror, log);
 
     Monitor mon(m);
 
