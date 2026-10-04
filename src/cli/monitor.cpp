@@ -78,14 +78,14 @@ bool mayNap(bool idle, bool anyConsole, bool tty, bool paced) {
 
 // SET MACHINE's table: the settings that belong to the machine as a whole rather than to
 // any board in it. Today that is only the name -- what SHOW MACHINE prints, the video
-// window's title, and what CONFIG SAVE writes as `[machine] name`. Before this it was set only by the
+// window's title, and what CONFIG SAVE saves as `[machine] name`. Before this it was set only by the
 // loader, so a machine built at the prompt always saved as whatever it was built from
 // (`none`, `default`). Property rows rather than a hand-rolled check, so SET, its errors
 // and tab completion come out of the same generic path CONSOLE and DISPLAY use.
 static std::vector<Property> machineProperties(Machine& m) {
     Property n;
     n.name = "name";
-    n.help = "The machine's name -- what SHOW MACHINE prints and CONFIG SAVE writes";
+    n.help = "The machine's name -- what SHOW MACHINE prints and CONFIG SAVE saves";
     n.kind = Kind::Str;
     n.get  = [&m] { return Value::ofStr(m.name); };
     n.set  = [&m](const Value& v, std::string& err) {
@@ -93,7 +93,7 @@ static std::vector<Property> machineProperties(Machine& m) {
             err = "machine: name cannot be empty";
             return false;
         }
-        // CONFIG SAVE writes the name raw inside `"..."`, which is how the loader reads a
+        // CONFIG SAVE saves the name raw inside `"..."`, which is how the loader reads a
         // string back -- quotes stripped from the ends, nothing unescaped. A `"` inside it
         // would close the string early, and a `#` after that is read as a comment, so
         // the file would load as a different name or not at all. Refuse it here.
@@ -1096,7 +1096,7 @@ void Monitor::showSchema(const std::vector<Property>& ps, std::ostream& out) {
         out << buf << "\n";
 
         // A SECOND SPELLING GETS ITS OWN LINE, under the real one. It cannot share the key
-        // column: the name there is what CONFIG SAVE writes, and an operator reading a
+        // column: the name there is what CONFIG SAVE saves, and an operator reading a
         // slash-separated pair has no way to tell which of the two that is.
         for (const auto& a : p.aliases) {
             std::snprintf(buf, sizeof buf, "  %-16s (another spelling of %s)", a.c_str(),
@@ -3897,7 +3897,7 @@ bool Monitor::exec(const std::string& line, std::ostream& out) {
             return true;
         }
 
-        // The machine itself -- its name, which is what CONFIG SAVE writes. Neither a
+        // The machine itself -- its name, which is what CONFIG SAVE saves. Neither a
         // board nor the host's, so it gets its own target.
         if (setSel == "MACHINE") {
             std::string err;

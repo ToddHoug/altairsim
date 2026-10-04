@@ -115,7 +115,7 @@ $ altairsim basic4k -x 'CONFIG SAVE mine.toml'
 $ altairsim mine.toml
 ```
 
-`CONFIG SAVE` writes the machine that you are running, and the file loads back as the same
+`CONFIG SAVE` saves the machine that you are running, and the file loads back as the same
 machine. **You can use each built-in machine as an example.** Find the one that is nearest to
 what you want, save it, and edit the file.
 
@@ -221,7 +221,7 @@ Two more commands are often part of a machine. `CONFIG SAVE` saves both of them:
 - **`STARTUP ADD RUN FF00`** records the command that starts the machine. Use `MOUNT` to put a
   disk in a drive.
 - **`SET MACHINE name=<name>`** gives the machine a name. A machine that you build from `-n` is
-  called `none` until you give it a name. `CONFIG SAVE` writes the name. The name is a label:
+  called `none` until you give it a name. `CONFIG SAVE` saves the name. The name is a label:
   the `base =` key of another file finds this machine by the path of its file, not by its name.
 
 ## The path rule: one base directory

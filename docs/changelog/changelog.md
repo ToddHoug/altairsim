@@ -8,6 +8,12 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+**The configuring chapter has the right title, and says how a machine file is loaded.** The
+chapter that was called "The machine file" is now "Configuring a machine", like the other
+chapters call it. It says how a file is loaded (the command line, `CONFIG LOAD`, or `base`), why
+a table has one pair of brackets or two, and what `CONFIG SAVE` leaves out of a file that has
+comments. The docs and the HELP text now say that `CONFIG SAVE` saves the machine.
+
 **The manual describes `SHOW BUS`.** A new section in the machines chapter shows what a bare
 `SHOW BUS` prints, and how to read its `MEMORY`, `I/O` and `INTERRUPTS` parts. The Monitor and
 Debugger documents and the HELP text now say what the bare command does.

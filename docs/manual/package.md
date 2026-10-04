@@ -92,7 +92,7 @@ $ altairsim sol20                 a Processor Technology Sol-20, running SOLOS
 ```
 
 A built-in machine is an ordinary machine file that is stored inside the program. It uses the
-same TOML format that you would write yourself. `CONFIG SAVE mine.toml` writes any running
+same TOML format that you would write yourself. `CONFIG SAVE mine.toml` saves any running
 machine to a file that you can edit.
 
 **Some built-in machines have their software in ROM and need nothing else.** Examples are

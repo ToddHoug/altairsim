@@ -34,6 +34,6 @@ belongs in [`examples/`](../examples/).
 
 ## Read more
 
-- [Machines](../docs/manual/machines.md) and [The machine file](../docs/manual/configuring.md)
+- [Machines](../docs/manual/machines.md) and [Configuring a machine](../docs/manual/configuring.md)
   in the *User Manual*, for the format.
 - [`docs/config.md`](../docs/config.md) for why the format has this shape.

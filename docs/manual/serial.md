@@ -432,7 +432,7 @@ Connect with telnet, and use the guest. `bbs.hex` fills with the conversation:
   a rising edge, and `_` is a falling edge.
 
 The program empties the file each time that you connect. `SHOW` prints the tap, and
-`CONFIG SAVE` writes it, so a machine file can have a line that is always traced.
+`CONFIG SAVE` saves it, so a machine file can have a line that is always traced.
 
 ### The layouts and the options
 
@@ -478,7 +478,7 @@ altairsim> CONNECT sio0:a console|socket:2323?ro
 ```
 
 A slow watcher never slows the guest. The watcher loses some output, and the guest loses no
-bytes. `SHOW` prints the mirror, and `CONFIG SAVE` writes it.
+bytes. `SHOW` prints the mirror, and `CONFIG SAVE` saves it.
 
 `nc` and `telnet` stop when the simulator stops, and Windows installs neither. The scripts
 `tools/mirror-watch.sh` and `tools/mirror-watch.ps1` in the package watch a mirror, and connect

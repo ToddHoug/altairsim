@@ -259,7 +259,7 @@ static const std::vector<CommandDef> kCommands = {
      "  0102  21 13 FF  LXI H,FF13\n"
      "  (needs an interactive or piped session -- with none, use DEPOSIT)"},
     {"CONFIG", true, nullptr, "CONFIG LOAD <f.toml> | CONFIG SAVE <f.toml>",
-     "THE MACHINE, NOT WHAT IT IS DOING. SAVE writes the hardware you are actually\n"
+     "THE MACHINE, NOT WHAT IT IS DOING. SAVE saves the hardware you are actually\n"
      "running -- which boards, in what order, every property SET can write, what each\n"
      "unit is CONNECTed to, what is MOUNTed in each socket, and the startup list. It\n"
      "is the same format you would write by hand, and the same one a built-in is\n"
@@ -341,7 +341,7 @@ static const std::vector<CommandDef> kCommands = {
      "boards, and they take settings the same way. REG is a CPU register (see REGS),\n"
      "and BUS is the backplane's own diagnostics rather than anything plugged into it.\n"
      "MACHINE is the machine itself: its name is what SHOW MACHINE prints, the video\n"
-     "window's title, and what CONFIG SAVE writes.\n"
+     "window's title, and what CONFIG SAVE saves.\n"
      "\n"
      "  SET mem0 fill=zero\n"
      "  SET mem0 phantom=read\n"
@@ -580,7 +580,7 @@ static const std::vector<CommandDef> kCommands = {
      "  SYMBOLS LOAD prog.SYM\n"
      "  SYMBOLS LOAD roms/ALTMON/ALTMON.PRN\n"
      "  SYMBOLS CLEAR"},
-    // STARTUP edits the boot list a config replays on load and CONFIG SAVE writes back as
+    // STARTUP edits the boot list a config replays on load and CONFIG SAVE saves as
     // `startup = [...]`. It is the interactive twin of hand-editing that array; before it,
     // the only interactive action that reached the saved list was SYMBOLS LOAD, which is why
     // it sits beside it. A startup entry is an ORDINARY command line, not a second language
@@ -588,7 +588,7 @@ static const std::vector<CommandDef> kCommands = {
     // loader does not either. STA is free: STEP owns S/ST/STE, and STARTUP is no prefix of it.
     {"STARTUP", true, nullptr, "STARTUP [ADD <command> | REMOVE <n> | CLEAR]",  // STA
      "The machine's boot list -- the commands a config replays on load, and what CONFIG\n"
-     "SAVE writes out as startup = [...]. A bare STARTUP shows the list, numbered; the\n"
+     "SAVE saves as startup = [...]. A bare STARTUP shows the list, numbered; the\n"
      "rest edit it in place, so you can compose a boot sequence at the prompt and save it:\n"
      "\n"
      "  STARTUP                                       ; show the list, numbered\n"

@@ -89,7 +89,7 @@ Type the part before the bracket.
 | `SE[T]` | Change a property of a board, the console, display, a register, the bus, or the machine. | `SET <id>[:<u>]\|CONSOLE\|DISPLAY\|TERMINAL\|MACHINE\|REG\|BUS <k>=<v>` |
 | `SH[OW]` | Display the state of a board, the bus, or the machine. | `SHOW <id>\|BOARDS\|BOARD <type> [UNITS]\|MACHINES\|MACHINE [<name>]\|BUS [MAP\|IO\|IRQ\|CONTENTION]\|ROMS\|MOUNTS\|PATHS\|CONSOLE\|DISPLAY\|SYMBOLS\|CLOCK\|VERSION` |
 | `SN[APSHOT]` | Save the whole machine state to a file. | `SNAPSHOT <file>` |
-| `STA[RTUP]` | Edit the machine's boot list (the commands CONFIG SAVE writes as startup = [...]). | `STARTUP [ADD <command> \| REMOVE <n> \| CLEAR]` |
+| `STA[RTUP]` | Edit the machine's boot list (the commands CONFIG SAVE saves as startup = [...]). | `STARTUP [ADD <command> \| REMOVE <n> \| CLEAR]` |
 | `S[TEP]` | Run one instruction (or n), showing the registers after each. | `STEP [n]` |
 | `SY[MBOLS]` | Load or clear a symbol table for disassembly. | `SYMBOLS LOAD <file> [REPLACE] \| SYMBOLS CLEAR` |
 | `T[RACE]` | Log every bus cycle while the machine runs. | `TRACE ON\|OFF [file] [MASK=IN,OUT,IRQ,DMA,CONTENTION]` |

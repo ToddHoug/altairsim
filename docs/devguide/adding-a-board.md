@@ -402,7 +402,7 @@ came from one, relative to the shell when typed — the rule is in the serial-I/
 config docs). But **store the spec as the user wrote it** for `describe()` and round-trip.
 
 > **Where you LOOK is `resolvePath()`; what you REMEMBER is the path as written.** Save the
-> resolved absolute path instead and `CONFIG SAVE` writes *that* back, so the next load rebases
+> resolved absolute path instead and `CONFIG SAVE` saves *that* back, so the next load rebases
 > an already-absolute path and the one after that rebases again. The hard-sector controller
 > states the rule in a comment at its `openMedia` site; follow it.
 

@@ -507,7 +507,7 @@ removes the breakpoints.
 When you load a second file, `SYMBOLS LOAD` **merges** the two. If a name is in both files, the
 newer value is used, and the command tells you how many names changed. `SYMBOLS LOAD <file>
 REPLACE` removes the old symbols first. A machine file can load a symbol file in its `startup`.
-`CONFIG SAVE` writes the file name back to the machine file, not the symbols. It does the same
+`CONFIG SAVE` saves the file name back to the machine file, not the symbols. It does the same
 for a built-in ROM.
 
 **A name is used before a hex number.** If a symbol looks like a number, such as `FACE` or
