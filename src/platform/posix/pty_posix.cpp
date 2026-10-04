@@ -38,6 +38,14 @@ void makeRaw(int fd) {
     tcsetattr(fd, TCSANOW, &t);
 }
 
+// The slave is in echo or line mode. macOS puts it back there at EVERY open, so this is
+// asked on every poll and not only when a program arrives: a program that closes the
+// slave and opens it again between two polls shows no edge to see.
+bool isCooked(int fd) {
+    termios t{};
+    return tcgetattr(fd, &t) == 0 && (t.c_lflag & (ECHO | ICANON)) != 0;
+}
+
 // A link left by a run that did not clean up: it points at a device that is gone, or
 // at a slave whose master is closed. Opening the target tells us; O_NOCTTY so the probe
 // can never become our controlling terminal.
@@ -75,7 +83,7 @@ public:
     void poll() override {
         pollfd p{fd_, POLLIN, 0};
         bool   now = ::poll(&p, 1, 0) >= 0 && !(p.revents & POLLHUP);
-        if (now && !attached_) makeRaw(fd_);
+        if (now && isCooked(fd_)) makeRaw(fd_);
         attached_ = now;
     }
 
