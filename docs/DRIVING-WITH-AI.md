@@ -76,6 +76,11 @@ Then start `claude` in that directory and give it the job in plain language:
 write a shareable `.mcp.json` into the directory instead — commit that and anyone who opens the
 folder gets the same server. `claude mcp get altairsim` shows how a given one is configured.
 
+**The registered program can be a different one from `altairsim` on your `PATH`.** A server
+registered as `./altairsim` runs the copy in that folder. `altairsim` typed in a shell runs the
+copy on `PATH`, which can be a different release with different tools. To start the same
+program by hand, use the command that `claude mcp get altairsim` shows.
+
 **Claude Desktop, or any other MCP client.** These read a JSON config. Add an `mcpServers` entry
 naming the command and its arguments:
 
@@ -251,6 +256,16 @@ the `25` of `252`; the same four lines in four calls arrive complete. A guest th
 CP/M, takes each character when it is ready and loses none, but the rule is correct for these
 guests too. This is the guest and not the simulator: real hardware at the same baud rate loses
 the same characters.
+
+**Make `until` the full prompt, and text that the guest does not print again.** A `run` stops
+at the first place where `until` occurs in the output. If `until` is only the start of a longer
+prompt, the call returns before the guest prints the remaining characters. For example, the
+assembler of MITS Programming System II has the prompt `*ASM*`, and its editor has the prompt
+`*`. With `until: "*"`, the call returns after the first `*` of `*ASM*`, and the next call gets
+`ASM*`. Use `until: "*ASM*"`. A prompt that the guest prints more than one time gives the same
+problem. A disk that runs `PROFILE.SUB` prints `A>` more than one time, and the guest
+discards input that arrives while the file runs. Match text that only the state you want
+prints.
 
 **`timeout_ms` is a ceiling, not a wait.** The call ends the moment `until` matches or the
 guest reaches a prompt, so a budget larger than the job costs you nothing — a 50-second

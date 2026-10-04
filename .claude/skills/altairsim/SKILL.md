@@ -9,6 +9,10 @@ description: Drive the altairsim MITS Altair 8800 / S-100 simulator over its bui
 as an MCP server, its tools are already in your list; otherwise start it yourself and send
 `initialize`, `notifications/initialized`, then `tools/call`.
 
+A registered server can run a different program from `altairsim` on `PATH`: a server
+registered as `./altairsim` runs the copy in that folder, which can be a different release.
+When you start the program yourself, use the command that `claude mcp get <name>` shows.
+
 **`--mcp` does not run the machine file's `startup`.** The machine is loaded — disks mounted,
 boards fitted — but parked, so nothing blocks before you have control. You boot it.
 
@@ -34,6 +38,9 @@ run {input: "ASM FOO\r", until: "A>", timeout_ms: 120000}
 - **Never pick an `until` that recurs.** A disk that auto-runs `PROFILE.SUB` reprints `A>`
   several times, and input sent while a SUB is running is swallowed. Match something unique
   to the state you want.
+- **Make `until` the full prompt.** `run` stops at the first place `until` occurs. The PS II
+  assembler prompt is `*ASM*`: `until: "*"` returns after its first `*`, before the remaining
+  characters. Use `until: "*ASM*"`.
 - **Control bytes are JSON escapes:** `\u0003` for ^C, `\u001a` for ^Z, `\u001b` for ESC.
   `\x03` is not JSON — it reaches the guest as the three characters `x03`, which is why a
   control byte can seem to vanish while printable text gets through.

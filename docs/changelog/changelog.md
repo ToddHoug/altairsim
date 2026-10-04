@@ -8,6 +8,12 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+**The AI driving guide says how to select an `until`, and which `altairsim` a server runs.**
+A `run` stops at the first place where `until` occurs, so an `until` that is only the start of
+a longer prompt returns too early. `DRIVING-WITH-AI.md` and the `altairsim` skill now say to
+give the full prompt. They also say that a server registered as `./altairsim` can be a
+different release from `altairsim` on `PATH`.
+
 **The AI driving guide says to send one line in each `run`.** A guest that reads the console
 with interrupts and has no type-ahead buffer, such as the MITS Programming System II monitor on
 `ps2int`, loses characters when one `run` sends more than one line. `DRIVING-WITH-AI.md` now
