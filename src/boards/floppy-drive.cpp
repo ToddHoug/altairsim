@@ -81,6 +81,7 @@ bool DiskImageDrive::sectorIdAt(int index, SectorId& out) const {
     out.size       = tf.sectorSize;
     out.lengthCode = lengthCodeFor(tf.sectorSize);
     out.deleted    = false;   // a raw image has no data address marks to be deleted
+    out.doubleDensity = tf.density == Density::DD;  // FM or MFM, as the track was recorded
     out.idCrcOk    = true;    // ...and no rot: images do not carry bad CRCs
     out.dataCrcOk  = true;
     return true;

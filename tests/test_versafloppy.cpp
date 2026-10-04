@@ -471,6 +471,75 @@ void test_versafloppy() {
         CHECK((in(b, CMD) & 0x10) == 0, "media=8sd-ds (f1, two sides): side B reads, no RNF");
     }
 
+    // ---- THE WRONG DENSITY IS RECORD NOT FOUND (issue #691) ----
+    //
+    // The DDBIOS finds the disk type by trying each density until Read Address succeeds
+    // (DDB200.ASM, USL1: DRVSET, IDRD, next type on an error), double density first. A board
+    // that answers at every density makes it keep "double" for a single-density disk, and
+    // the boot dies on sector 27 of a 26-sector track.
+    {
+        // Restore, then Read Address on drive 0 with the density bit as given. The six ID
+        // bytes come off 67H wait-synced, as IDRD's INIR takes them. Returns the status.
+        auto readAddress = [](VersaFloppyBoard& b, bool dd, std::vector<uint8_t>& id) {
+            control(b, dd, /*side=*/0);
+            out(b, CMD, 0x08);  // Restore
+            in(b, CMD);
+            out(b, CMD, 0xC0);  // Read Address
+            id.clear();
+            for (int i = 0; i < 6; ++i) id.push_back(in(b, DAT));
+            return in(b, CMD);
+        };
+        std::string          err;
+        std::vector<uint8_t> id;
+
+        {
+            withRampDisk(77ull * 26 * 128);  // 8" SS-SD, 256,256 bytes
+            Clock c;
+            VersaFloppyBoard b;
+            b.attachClock(&c);
+            b.power();
+            CHECK(b.mount("drive0", "ramp.dsk", false, err), "the single-density image mounts");
+
+            CHECK((readAddress(b, /*dd=*/true, id) & 0x10) != 0,
+                  "a single-density disk at double density: Read Address is Record Not Found");
+            const uint8_t st = readAddress(b, /*dd=*/false, id);
+            CHECK((st & 0x10) == 0 && id[0] == 0 && id[2] == 1 && id[3] == 0,
+                  "...and at single density it returns the ID (track 0, sector 1, 128 bytes)");
+
+            control(b, /*dd=*/true, 0);
+            out(b, TRK, 0);
+            out(b, SECR, 1);
+            out(b, CMD, 0x88);  // Read Sector
+            CHECK((in(b, CMD) & 0x10) != 0, "a sector read at the wrong density is Record Not Found");
+        }
+        {
+            withRampDisk(77ull * 26 * 256);  // 8" DD-256, 512,512 bytes
+            Clock c;
+            VersaFloppyBoard b;
+            b.attachClock(&c);
+            b.power();
+            CHECK(b.mount("drive0", "ramp.dsk", false, err), "the double-density image mounts");
+
+            CHECK((readAddress(b, /*dd=*/false, id) & 0x10) != 0,
+                  "a double-density disk at single density: Read Address is Record Not Found");
+            const uint8_t st = readAddress(b, /*dd=*/true, id);
+            CHECK((st & 0x10) == 0 && id[2] == 1 && id[3] == 1,
+                  "...and at double density it returns the ID (sector 1, 256 bytes)");
+        }
+        {
+            // The VersaFloppy I has an FD1771 and no density bit: it reads FM and nothing else.
+            withRampDisk(77ull * 26 * 256);
+            Clock c;
+            VersaFloppyBoard b;
+            b.attachClock(&c);
+            CHECK(setProperty(b, "variant", "vfi", err), "variant = vfi");
+            b.power();
+            CHECK(b.mount("drive0", "ramp.dsk", false, err), "the double-density image mounts on a vfi");
+            CHECK((readAddress(b, /*dd=*/false, id) & 0x10) != 0,
+                  "the FD1771 cannot read a double-density disk: Record Not Found");
+        }
+    }
+
     // ---- `timing = real`: 67H holds READY while the wait-state circuit is on (issue #637) ----
     //
     // The DDBIOS read loop on a real CPU. Under `real` each IN (67H) holds READY until the

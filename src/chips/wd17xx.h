@@ -143,6 +143,11 @@ public:
         int  lengthCode = 0;
 
         bool deleted    = false;  // the data field carries an F8, not an FB
+
+        // How the ID field is RECORDED: FM (single density) or MFM (double). A chip that
+        // is clocked for the other encoding finds no address mark here at all -- see
+        // Wd17xx::setDensityChecked().
+        bool doubleDensity = false;
         bool idCrcOk    = true;   // a bad ID-field CRC. Real disks have them; images do not
         bool dataCrcOk  = true;   // ...and a bad data-field CRC
     };
@@ -324,6 +329,26 @@ public:
     void setWaitSynced(bool on) { waitSynced_ = on; }
     bool waitSynced() const { return waitSynced_; }
 
+    // ---- THE DENSITY CHECK -- a board strap ----
+    //
+    // A real part clocked for FM cannot see an MFM address mark, and the reverse: Read
+    // Address at the wrong density finds no ID field and ends in Record Not Found. Software
+    // LEANS on that. The SD Systems DDBIOS finds what kind of disk is in the drive by trying
+    // each density in turn and keeping the first one whose Read Address succeeds
+    // (DDB200.ASM, USL1) -- answer at every density and it keeps its first guess, double
+    // density, for a single-density disk, and the boot dies on a sector that is not there.
+    //
+    // ON: an ID field recorded at the other density does not exist for this chip -- Read
+    // Address, the Type II search and the Type I verify all pass it by. The chip's density
+    // is dataRateBits (>= 500 kbit/s is double), the same reading Write Track records a
+    // track with, so what a card formats at a rate it reads back at that rate.
+    //
+    // OFF (the default): the medium decides, and the strap is fidelity only. That is the
+    // Tarbell double-density card and the Cromemco FDCs as they stand (issue #691 turned it
+    // on for the VersaFloppy alone).
+    void setDensityChecked(bool on) { densityChecked_ = on; }
+    bool densityChecked() const { return densityChecked_; }
+
     // THE CPU WAITS ON READY UNTIL DRQ OR THE END OF THE COMMAND. Runs the state machine
     // forward, deadline by deadline, until DRQ is up or the chip is idle, and returns the
     // T-states that took -- the wait states the board holds READY for. Zero if it is
@@ -474,6 +499,11 @@ protected:
     void finish(const Clock& clk);  // INTRQ, drop BUSY, go Idle
 
     bool findSector(FloppyDrive::SectorId& out);  // an ID matching TR + SR
+
+    // Can the chip, clocked as it is, see this ID field at all? See setDensityChecked().
+    bool legible(const FloppyDrive::SectorId& id) const {
+        return !densityChecked_ || id.doubleDensity == (dataRateBits >= 500000);
+    }
     void stepOnce();
     bool ready() const { return drive_ && drive_->ready(); }
 
@@ -496,8 +526,9 @@ protected:
     // Board straps (see setWaitSynced/setSide). Not part of the register file: a strap
     // set by the CARD, so they do not travel in serialize() -- the owning card re-applies
     // them after a restore, just as it does the format straps.
-    bool waitSynced_ = false;
-    int  side_       = 0;
+    bool waitSynced_     = false;
+    bool densityChecked_ = false;
+    int  side_           = 0;
 
     // Where the state machine is going next, and when.
     uint64_t due_ = 0;

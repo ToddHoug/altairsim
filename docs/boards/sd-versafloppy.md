@@ -126,6 +126,7 @@ with 8″ drives at 360 RPM (6 rev/s) and 5.25″ minis at 300 RPM (5 rev/s) —
 |---|---|
 | **63H is negative-true** — the guest writes `~control` | Every drive-select picks the wrong drive → the disk reads NOT READY → **the boot hangs**. This is the bug that cost the first boot attempt. |
 | **PRDY wait-synchronization** — the data port and command completion stall the CPU; there is no DRQ polling | The `INIR`/`OTIR` transfer loop reads a byte before it is ready, or a status read returns BUSY forever. Modeled two ways, by the `timing` property (below). |
+| **The wrong density reads nothing** — an ID field recorded at the other density is Record Not Found | The DDBIOS finds the disk type by trying each density until `Read Address` succeeds (`DDB200.ASM`, `USL1`), double density first. A board that answers at every density makes it keep double density for a single-density disk: the boot sector asks for sector 27 of a 26-sector track and stops with `COLD BOOT ERROR`. The board turns on the chip's density check (`Wd17xx::setDensityChecked`). |
 | **DD-256 uses double-density 256-byte sectors** | The DDBIOS format probe reads the ID field's length code (`IDSV+3`); a wrong sector size fails detection and the boot falls through to the monitor. |
 | **FD1771 vs FD1791 differ** (step rates, side byte, record-type bits) | Wrong step-rate table seeks at the wrong speed; wrong record-type width misreports deleted sectors. Split into `Wd1771`/`Wd1791` parts, not a flag. |
 

@@ -991,6 +991,75 @@ void test_wd17xx() {
         CHECK(got.size() == 6 && got[1] == 1, "179x Read Address byte 2 is the selected side");
     }
 
+    // ---- THE DENSITY CHECK (setDensityChecked) -- issue #691 ----
+    //
+    // A track recorded in MFM has no address mark a chip clocked for FM can see, and the
+    // reverse. With the strap ON, every command that reads an ID field must come back empty
+    // at the wrong density -- the SD Systems DDBIOS finds the disk type from exactly that.
+    {
+        // One Read Address / Read Sector / Seek-with-verify round on track 5, at `rate`,
+        // against a track recorded at `diskDd`. Returns the three status bytes.
+        struct Round { uint8_t readAddress, readSector, verify; size_t idBytes; };
+        auto round = [](bool checked, long long rate, bool diskDd) {
+            Clock clk;
+            FakeDrive d;
+            Wd1791    f("fdc");
+            f.attach(&d);
+            f.powerOn(clk);
+            f.setDensityChecked(checked);
+            f.dataRateBits = rate;
+            d.format(5, 26, 128);
+            for (auto& sec : d.track[5]) sec.id.doubleDensity = diskDd;
+            d.head = 5;
+            f.writeTrackReg(5);
+
+            Round r{};
+            std::vector<uint8_t> got;
+            auto take = [&](Wd17xx& c) { if (c.drq()) got.push_back(c.readData(clk)); };
+
+            f.writeCommand(0xC4, clk);  // Read Address
+            spin(f, clk, take);
+            r.idBytes     = got.size();
+            r.readAddress = f.readStatus(clk);
+
+            f.writeSectorReg(1);
+            f.writeCommand(0x88, clk);  // Read Sector
+            spin(f, clk, take);
+            r.readSector = f.readStatus(clk);
+
+            f.writeData(5, clk);
+            f.writeCommand(0x1C, clk);  // Seek to the track we are on, WITH verify
+            spin(f, clk, idle);
+            r.verify = f.readStatus(clk);
+            return r;
+        };
+
+        const Round off = round(false, 500000, /*diskDd=*/false);
+        CHECK(off.idBytes == 6 && (off.readAddress & 0x10) == 0 && (off.readSector & 0x10) == 0 &&
+                  (off.verify & 0x10) == 0,
+              "strap off: the medium decides, a single-density track reads at the double rate");
+
+        const Round sdAtDd = round(true, 500000, /*diskDd=*/false);
+        CHECK(sdAtDd.idBytes == 0 && (sdAtDd.readAddress & 0x10) != 0,
+              "strap on: Read Address of an FM track at the MFM rate is RECORD NOT FOUND");
+        CHECK((sdAtDd.readSector & 0x10) != 0, "...Read Sector is RECORD NOT FOUND");
+        CHECK((sdAtDd.verify & 0x10) != 0, "...and the verify of a seek is SEEK ERROR");
+
+        const Round ddAtSd = round(true, 250000, /*diskDd=*/true);
+        CHECK(ddAtSd.idBytes == 0 && (ddAtSd.readAddress & 0x10) != 0 &&
+                  (ddAtSd.readSector & 0x10) != 0 && (ddAtSd.verify & 0x10) != 0,
+              "strap on: an MFM track at the FM rate fails the same three ways");
+
+        const Round sdAtSd = round(true, 250000, /*diskDd=*/false);
+        const Round ddAtDd = round(true, 500000, /*diskDd=*/true);
+        CHECK(sdAtSd.idBytes == 6 && (sdAtSd.readAddress & 0x10) == 0 &&
+                  (sdAtSd.readSector & 0x10) == 0 && (sdAtSd.verify & 0x10) == 0,
+              "strap on: an FM track at the FM rate reads");
+        CHECK(ddAtDd.idBytes == 6 && (ddAtDd.readAddress & 0x10) == 0 &&
+                  (ddAtDd.readSector & 0x10) == 0 && (ddAtDd.verify & 0x10) == 0,
+              "strap on: an MFM track at the MFM rate reads");
+    }
+
     // The record type is ONE bit on the 179x (S5), where the 1771 uses two (S6|S5).
     {
         Clock clk;

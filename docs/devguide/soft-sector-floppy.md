@@ -41,6 +41,8 @@ the chip/drive split is spelled out there at length. The essentials for a board 
   it to the drive's `Write Track` calls**, which derive the revolution byte budget and the
   recorded per-track density from it. The board sets it from its control-port density bit. This is
   the **single source of truth for density** — do not duplicate it onto the drive.
+- **The density check is a board strap** (`setDensityChecked`, off by default). On, an ID field
+  recorded at the other density does not exist for the chip. See "The density model" below.
 - **Wait-synced vs DRQ-polling.** A card whose data port stalls the CPU on a wait-state
   generator (PRDY) sets `setWaitSynced(true)`; then every command completes on the register
   access that would have stalled, one byte per access, and Lost Data is correctly unreachable.
@@ -140,11 +142,26 @@ Reads and writes **validate geometry** — the addressed track's recorded sector
 `locate()` — and return **Record Not Found (S4)** on an unformatted / out-of-range track, never
 WRITE FAULT. The **format path records density; it is never density-gated.**
 
-> **Read-side density gate: still deferred.** Reads validate the *geometry* a track records, not
-> its density: a track formatted DD but read with the controller strapped SD still reads back its
-> bytes. Real software never does this (DFORMAT sets the density bit for the whole DD pass, the
-> boot path reads track 0 SD), so the gate buys nothing yet. When a workload needs it, compare
-> `dataRateBits` against `TrackFormat.density` in the read path and RNF on a mismatch.
+### The read-side density check
+
+A real part that is clocked for FM cannot see an MFM address mark, and the reverse. The chip
+models this with a board strap, `Wd17xx::setDensityChecked(bool)`, which is **off by default**.
+
+- **On:** the drive reports how each ID field is recorded (`SectorId::doubleDensity`, from
+  `TrackFormat.density`). The chip passes by an ID field whose density is not its own
+  (`dataRateBits >= 500000` is double, the same reading `Write Track` records a track with).
+  `Read Address` and the Type II search end in **Record Not Found**, and the Type I verify ends
+  in **Seek Error**. A write to a sector at the wrong density is Record Not Found too.
+- **Off:** the medium decides. A track formatted DD reads back with the controller strapped SD.
+
+| Board | Strap | Why |
+|---|---|---|
+| VersaFloppy I / II | **on** | The DDBIOS finds the disk type by trying each density until `Read Address` succeeds (`DDB200.ASM`, `USL1`). Issue #691. |
+| Tarbell DD, Cromemco 16FDC / 64FDC | off | The medium decides, as before. No guest is known to need the check; turning it on there is issue #692. |
+
+The check rests on `dataRateBits`, so it is correct only for a board that sets 500 kbit/s for
+every double-density disk. The Cromemco boards run 5.25″ double density at 250 kbit/s; turning
+the strap on there needs the density given to the chip separately from the rate.
 
 ## Mount vs. format — where geometry starts
 
