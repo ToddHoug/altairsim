@@ -8,6 +8,10 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+**`SHOW BOARD <type>` shows the default of each property.** Under the legal values of each
+setting, it now gives a `default:` line: the value the setting has when a machine file does not
+set it. A setting that only shows live state has no default, and has no line.
+
 **A single-density disk boots on the SD Systems VersaFloppy.** The DDBIOS PROM finds the type
 of a disk by a read of an address at each density, double density first. The `versafloppy`
 board gave a good address at each density, so the PROM used a single-density disk as a

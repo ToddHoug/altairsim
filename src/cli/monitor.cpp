@@ -3569,6 +3569,15 @@ bool Monitor::exec(const std::string& line, std::ostream& out) {
                         if (!legal.empty())
                             for (const auto& ln : wrapText("values: " + legal, width - helpCol))
                                 out << std::string(helpCol, ' ') << ln << "\n";
+                        // The value the property has when a machine file leaves it out. This
+                        // board is a fresh instance, so get() IS the default. Read-only state
+                        // and sub-unit schema rows (no accessor) have none, as in the reference.
+                        if (p.get && p.set) {
+                            std::string def = p.get().text(p.radix);
+                            if (def.empty()) def = "(empty)";
+                            for (const auto& ln : wrapText("default: " + def, width - helpCol))
+                                out << std::string(helpCol, ' ') << ln << "\n";
+                        }
                     }
                 };
 
