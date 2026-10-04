@@ -38,6 +38,7 @@
 // socket: right side selects the mirror over the tee). Same contract as the tee.
 
 #include "host/stream.h"
+#include "platform/pty.h"
 #include "platform/socket.h"
 
 #include <cstdint>
@@ -46,6 +47,58 @@
 #include <vector>
 
 namespace altair {
+
+// THE SINK -- where the watcher is. A TCP listener was the first one; a pseudo-terminal
+// is the second (issue #683). The mirror's rules (drop with nobody there, bounded
+// queue, the inject path, `ro`) do not depend on which, so they stay in MirrorStream
+// and the sink is only the wire: is somebody there, and move bytes.
+class MirrorSink {
+public:
+    virtual ~MirrorSink() = default;
+
+    // Do the host I/O: answer a caller, finish a handshake, notice a hang-up.
+    virtual void poll() = 0;
+    // A watcher is on the wire and can be sent to.
+    virtual bool attached() const = 0;
+    virtual size_t read(uint8_t* buf, size_t n) = 0;
+    // What it TOOK -- less than n on backpressure, which never reaches the guest.
+    virtual size_t write(const uint8_t* buf, size_t n) = 0;
+    // Where a person finds the sink, when the operator's own text does not say (a
+    // pseudo-terminal's name is chosen at run time). Empty when there is nothing to add.
+    virtual std::string note() const { return {}; }
+};
+
+// The TCP sink: one watcher at a time; a second caller waits on the listener
+// (host/tcp.cpp's rule). The listener stays up across watchers.
+class SocketMirrorSink : public MirrorSink {
+public:
+    explicit SocketMirrorSink(std::unique_ptr<platform::TcpListener> listener)
+        : listener_(std::move(listener)) {}
+    void   poll() override;
+    bool   attached() const override { return conn_ && conn_->established() && !conn_->closed(); }
+    size_t read(uint8_t* buf, size_t n) override { return attached() ? conn_->read(buf, n) : 0; }
+    size_t write(const uint8_t* buf, size_t n) override {
+        return attached() ? conn_->write(buf, n) : 0;
+    }
+
+private:
+    std::unique_ptr<platform::TcpListener> listener_;
+    std::unique_ptr<platform::TcpConn>     conn_;
+};
+
+// The pseudo-terminal sink: the watcher is whatever program has the slave side open.
+class PtyMirrorSink : public MirrorSink {
+public:
+    explicit PtyMirrorSink(std::unique_ptr<platform::Pty> pty) : pty_(std::move(pty)) {}
+    void        poll() override { pty_->poll(); }
+    bool        attached() const override { return pty_->attached(); }
+    size_t      read(uint8_t* buf, size_t n) override { return pty_->read(buf, n); }
+    size_t      write(const uint8_t* buf, size_t n) override { return pty_->write(buf, n); }
+    std::string note() const override { return pty_->link() + " (" + pty_->device() + ")"; }
+
+private:
+    std::unique_ptr<platform::Pty> pty_;
+};
 
 class MirrorStream : public ByteStream {
 public:
@@ -59,6 +112,10 @@ public:
                  std::string                              sinkSpec,
                  std::unique_ptr<platform::TcpListener>   listener,
                  bool                                     readOnly);
+
+    // The same, over any sink (a pseudo-terminal: `inner|pty[:LINK]`).
+    MirrorStream(std::unique_ptr<ByteStream> inner, std::string sinkSpec,
+                 std::unique_ptr<MirrorSink> sink, bool readOnly);
 
     // The mirror is `inner|socket:PORT[?ro]`, so SHOW / CONFIG SAVE round-trip it.
     std::string describe() const override { return inner_->describe() + "|" + sinkSpec_; }
@@ -101,7 +158,19 @@ public:
         return inner_->setParams(p, err);
     }
 
-    std::vector<std::string> drainLog() override { return inner_->drainLog(); }
+    // The inner's operator messages -- and, once, where the watcher finds the sink.
+    std::vector<std::string> drainLog() override;
+
+    // Where a person finds the sink (see MirrorSink::note()); "" for a socket.
+    std::string sinkNote() const { return sink_->note(); }
+
+    // The same, but only the FIRST time it is asked (by this or by drainLog()), so the
+    // operator is told once whichever path gets there first. "" after that.
+    std::string takeNote() {
+        if (noteSaid_) return {};
+        noteSaid_ = true;
+        return sink_->note();
+    }
     void greet(const std::string& owner) override { inner_->greet(owner); }
 
     // Is a watcher on the line -- accepted by pump() and through its handshake? The one
@@ -111,7 +180,7 @@ public:
     // it the mirror has no session and guest output goes nowhere (queueToClient). So a
     // caller that wants the watcher to see what comes next waits on THIS, not on its
     // own end reporting connected.
-    bool watching() const { return conn_ && conn_->established() && !conn_->closed(); }
+    bool watching() const { return sink_->attached(); }
 
     // For the --mcp attachment (Phase 2): reach the wrapped line so the MCP server can
     // feed()/out() an inner ScriptedStream directly while the guest talks to the mirror.
@@ -123,13 +192,14 @@ private:
     // host/tcp.cpp, output with nobody on the line goes nowhere -- a watcher who
     // connects later must not open to an hour-old faceful of text).
     void queueToClient(const uint8_t* buf, size_t n);
-    void sendToClient();  // push txQueue_ -> conn_, stopping on backpressure
+    void sendToClient();  // push txQueue_ -> the sink, stopping on backpressure
 
     std::unique_ptr<ByteStream>            inner_;
     std::string                            sinkSpec_;
-    std::unique_ptr<platform::TcpListener> listener_;
-    std::unique_ptr<platform::TcpConn>     conn_;  // at most one watcher, one wire
+    std::unique_ptr<MirrorSink>            sink_;  // at most one watcher, one wire
     bool                                   readOnly_;
+    bool                                   wasWatching_ = false;
+    bool                                   noteSaid_    = false;
 
     // Guest output waiting for the watcher (drop-oldest past the cap), and watcher
     // keystrokes waiting for the guest (a bounded take-over channel).

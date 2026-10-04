@@ -8,6 +8,16 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+**`--mirror pty` puts the mirror of the console on a pseudo-terminal, on macOS and Linux.**
+With `--mcp --mirror pty`, the program prints a name, `/tmp/altairsim0` for the first mirror.
+Open that name with a terminal program, for example `screen /tmp/altairsim0`, to watch the
+session that the AI assistant controls and to type on it. A terminal program sends each key
+when you press it and does not print it a second time, and there is no port number to select.
+`--mirror pty:PATH` selects the name. In the monitor and in a machine file, the same mirror is
+`<endpoint>|pty`. Windows has no pseudo-terminal, so `--mirror socket:PORT` is the mirror there.
+A mirror now also sends the end of a long listing to the watcher immediately, and does not wait
+for the next command from the assistant.
+
 **`--log FILE` keeps a text log of the console while an AI assistant controls the machine.**
 With `--mcp --log session.log`, the program writes each character that the guest prints to the
 file, at the time that the guest prints it. The log is an ordinary text file that holds the full

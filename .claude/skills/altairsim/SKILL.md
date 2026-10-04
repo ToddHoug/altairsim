@@ -61,7 +61,20 @@ still works meanwhile; `recv` collects the output, `status` says `running` or wh
 **For a person who wants to watch**, start the server with `--log FILE`: it writes what the
 guest prints to `FILE` as plain text. It is an ordinary file — they can `cat` it, open it, or
 follow it live, for example with `tail -f FILE` (PowerShell: `Get-Content -Wait FILE`). It is
-watch-only; `--mirror socket:PORT` is for a person who must type.
+watch-only; `--mirror` is for a person who must type.
+
+**For a person who wants to type**, start the server with `--mirror`. Two sinks:
+
+- `--mirror socket:PORT` — every platform. The person runs `nc localhost PORT` (or `telnet`).
+- `--mirror pty` — macOS and Linux only. The simulator prints
+  `altairsim: --mirror: open /tmp/altairsim0 (/dev/ttys004)` on stderr; the person opens that
+  name with a terminal program, for example `screen /tmp/altairsim0`. A terminal program sends
+  each key as it is typed and does not echo it, so prefer this sink where it exists.
+  `--mirror pty:PATH` picks the name. Windows refuses it (exit 2): use `socket:PORT` there.
+
+`?ro` makes either sink watch-only; quote it (`--mirror 'pty?ro'`). Tell the person the name or
+the port — they cannot see the server's stderr. Their keys reach the guest only while it runs,
+so `start` the guest before you hand the console over.
 
 ## Do not hand-roll a pty
 

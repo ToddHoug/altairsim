@@ -85,6 +85,9 @@ std::string endpointHelp(bool all) {
     // peers of them.
     parts.emplace_back("<endpoint>|FILE");
     parts.emplace_back("<endpoint>|socket:PORT");
+    // The pseudo-terminal mirror only where the host has pseudo-terminals (not Windows);
+    // the docs generator lists it regardless, like `printer:` above.
+    if (all || platform::havePty()) parts.emplace_back("<endpoint>|pty[:LINK]");
 
     // Wrap the grammar so it does not run off the page -- the full list is one long line
     // that landed in the CONNECT help, the "no endpoint" error and the generated reference
@@ -125,7 +128,13 @@ std::string rebaseEndpointPaths(const std::string&                              
         }
         // A `socket:` right side is a MIRROR sink, not a path -- rebasing it against the
         // config dir would corrupt the port spec. Only a FILE sink (the tee) is a path.
-        if (!path.empty() && path.rfind("socket:", 0) != 0) path = rebase(path);
+        // A `pty` right side is a mirror sink too; only the link after `pty:` is a path.
+        if (path == "pty") {
+        } else if (path.rfind("pty:", 0) == 0) {
+            if (path.size() > 4) path = "pty:" + rebase(path.substr(4));
+        } else if (!path.empty() && path.rfind("socket:", 0) != 0) {
+            path = rebase(path);
+        }
         return rebaseEndpointPaths(inner, rebase) + "|" + path + opts;
     }
 
@@ -301,17 +310,29 @@ std::unique_ptr<ByteStream> resolveEndpoint(const std::string& spec, std::string
         // Everything up to here -- the split, the `?query` -- is shared; only the sink
         // differs. The mirror LISTENS (the watcher telnets in), so the right side is a
         // bare `socket:PORT`; a `?ro` option makes it read-only (watch, no take-over).
-        if (path.rfind("socket:", 0) == 0) {
-            std::string rest = path.substr(7);
-            if (rest.find(':') != std::string::npos) {
-                err = "mirror listens for a watcher: use ENDPOINT|socket:PORT (a bare port), "
-                      "got '" + path + "'";
-                return nullptr;
-            }
-            uint16_t port = 0;
-            if (!parsePort(rest, port)) {
-                err = "'" + rest + "' is not a TCP port number (1..65535)";
-                return nullptr;
+        // A `pty` or `pty:LINK` right side is the same mirror over a pseudo-terminal
+        // (issue #683): the watcher opens the link with a terminal program.
+        const bool ptySink = path == "pty" || path.rfind("pty:", 0) == 0;
+        if (path.rfind("socket:", 0) == 0 || ptySink) {
+            uint16_t    port = 0;
+            std::string link;  // "" = the first free /tmp/altairsim{n}
+            if (ptySink) {
+                link = path.size() > 4 ? path.substr(4) : "";
+                if (path.size() == 4) {
+                    err = "mirror: pty: wants a path for the link (or use a bare 'pty')";
+                    return nullptr;
+                }
+            } else {
+                std::string rest = path.substr(7);
+                if (rest.find(':') != std::string::npos) {
+                    err = "mirror listens for a watcher: use ENDPOINT|socket:PORT (a bare "
+                          "port), got '" + path + "'";
+                    return nullptr;
+                }
+                if (!parsePort(rest, port)) {
+                    err = "'" + rest + "' is not a TCP port number (1..65535)";
+                    return nullptr;
+                }
             }
 
             // The mirror's only option is `ro` (read-only). A bare key is =true, the same
@@ -335,8 +356,8 @@ std::unique_ptr<ByteStream> resolveEndpoint(const std::string& spec, std::string
                         readOnly = v.b();
                     } else {
                         err = "mirror: unknown option '" + key +
-                              "'. The only option is ro (read-only) -- the port comes "
-                              "before '?'";
+                              "'. The only option is ro (read-only) -- the port or "
+                              "the link comes before '?'";
                         return nullptr;
                     }
                 }
@@ -351,6 +372,13 @@ std::unique_ptr<ByteStream> resolveEndpoint(const std::string& spec, std::string
             // re-selects this branch on reload).
             auto innerStream = resolveEndpoint(inner, err);
             if (!innerStream) return nullptr;
+            if (ptySink) {
+                auto pty = platform::openPty(link, err);
+                if (!pty) return nullptr;
+                return std::make_unique<MirrorStream>(
+                    std::move(innerStream), file,
+                    std::make_unique<PtyMirrorSink>(std::move(pty)), readOnly);
+            }
             auto listener = platform::listenTcp(port, err);
             if (!listener) return nullptr;
             return std::make_unique<MirrorStream>(std::move(innerStream), file,

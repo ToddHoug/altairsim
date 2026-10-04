@@ -576,8 +576,10 @@ void cheatsheet(const std::string& dir) {
          "  -x, --exec <cmd>   run one monitor command (repeatable), then exit.\n"
          "  -i, --interactive  after --script/--exec, stay in the monitor.\n"
          "      --mcp          MCP server on stdio.\n"
-         "      --mirror <sock>  with --mcp: mirror the console to socket:PORT so a person\n"
-         "                     can telnet in to watch and take over. Add ?ro for watch-only.\n"
+         "      --mirror <sink>  with --mcp: mirror the console so a person can watch and\n"
+         "                     take over. socket:PORT (telnet in), or on macOS and Linux\n"
+         "                     pty or pty:LINK (open the link with a terminal program).\n"
+         "                     Add ?ro for watch-only.\n"
          "      --log <file>   with --mcp: write what the guest prints to a text file, as\n"
          "                     it prints it. An ordinary file; starts empty each run.\n"
          "  -v, --version      print the version and exit.\n"
@@ -690,7 +692,9 @@ void cheatsheet(const std::string& dir) {
          "| `<endpoint>\\|FILE` | a tap: append `\\|FILE` to any endpoint to also log the line. "
          "`?fmt=text` = plain text, only what the guest prints. |\n"
          "| `<endpoint>\\|socket:PORT` | a live mirror: `telnet` in to watch and take over. "
-         "`?ro` = watch-only. |\n\n";
+         "`?ro` = watch-only. |\n"
+         "| `<endpoint>\\|pty[:LINK]` | the same mirror on a pseudo-terminal (macOS and "
+         "Linux): open `/tmp/altairsim0`, or `LINK`, with a terminal program. |\n\n";
 }
 
 }  // namespace

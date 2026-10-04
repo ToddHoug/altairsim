@@ -8,10 +8,26 @@ MirrorStream::MirrorStream(std::unique_ptr<ByteStream>            inner,
                            std::string                            sinkSpec,
                            std::unique_ptr<platform::TcpListener> listener,
                            bool                                   readOnly)
+    : MirrorStream(std::move(inner), std::move(sinkSpec),
+                   std::make_unique<SocketMirrorSink>(std::move(listener)), readOnly) {}
+
+MirrorStream::MirrorStream(std::unique_ptr<ByteStream> inner, std::string sinkSpec,
+                           std::unique_ptr<MirrorSink> sink, bool readOnly)
     : inner_(std::move(inner)),
       sinkSpec_(std::move(sinkSpec)),
-      listener_(std::move(listener)),
+      sink_(std::move(sink)),
       readOnly_(readOnly) {}
+
+// Answer a waiting watcher. One at a time -- a serial line is one wire; a second caller
+// waits on the listener (host/tcp.cpp's rule). accept() is non-blocking and null when
+// nobody is calling. A watcher who hung up is dropped; the listener stays up for the next.
+void SocketMirrorSink::poll() {
+    if (conn_ && conn_->closed()) conn_.reset();
+    if (!conn_) {
+        if (auto c = listener_->accept()) conn_ = std::move(c);
+    }
+    if (conn_) conn_->poll();
+}
 
 // INJECTED BYTES FIRST. A human taking over is driving the line; their keystrokes lead
 // the inner's own input (under --mcp, the AI's scripted feed). One source per call is
@@ -40,15 +56,15 @@ size_t MirrorStream::write(const uint8_t* buf, size_t n) {
 // watcher who connects later must not receive output the guest emitted before they
 // arrived, and a watcher who falls behind loses scrollback, not the guest a byte.
 void MirrorStream::queueToClient(const uint8_t* buf, size_t n) {
-    if (!conn_ || conn_->closed() || n == 0) return;
+    if (!sink_->attached() || n == 0) return;
     txQueue_.append((const char*)buf, n);
     if (txQueue_.size() > kTxCap) txQueue_.erase(0, txQueue_.size() - kTxCap);
 }
 
 void MirrorStream::sendToClient() {
-    if (!conn_ || !conn_->established()) return;
+    if (!sink_->attached()) return;
     while (!txQueue_.empty()) {
-        size_t w = conn_->write((const uint8_t*)txQueue_.data(), txQueue_.size());
+        size_t w = sink_->write((const uint8_t*)txQueue_.data(), txQueue_.size());
         if (w == 0) break;  // send buffer full -- try again in pump(). No guest stall.
         txQueue_.erase(0, w);
     }
@@ -62,23 +78,16 @@ void MirrorStream::flush() {
 void MirrorStream::pump() {
     inner_->pump();  // let the wrapped line do its own host I/O first
 
-    // Answer a waiting watcher. One at a time -- a serial line is one wire; a second
-    // caller waits on the listener (host/tcp.cpp's rule). accept() is non-blocking and
-    // null when nobody is calling.
-    if (!conn_) {
-        if (auto c = listener_->accept()) conn_ = std::move(c);
-    }
-    if (!conn_) return;
+    sink_->poll();
 
-    conn_->poll();
-
-    if (conn_->established()) {
+    if (sink_->attached()) {
+        wasWatching_ = true;
         // Drain the watcher. Read-only throws the bytes away rather than leaving them to
         // pile up in the kernel buffer -- a spectator's stray keystroke is not an error,
         // it just goes nowhere. Otherwise it becomes take-over input, bounded like tx.
         uint8_t buf[512];
         for (;;) {
-            size_t r = conn_->read(buf, sizeof buf);
+            size_t r = sink_->read(buf, sizeof buf);
             if (r == 0) break;
             if (!readOnly_) {
                 injectBuf_.append((const char*)buf, r);
@@ -89,14 +98,20 @@ void MirrorStream::pump() {
         sendToClient();
     }
 
-    // The watcher hung up. Drop the session; the listener stays up for the next one.
-    // Bytes already INJECTED stay in injectBuf_ -- they arrived before the hangup and
-    // the guest is entitled to them. Nothing more goes OUT a dead line, so txQueue_ is
-    // cleared (a fresh watcher starts at the live tail, not this one's backlog).
-    if (conn_->closed()) {
-        conn_.reset();
+    // The watcher hung up. Bytes already INJECTED stay in injectBuf_ -- they arrived
+    // before the hangup and the guest is entitled to them. Nothing more goes OUT a dead
+    // line, so txQueue_ is cleared (a fresh watcher starts at the live tail, not this
+    // one's backlog).
+    if (wasWatching_ && !sink_->attached()) {
+        wasWatching_ = false;
         txQueue_.clear();
     }
+}
+
+std::vector<std::string> MirrorStream::drainLog() {
+    std::vector<std::string> v = inner_->drainLog();
+    if (std::string n = takeNote(); !n.empty()) v.push_back("mirror: " + n);
+    return v;
 }
 
 } // namespace altair

@@ -4022,6 +4022,21 @@ bool Monitor::exec(const std::string& line, std::ostream& out) {
             failed_ = true;
         } else {
             out << b->id << ":" << u.name << ": connected to " << a[2] << "\n";
+            // A pseudo-terminal mirror's name is chosen at connect, and the operator
+            // needs it now, not after the next RUN. Peel to the mirror, as above.
+            for (ByteStream* s = b->unitStream(u.name); s;) {
+                if (auto* mir = dynamic_cast<MirrorStream*>(s)) {
+                    if (std::string note = mir->takeNote(); !note.empty())
+                        out << "mirror: " << note << "\n";
+                    s = mir->inner();
+                } else if (auto* f = dynamic_cast<FilterStream*>(s)) {
+                    s = f->inner();
+                } else if (auto* tee = dynamic_cast<TeeStream*>(s)) {
+                    s = tee->inner();
+                } else {
+                    break;
+                }
+            }
         }
         return true;
     }
