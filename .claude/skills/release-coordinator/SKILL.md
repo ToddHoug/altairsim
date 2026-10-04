@@ -38,6 +38,16 @@ to GitHub** — those are outward-facing and hard to undo.
 - It goes through the `work-task` and `ship-change` skills, as every change here: review, then
   commit approval, then PR approval, then merge on green CI.
 
+## 1a. Sweep the docs
+
+Per-change work checks only the docs a diff touches, so a stale sample can sit on `master`
+until now. Before the version bump:
+
+- Replay every doc that has `altairsim>` transcripts with the `check-doc-samples` skill.
+- Load every TOML example in the manual, as the design-docs-drift rule says.
+- **Report** what is stale. Do not edit. Each fix goes through `work-task` and `ship-change`
+  and merges before step 1.
+
 ## 2. Wait for CI's PDFs, and tag THAT commit
 
 `docs.yml` rebuilds the documents on master and commits them as *"Rebuild the PDFs for

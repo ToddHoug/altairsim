@@ -111,6 +111,12 @@ The docs are part of the change under review, not a follow-up. Update whichever 
 
 Never commit a locally built PDF; CI builds them.
 
+**Scope the doc checks to the change.** Edit the docs your diff affects, and replay samples
+(`check-doc-samples`) only for a doc whose transcripts the diff could change. Do not run a
+sense pass, a whole-file `simplified-english` review or an audit of every TOML example unless
+the task is itself a doc rewrite. The whole-tree sweep is a release step
+(`release-coordinator`, step 1a).
+
 ## 5. Test
 
 The cadence `CLAUDE.md` sets: the unit suites for what you touched
