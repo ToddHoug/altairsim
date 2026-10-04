@@ -8,6 +8,11 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+**The AI driving guide says to send one line in each `run`.** A guest that reads the console
+with interrupts and has no type-ahead buffer, such as the MITS Programming System II monitor on
+`ps2int`, loses characters when one `run` sends more than one line. `DRIVING-WITH-AI.md` now
+gives the rule, the symptom and the reason.
+
 **A machine file with the wrong brackets on a table is refused.** `[board]` with single
 brackets loaded as if it was `[[board]]`, and `[[console]]` loaded as if it was `[console]`.
 Now each is an error that gives the line and the correct form. A file that has this mistake

@@ -240,6 +240,18 @@ run {input: "ASM FOO\r", until: "A>", timeout_ms: 20000}
 `\r` submits a CP/M line. `run` also returns on its own when the guest reaches a prompt
 (`stopped: "idle"`), so you rarely need to guess a timeout for interactive commands.
 
+**Send one line in each `run`, and wait for its output before the next.** The server gives
+`input` to the guest at the baud rate of the board, with no pause after a carriage return. A
+person cannot type that fast. A guest that has no type-ahead buffer loses the characters that
+arrive while it is busy with the last line: a line arrives with its first characters missing
+(`FILE` arrives as `LE`), and the guest gives no error. The MITS Programming System II monitor
+on `ps2int` does this, because it reads the console with interrupts and keeps one character
+only. On `ps2int`, `input: "DEP 5124\r0\r100\r252\r"` in one call loses the line `100` and
+the `25` of `252`; the same four lines in four calls arrive complete. A guest that polls the port, such as `ps2` or
+CP/M, takes each character when it is ready and loses none, but the rule is correct for these
+guests too. This is the guest and not the simulator: real hardware at the same baud rate loses
+the same characters.
+
 **`timeout_ms` is a ceiling, not a wait.** The call ends the moment `until` matches or the
 guest reaches a prompt, so a budget larger than the job costs you nothing — a 50-second
 assembly under `timeout_ms: 120000` returns in 50 seconds, not 120. There is no reason to
