@@ -8,6 +8,12 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+**`CONFIG SAVE` marks the settings that have the default value.** A saved file used to list every
+setting, and you could not tell a default from a value that was set on purpose. Now a setting that
+has the default value ends with a comment, for example `baud = 9600  # default X.Y.Z`, and `X.Y.Z`
+is the release that the default belongs to. A setting without the comment was set on purpose. The
+comment does nothing when the file loads.
+
 **`SHOW BOARD <type>` shows the default of each property.** Under the legal values of each
 setting, it now gives a `default:` line: the value the setting has when a machine file does not
 set it. A setting that only shows live state has no default, and has no line.

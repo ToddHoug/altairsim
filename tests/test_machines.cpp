@@ -3,6 +3,7 @@
 #include "boards/registry.h"
 #include "config/toml.h"
 #include "core/machines.h"
+#include "core/version.h"
 
 #include <filesystem>
 #include <fstream>
@@ -415,6 +416,37 @@ remove = true
     std::string ed2;
     CHECK(loadTomlText(dtext, "delta (saved)", dback, ed2), "...and it loads on its own");
     CHECK(dback.boards().size() == md2.boards().size(), "...with all five cards written out");
+
+    SECTION("CONFIG SAVE marks a value that is the default (#699)");
+        // A reader cannot tell a default from a setting someone chose, so a key that equals
+        // what a NEW board of the type starts with ends in `# default <release>`. The release
+        // is named because the file outlives the binary and a default can change.
+        const std::string mark = std::string("  # default ") + versionNumber();
+        Machine     mk;
+        std::string ek;
+        CHECK(loadTomlText("[machine]\nname = \"k\"\n\n[[board]]\ntype = \"sio\"\nid = \"sio0\"\n"
+                           "baud = 1200\n",
+                           "k", mk, ek),
+              "a 2SIO with one changed setting loads");
+        const std::string ktext = saveTomlText(mk);
+        CHECK(ktext.find("data_bits = 8" + mark + "\n") != std::string::npos,
+              "a key left at its default carries the mark, with the release");
+        CHECK(ktext.find("baud = 1200\n") != std::string::npos,
+              "...and a key that was changed does not");
+        CHECK(ktext.find("type = \"sio\"" + mark) == std::string::npos &&
+                  ktext.find("id   = \"sio0\"" + mark) == std::string::npos,
+              "...and type and id are never marked");
+
+        Machine     kback;
+        std::string ek2;
+        CHECK(loadTomlText(ktext, "k (saved)", kback, ek2),
+              "the marked file loads: the loader drops the comment");
+        CHECK(saveTomlText(kback) == ktext, "...and saving it again is byte-identical");
+
+        // Every type must build with no arguments, or its keys are silently never marked.
+        for (const auto& bt : boardTypes())
+            CHECK(makeBoard(bt.name) != nullptr,
+                  ("makeBoard builds '" + bt.name + "', so CONFIG SAVE can mark its defaults").c_str());
 }
 
 // ---------------------------------------------------------------------------

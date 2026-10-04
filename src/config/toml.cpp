@@ -5,6 +5,7 @@
 #include "boards/registry.h"
 #include "core/machines.h"  // `base = "default"` -- a built-in is a config file too
 #include "core/paths.h"     // ...and a file's relative paths are relative to IT
+#include "core/version.h"   // CONFIG SAVE names the release a default belongs to
 #include "host/console.h"
 #include "host/display.h"
 #include "host/terminal/stream.h"
@@ -13,6 +14,7 @@
 #include <cstdio>
 #include <fstream>
 #include <map>
+#include <memory>
 #include <set>
 #include <sstream>
 
@@ -819,6 +821,27 @@ static std::string tomlString(const std::string& text, const std::string& what,
     return "\"\"";
 }
 
+// What a NEW board of a type starts with, as property name -> value text, for CONFIG SAVE to
+// mark the keys that still hold it. `unit` empty = the board's own properties, else that
+// unit's. A board that cannot be built, or has no such unit, gives an empty map: nothing is
+// marked. This only reads -- no setter is called, on the fresh board or any other.
+static std::map<std::string, std::string> defaultsOf(Board* fresh, const std::string& unit = "") {
+    std::map<std::string, std::string> out;
+    if (!fresh) return out;
+    for (const auto& p : unit.empty() ? fresh->properties() : fresh->unitProperties(unit))
+        if (p.get) out[p.name] = p.get().text(p.radix);
+    return out;
+}
+
+// The comment CONFIG SAVE puts after a key that holds its default, or nothing. It names the
+// release, because a default can change between releases and the file outlives the binary.
+static std::string defaultMark(const std::map<std::string, std::string>& defaults,
+                               const std::string& name, const std::string& text) {
+    auto it = defaults.find(name);
+    if (it == defaults.end() || it->second != text) return "";
+    return std::string("  # default ") + versionNumber();
+}
+
 bool saveToml(const std::string& path, Machine& m, std::string& err) {
     // Build the text FIRST: a refused save must not have truncated the file already there.
     std::string why;
@@ -912,14 +935,23 @@ std::string saveTomlText(Machine& m, std::string* err) {
         // used to sit below excused this walk on the grounds that a board property is "a
         // port jumper". `card` is not a port jumper, and the next board's property will
         // not be one either.
+        //
+        // A value that equals what a NEW board of this type starts with is marked
+        // `# default X.Y.Z`, so a reader can tell a default from a setting somebody chose.
+        // The comparison is against a fresh board from the registry, which is a read of a
+        // different object -- the live board is still never written. The loader drops the
+        // comment, so the file loads back as the same machine.
+        std::unique_ptr<Board> fresh = makeBoard(b->type());
+        const std::map<std::string, std::string> freshBoard = defaultsOf(fresh.get());
         for (const auto& p : b->properties()) {
             if (!p.set) continue;
             Value v = p.get();
+            const std::string text = v.text(p.radix);
             if (p.kind == Kind::Str || p.kind == Kind::Enum)
-                f << p.name << " = " << tomlString(v.text(p.radix), b->id + " " + p.name, err)
-                  << "\n";
+                f << p.name << " = " << tomlString(text, b->id + " " + p.name, err);
             else
-                f << p.name << " = " << v.text(p.radix) << "\n";
+                f << p.name << " = " << text;
+            f << defaultMark(freshBoard, p.name, text) << "\n";
         }
         // ---- Unit properties: `[board.unit.a]` ----
         //
@@ -936,15 +968,17 @@ std::string saveTomlText(Machine& m, std::string* err) {
             auto up = b->unitProperties(u.name);
             if (up.empty()) continue;
             f << "\n  [board.unit." << u.name << "]\n";
+            const std::map<std::string, std::string> freshUnit = defaultsOf(fresh.get(), u.name);
             for (const auto& p : up) {
                 if (!p.set) continue;
                 Value v = p.get();
+                const std::string text = v.text(p.radix);
                 if (p.kind == Kind::Str || p.kind == Kind::Enum)
                     f << "  " << p.name << " = "
-                      << tomlString(v.text(p.radix), b->id + ":" + u.name + " " + p.name, err)
-                      << "\n";
+                      << tomlString(text, b->id + ":" + u.name + " " + p.name, err);
                 else
-                    f << "  " << p.name << " = " << v.text(p.radix) << "\n";
+                    f << "  " << p.name << " = " << text;
+                f << defaultMark(freshUnit, p.name, text) << "\n";
             }
         }
 
