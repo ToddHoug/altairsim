@@ -8,6 +8,10 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+**The manual describes `SHOW BUS`.** A new section in the machines chapter shows what a bare
+`SHOW BUS` prints, and how to read its `MEMORY`, `I/O` and `INTERRUPTS` parts. The Monitor and
+Debugger documents and the HELP text now say what the bare command does.
+
 **The package has two scripts that watch a mirror.** `tools/mirror-watch.sh` (macOS and Linux)
 and `tools/mirror-watch.ps1` (Windows) show the console of the machine in a second window while
 an AI assistant controls it through `--mcp --mirror socket:2323`. A script waits for the mirror,

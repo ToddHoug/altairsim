@@ -589,7 +589,32 @@ Use `SHOW BUS CONTENTION` when a machine that you built does not operate correct
 not know why. Two boards that decode the same port are a real hardware fault. The simulator
 does not choose one of the two boards for you.
 
+`SHOW BUS` with no view prints three sections: `MEMORY`, `I/O` and `INTERRUPTS`. The
+`INTERRUPTS` section is the short form of `SHOW BUS IRQ`. Run it first on a machine that you
+built:
+
 ```
+altairsim> SHOW BUS
+MEMORY
+  0000-0FFF  mem0     ram
+  unmapped: 1000-FFFF  (floats to FF)
+I/O
+  FF         fp0      IN  --     SENSE switches SA8..SA15 -> D0..D7
+  00         sio0     IN  OUT    COM2502 -- status / interrupt enables
+  01         sio0     IN  OUT    COM2502 -- data
+  06         acr0     IN  OUT    88-SIO B UART -- status / interrupt enables
+  07         acr0     IN  OUT    88-SIO B UART -- data, via the modem, to the cassette
+INTERRUPTS
+  CPU     INTE off         interrupts are DISABLED; nothing will be acknowledged
+  pINT    idle             pin 73
+  88-VI   (none)           nothing watches VI0-VI7; an acknowledged interrupt
+                           floats to FF, which the 8080 executes as RST 7
+```
+
+To see one section, or more detail, add a view:
+
+```
+SHOW BUS              memory, ports and interrupts, all at one time
 SHOW BUS MAP          which board decodes each memory address, and which addresses float
 SHOW BUS IO           which board decodes each port
 SHOW BUS IRQ          the eight interrupt lines: which board is set to each, and which assert
