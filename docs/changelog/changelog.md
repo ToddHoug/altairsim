@@ -15,6 +15,12 @@ double-density disk and stopped with `COLD BOOT ERROR`. Now a read at the wrong 
 Record Not Found, as on the hardware, and the PROM finds the correct type. Double-density disks
 boot as before.
 
+**The SD Systems `FORMAT` program formats a disk with the default `timing`.** `FORMAT.COM` for
+CP/M Plus sends a track that is shorter than one revolution of the disk. It then waits for the
+controller to end the command at the index pulse. With `timing = full` the controller waited for
+more bytes and never ended the command, so `FORMAT` stopped after the first track and the disk
+was not formatted. Now the command ends at the index pulse, as on the hardware.
+
 ## 1.3.2
 
 **1.3.2 puts a serial line or the mirror of the console on a pseudo-terminal, adds a text log of

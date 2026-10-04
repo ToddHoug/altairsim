@@ -152,7 +152,7 @@ until the FD177x has a byte (DRQ) or the command ends (INTRQ). Ports 63H-66H nev
 
 | `timing` | What it does |
 |---|---|
-| `full` (default) | The chip is wait-synced: every byte is ready the moment it is asked for, and the stall costs nothing. |
+| `full` (default) | The chip is wait-synced: every byte is ready the moment it is asked for, and the stall costs nothing. A `Write Track` still ends at the index pulse: a format program that sends a counted track shorter than one revolution, and then reads status until the command ends, gets the end one revolution after its last byte, with Lost Data set. The SD Systems `FORMAT.COM` for CP/M Plus does this. |
 | `real` | The chip runs its byte-timed model on the clock — step rate, head settle, one byte per byte time — and a 67H access holds READY until DRQ or INTRQ. The hold is charged to the CPU as wait states, so a seek and a sector take as long as on the machine. With wait-enable clear, 67H never holds. |
 
 ## Verification

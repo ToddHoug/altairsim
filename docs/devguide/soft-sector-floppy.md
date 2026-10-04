@@ -47,6 +47,8 @@ the chip/drive split is spelled out there at length. The essentials for a board 
   generator (PRDY) sets `setWaitSynced(true)`; then every command completes on the register
   access that would have stalled, one byte per access, and Lost Data is correctly unreachable.
   Both Tarbell boards are wait-synced. A DRQ-polling card leaves it off and gets byte timing.
+  The one deadline a wait-synced chip keeps is the index pulse that ends a `Write Track`. See
+  "The `trackImageBytes(rate)` budget" below.
 
 ## The drive: `DiskImageDrive` over `DiskImage`
 
@@ -183,13 +185,26 @@ blank (unformatted, formattable) — because the DD controller genuinely reads S
 
 ## The `trackImageBytes(rate)` budget — the load-bearing number
 
-Under wait-synced operation there is no index-pulse timeout: `Write Track` completes **exactly**
-when the collected buffer reaches `trackImageBytes(rate)`. So that value **is** the per-track raw
-byte budget, and it is the one number most likely to bite:
+Under wait-synced operation `Write Track` completes when the collected buffer reaches
+`trackImageBytes(rate)`. So that value **is** the per-track raw byte budget, and it is the one
+number most likely to bite:
 
-- **Too large → the command hangs**, waiting for bytes the guest will never send.
 - **Too small → the last sectors truncate**, because the command commits before the guest has
   streamed them.
+- **Too large → a guest that pads until the command ends sends more gap than a real track
+  holds.** The format still works, but the number is wrong.
+
+**A guest can also send less than the budget.** Some format programs send a counted track and
+then read status until the chip ends the command at the index pulse. The SD Systems `FORMAT.COM`
+for CP/M Plus sends 9,672 bytes for an 8″ double-density track of 10,416. The wait states hold
+the CPU, not the disk, so the index pulse still comes. When a DRQ of a `Write Track` has had no
+answer for one revolution of machine time (`trackImageBytes` byte times), the chip fills the
+rest of the track with zeros, sets Lost Data and commits the track. That is what the byte-timed
+model does one byte at a time. If the DRQ with no answer is the first one, the command ends with
+Lost Data and writes nothing, as the data sheet says. The deadline starts again at each DRQ, so
+a guest that continues to send bytes never reaches it. `Wd17xx::nextEdge` reports the deadline,
+so the command also ends for a guest that waits for INTRQ. A sector write has no such deadline
+(issue #693).
 
 It is derived from the chip's data rate **and the drive's rotation speed** — one revolution is
 `rate / (8 × rev/s)` bytes (`rate/8` bytes per second ÷ the revolutions per second). An 8″ drive
