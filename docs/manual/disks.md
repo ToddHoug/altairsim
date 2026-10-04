@@ -111,7 +111,7 @@ drive when the machine starts. `MOUNT` changes it later.
 The name has no folder, so the program looks for the file beside the machine file. For this
 reason, you can copy the whole folder to another place, and it still boots.
 
-`writeprotect = true` is the same as `readonly = true`. `CONFIG SAVE` writes `readonly`.
+`writeprotect = true` is the same as `readonly = true`. `CONFIG SAVE` saves `readonly`.
 
 ## Keep your disk safe
 

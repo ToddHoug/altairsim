@@ -1,4 +1,4 @@
-# The machine file
+# Configuring a machine
 
 A machine file is a **TOML** file that describes a machine. It lists the boards in the
 backplane, the settings of each board, and the commands to run after the power comes on. This
@@ -6,18 +6,37 @@ chapter describes the format in full.
 
 ## What TOML is
 
-**TOML** is a plain configuration format. You write it by hand, and you can read it again later
-without a manual. These rules are enough to read every example in this chapter:
+**TOML** is a plain configuration format. You can write it in an editor, or the `CONFIG SAVE`
+command can write it from the machine that you are running. Either way, you can read it again
+later without a manual. These rules are enough to read every example in this chapter:
 
 - **`key = value`** gives one setting on each line, for example `clock_hz = 2000000`.
 - **Quotes are for text.** A string has quotes (`name = "cpm22"`). A number, `true` or `false`
   has no quotes (`size = 256`, `idle = true`).
-- **A `[table]` appears one time.** `[machine]` is the machine, and `[console]` is your
-  terminal.
-- **A `[[table]]`, with double brackets, repeats.** Each `[[board]]` starts one more board.
+- **A `[table]`, with single brackets, is a thing that the machine has one of.** `[machine]` is
+  the machine, and `[console]` is your terminal. You write it one time.
+- **A `[[table]]`, with double brackets, is a thing that the machine has many of.** Each
+  `[[board]]` starts one more board, and each `[[board.drive]]` one more drive. The double
+  brackets mean "add one more to the list". Write `[[board]]` for each board.
 - **A nested table such as `[board.unit.x]` belongs to the block above it**, by its name. The
   indentation in these examples only makes them easier to read.
 - **`#` starts a comment** that continues to the end of the line.
+
+## How a machine file is loaded
+
+There are four ways to load a machine file:
+
+- **Name it on the command line**: `altairsim mine.toml`. A filename that has a `/` or ends in
+  `.toml` is a file, not a built-in machine. Use `-f mine` if the filename has neither.
+- **Name nothing.** If the working folder has a file called `altairsim.toml`, `altairsim` with
+  no arguments loads it. If it has none, you get the built-in `default` machine.
+- **Type `CONFIG LOAD mine.toml`** at the monitor, in a machine that is already running. The
+  file **replaces** that machine, and it loads all of the file or nothing.
+- **Name it as the `base` of another file** (`base = "mine.toml"`). The other file starts from
+  this one and gives only what is different.
+
+The first three make the file the machine. The last one uses the file as a start for another.
+The machines chapter gives the rules for the command line and for relative paths.
 
 ## The file that you will write
 
@@ -112,7 +131,7 @@ The name of the machine. **The name is a label for you, and nothing more.**
 
 - **The program shows it in three places:** the `machine:` line that it prints when the
   monitor starts, the first line of `SHOW MACHINE`, and the title bar of the video window.
-- **`SET MACHINE name=` changes it** at the monitor, and `CONFIG SAVE` writes it.
+- **`SET MACHINE name=` changes it** at the monitor, and `CONFIG SAVE` saves it.
 - **The program does not find a machine file by its name.** The command line and the `base`
   key find a file by its path. The name in the file can be different from the file name.
 - **A file with no `name` has the name of its base.** A file that starts from `default` and
@@ -262,7 +281,7 @@ did not write. You get the defaults of the type, and the settings that you write
 
 **In a file with a `base`, you almost always want MODIFY.** Leave the `type` out.
 
-`CONFIG SAVE` writes every board with its `type` and all its keys. Do not copy a board from a
+`CONFIG SAVE` saves every board with its `type` and all its keys. Do not copy a board from a
 saved file into a file that has a `base`, because that is a REPLACE. Write the `id` and the keys
 that you change.
 
@@ -545,8 +564,8 @@ startup = ["RUN FF00"]
 - **A `#>` can follow a setting** on the same line: `name = "cpm22"  #> the buffered variant`.
 - **Under `--mcp`, the notes go to stderr.** Stdout carries only the MCP messages there, but you
   still see the notes in the terminal.
-- **A note sets nothing, and `CONFIG SAVE` does not write it.** To keep a note, keep it in the
-  file that you wrote by hand.
+- **A note sets nothing, and `CONFIG SAVE` does not save it.** To keep a note, keep the
+  file that has it, and do not save over that file.
 
 ## A machine with no base
 
@@ -597,19 +616,19 @@ altairsim> CONFIG SAVE mine.toml
 altairsim> CONFIG LOAD mine.toml
 ```
 
-**`CONFIG SAVE` writes the machine that you are running now.** It writes every board and every
+**`CONFIG SAVE` saves the machine that you are running now.** It saves every board and every
 property, with every change that you made with `SET`. When you load the file, you get the same
 machine. Give the machine a name with `SET MACHINE name=` before you save it.
 
-**`CONFIG SAVE` writes a new file each time. It does not edit the file that is there.** If you
-save to the name of a machine file that you wrote by hand, these things from that file are not
-in the new file:
+**`CONFIG SAVE` saves a new file each time. It does not edit the file that is there.** If you
+save to the name of a machine file that has comments or a `base` line, these things from that
+file are not in the new file:
 
 - **Each `#` comment and each `#>` note.** The saved file has no comments.
 - **The `base` line.** The saved file contains every board in full, so that it does not need a
   base.
 
-To keep a file that you wrote by hand, save to a different name.
+To keep that file as it is, save to a different name.
 
 **`CONFIG LOAD` replaces the machine that you have**, the same as a machine file on the command
 line. You cannot undo it, except with a file that you saved. It **loads all of the file or
@@ -632,5 +651,5 @@ altairsim> STARTUP
 
 `STARTUP ADD` adds a line as you typed it, with its quotes and spaces, because a startup entry
 is a command line. `STARTUP REMOVE <n>` removes one line, and `STARTUP CLEAR` removes them all.
-`CONFIG SAVE` writes the list as `startup = [...]`, so the file boots the machine in the way
+`CONFIG SAVE` saves the list as `startup = [...]`, so the file boots the machine in the way
 that you tested at the monitor.

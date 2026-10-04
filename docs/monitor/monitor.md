@@ -303,7 +303,7 @@ BOARDS REMOVE sio1             remove it
 CONFIG SAVE mine.toml          save the machine as it is now
 ```
 
-`altairsim mine.toml` starts the same machine that `CONFIG SAVE` wrote.
+`altairsim mine.toml` starts the same machine that `CONFIG SAVE` saved.
 
 ## Running, and stopping
 

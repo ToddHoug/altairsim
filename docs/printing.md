@@ -138,7 +138,7 @@ the resolver is the only thing permitted to know this grammar; putting them on
 the unit would hand every board a printer-shaped property it has no business
 having, and would need adding again to the next card. In the spec they also
 round-trip for free — `describe()` returns what the operator typed, and that is
-what `SHOW` prints and `CONFIG SAVE` writes back.
+what `SHOW` prints and `CONFIG SAVE` saves.
 
 ```
 printer:QUEUE[?key[=value][&key[=value]...]]

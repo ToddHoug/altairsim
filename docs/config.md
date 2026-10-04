@@ -1,6 +1,6 @@
 # Machine configuration (TOML)
 
-A machine is described by a TOML file. The **same state** is reachable at runtime through the monitor, and `CONFIG SAVE` writes it back out.
+A machine is described by a TOML file. The **same state** is reachable at runtime through the monitor, and `CONFIG SAVE` saves it back out.
 
 **The TOML keys for a board *are* its `properties()`** (see `DESIGN.md` §5) — there is no separate config schema per board. The loader and `CONFIG SAVE` are the same code path, so they cannot drift, and a board added next year is configurable the day it lands with no changes here.
 
@@ -76,7 +76,7 @@ you get the `scratch.dsk` in the machine's own directory — the same folder its
 
 **There is no search path.** A file is looked for in exactly one place. If it is not there, the error names the place it looked — not the name you wrote — because the whole point of a resolved path is to be able to see where it went.
 
-**What is stored is what you wrote.** `SHOW` prints, and `CONFIG SAVE` writes back, the path *as it appears in the file* — so a machine saved out of `disks/mits-88mds/cpm22/` still says `mount = "CPM56K-1.DSK"` and still loads from its own directory. Only the *narration* ("`mounted …`", "`loaded …`") names where the file actually was, because that is a report of what happened rather than a record of what was asked for.
+**What is stored is what you wrote.** `SHOW` prints, and `CONFIG SAVE` saves, the path *as it appears in the file* — so a machine saved out of `disks/mits-88mds/cpm22/` still says `mount = "CPM56K-1.DSK"` and still loads from its own directory. Only the *narration* ("`mounted …`", "`loaded …`") names where the file actually was, because that is a report of what happened rather than a record of what was asked for.
 
 Absolute paths and the `builtin:` scheme are never re-based: `mount = "builtin:dbl"` is a ROM in the binary, not a file, and must never become one.
 

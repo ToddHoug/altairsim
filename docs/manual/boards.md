@@ -1104,7 +1104,7 @@ altairsim> RUN FF00
 ```
 
 The `default` machine's `dcdd` uses the same ports, so remove it first. On Windows, the device is
-a name such as `serial:COM3`. `CONFIG SAVE` writes the machine to a file, so that you do the
+a name such as `serial:COM3`. `CONFIG SAVE` saves the machine to a file, so that you do the
 setup only once.
 
 A slower line makes a slower disk. At 38400 baud, a track takes about one second. When the machine

@@ -728,7 +728,7 @@ BOARDS REMOVE mem0      ; pull one out
 ```
 CONFIG LOAD <f.toml> | CONFIG SAVE <f.toml>
 ```
-THE MACHINE, NOT WHAT IT IS DOING. SAVE writes the hardware you are actually
+THE MACHINE, NOT WHAT IT IS DOING. SAVE saves the hardware you are actually
 running -- which boards, in what order, every property SET can write, what each
 unit is CONNECTed to, what is MOUNTed in each socket, and the startup list. It
 is the same format you would write by hand, and the same one a built-in is
@@ -1055,7 +1055,7 @@ CONSOLE and DISPLAY are the HOST's terminal and video window rather than
 boards, and they take settings the same way. REG is a CPU register (see REGS),
 and BUS is the backplane's own diagnostics rather than anything plugged into it.
 MACHINE is the machine itself: its name is what SHOW MACHINE prints, the video
-window's title, and what CONFIG SAVE writes.
+window's title, and what CONFIG SAVE saves.
 
 ```
 SET mem0 fill=zero
@@ -1121,7 +1121,7 @@ SNAPSHOT before-boot.snap
 STARTUP [ADD <command> | REMOVE <n> | CLEAR]
 ```
 The machine's boot list -- the commands a config replays on load, and what CONFIG
-SAVE writes out as startup = [...]. A bare STARTUP shows the list, numbered; the
+SAVE saves as startup = [...]. A bare STARTUP shows the list, numbered; the
 rest edit it in place, so you can compose a boot sequence at the prompt and save it:
 
 ```

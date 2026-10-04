@@ -19,7 +19,7 @@ what the program is first, read [What altairsim is](introduction.md).
    machine file, and the boards, on one page.
 6. [Machines](machines.md): the command line, the built-in machines, and where a relative path
    starts.
-7. [The machine file](configuring.md): the TOML format, in full.
+7. [Configuring a machine](configuring.md): the TOML format, in full.
 8. [Boards](boards.md): what each board is, and what it is for.
 9. [Disks](disks.md): `MOUNT`, disk formats, and the track buffer.
 10. [Tapes](tapes.md): the cassette interface, and how to load BASIC as MITS intended.
