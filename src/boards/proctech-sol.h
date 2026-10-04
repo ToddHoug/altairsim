@@ -252,6 +252,7 @@ private:
     // any recording, seek, drop the byte the CUTS UART is still holding, retape. REWIND
     // is stageAt(d, 0).
     void stageAt(Deck* d, uint64_t pos);
+    bool otherDeckTurning(const Deck* d) const;
 
     // Where a deck's head is in seconds into its recording, and the recording's length.
     // Real audio time for a WAV; an estimate from the guest-selected baud for a byte

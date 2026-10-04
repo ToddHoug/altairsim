@@ -465,6 +465,12 @@ bool CassetteBoardBase::mount(const std::string& unit, const std::string& path, 
     audio_ = dynamic_cast<AudioTapeMedia*>(media.get());
 
     attachStream(std::make_unique<NullStream>());  // ...before the old tape goes
+
+    // ...and the byte the UART pulled off the OLD tape goes with it, exactly as it does in
+    // stageAt(). Left in the receiver, it is the first thing the guest reads off the new
+    // cassette -- and a bootstrap loader stores it as the first byte of its program.
+    (void)u_.readData();
+
     tape_ = std::make_unique<TapeImage>(std::move(media));
     path_ = path;
     detected_ = detected;
@@ -584,6 +590,7 @@ bool CassetteBoardBase::unmount(const std::string& unit, std::string& err) {
 
     commitTape();
     attachStream(std::make_unique<NullStream>());  // the line dies BEFORE the tape does
+    (void)u_.readData();  // ...and so does the byte still in flight from it -- see mount()
     tape_.reset();
     audio_ = nullptr;  // it died with the tape -- never leave this dangling
     path_.clear();

@@ -12,6 +12,11 @@ as it is now; this document is the record of how it got there.
 a mirror correctly. The manual, the `CONNECT` help and `DRIVING-WITH-AI.md` now give `nc` first
 and `telnet` second.
 
+**A tape that you mount after another tape starts at its first byte.** After a program loaded
+from a cassette, the next `MOUNT` on that recorder gave the guest one byte of the old tape
+before the new tape. A bootstrap loader stored that byte, and the program did not start. This
+is corrected for the 88-ACR, the 88-UIO and the Sol-20. `UNMOUNT` also removes that byte.
+
 ## 1.3.1
 
 **1.3.1 is a small release that starts the SBC-200 in its monitor, and makes the monitor show the
