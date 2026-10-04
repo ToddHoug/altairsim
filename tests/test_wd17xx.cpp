@@ -887,6 +887,132 @@ void test_wd17xx() {
         CHECK(f.drainLog().empty(), "no complaint -- the drive accepted the format");
     }
 
+    // ---- WAIT-SYNCED WRITE TRACK ENDS AT THE INDEX PULSE (issue #693) ----
+    //
+    // A formatter may send a counted track that is shorter than one revolution and then poll
+    // status for the end -- the SD Systems FORMAT.COM does. The wait states hold the CPU, not
+    // the disk: after one revolution with DRQ unserviced the index hole comes round, the rest
+    // of the track is zeros, Lost Data is set and the command ends.
+    SECTION("chips/wd17xx: a wait-synced Write Track ends at the index pulse");
+    {
+        Clock clk;
+        FakeDrive d;
+        Wd1771    f("fdc");
+        f.attach(&d);
+        f.powerOn(clk);
+        f.setWaitSynced(true);
+        d.trackCap = 1000;
+        const uint64_t rev = 1000 * clk.tStatesPer(f.dataRateBits / 8);
+
+        f.writeCommand(0xF4, clk);  // Write Track
+        bool asked = true;
+        for (int k = 0; k < 600; ++k) {
+            clk.advance(40);  // the guest's own time between bytes: never a revolution
+            f.poll(clk);
+            asked = asked && f.drq();
+            f.writeData((uint8_t)(k & 0x7F) | 0x01, clk);
+        }
+        CHECK(asked, "DRQ is up for every byte the guest sends");
+        f.poll(clk);  // DRQ for byte 601 goes up here. The guest never answers it.
+        CHECK(f.busy() && f.drq(), "the short track leaves the chip Busy with DRQ up");
+        CHECK(f.nextEdge(clk) == clk.now() + rev, "the index pulse is one revolution from that DRQ");
+
+        clk.advance(rev - 1);
+        f.poll(clk);
+        CHECK(f.busy() && f.drq(), "one T-state before the index pulse: still Busy");
+        CHECK(d.lastTrack.empty(), "...and nothing is committed yet");
+
+        clk.advance(1);
+        f.poll(clk);
+        CHECK(!f.busy(), "at the index pulse the command ends");
+        CHECK(f.intrq(), "...with INTRQ");
+        const uint8_t st = f.readStatus(clk);
+        CHECK((st & 0x04) != 0, "...and Lost Data, for the DRQs nobody serviced");
+        CHECK((st & 0x20) == 0, "...and no WRITE FAULT");
+        bool head = d.lastTrack.size() == 1000, tail = head;
+        for (size_t k = 0; head && k < 600; ++k) head = d.lastTrack[k] == (uint8_t)((k & 0x7F) | 0x01);
+        for (size_t k = 600; tail && k < 1000; ++k) tail = d.lastTrack[k] == 0x00;
+        CHECK(d.lastTrack.size() == 1000, "the drive gets a whole revolution");
+        CHECK(head, "...the guest's bytes first");
+        CHECK(tail, "...then zeros to the index");
+        CHECK(f.nextEdge(clk) == 0, "an idle chip has no edge");
+    }
+
+    // The first DRQ of a Write Track has the same deadline, and missing it is fatal: "if the DR
+    // has not been loaded by the time the index pulse is encountered the operation is
+    // terminated". Nothing is written.
+    {
+        Clock clk;
+        FakeDrive d;
+        Wd1771    f("fdc");
+        f.attach(&d);
+        f.powerOn(clk);
+        f.setWaitSynced(true);
+        d.trackCap = 1000;
+        const uint64_t rev = 1000 * clk.tStatesPer(f.dataRateBits / 8);
+        d.lastTrack = {0xAA};  // a marker: writeTrackImage would replace it
+
+        f.writeCommand(0xF4, clk);
+        f.poll(clk);
+        CHECK(f.busy() && f.drq(), "Write Track raises its first DRQ");
+        clk.advance(rev - 1);
+        f.poll(clk);
+        CHECK(f.busy(), "the first byte has a whole revolution");
+        clk.advance(1);
+        f.poll(clk);
+        CHECK(!f.busy(), "no first byte by the index pulse: the command ends");
+        CHECK((f.readStatus(clk) & 0x04) != 0, "...with Lost Data");
+        CHECK(d.lastTrack.size() == 1 && d.lastTrack[0] == 0xAA, "...and nothing written");
+    }
+
+    // A slow guest is not a guest that stopped: the deadline runs from the last DRQ, so a track
+    // that takes many revolutions of machine time to send still formats clean.
+    {
+        Clock clk;
+        FakeDrive d;
+        Wd1771    f("fdc");
+        f.attach(&d);
+        f.powerOn(clk);
+        f.setWaitSynced(true);
+        d.trackCap = 1000;
+        const uint64_t rev = 1000 * clk.tStatesPer(f.dataRateBits / 8);
+
+        f.writeCommand(0xF4, clk);
+        for (int k = 0; k < 1000 && f.busy(); ++k) {
+            clk.advance(rev / 2);  // 500 revolutions in all
+            f.poll(clk);
+            if (f.drq()) f.writeData(0x4E, clk);
+        }
+        f.poll(clk);
+        CHECK(!f.busy(), "a full track sent slowly completes on its last byte");
+        CHECK((f.readStatus(clk) & 0x04) == 0, "...with no Lost Data");
+        CHECK(d.lastTrack == std::vector<uint8_t>(1000, 0x4E), "...and every byte the guest sent");
+    }
+
+    // A wait-synced sector write has no index end: the CPU is held on the data port until it
+    // writes the byte, for as long as that takes.
+    {
+        Clock clk;
+        FakeDrive d;
+        Wd1771    f("fdc");
+        f.attach(&d);
+        d.format(0, 26, 128);
+        f.powerOn(clk);
+        f.setWaitSynced(true);
+
+        f.writeSectorReg(1);
+        f.writeCommand(0xA8, clk);  // Write Sector
+        f.poll(clk);
+        CHECK(f.busy() && f.drq(), "Write Sector raises DRQ");
+        f.writeData(0x11, clk);
+        f.poll(clk);
+        CHECK(f.nextEdge(clk) == 0, "a wait-synced sector write has no edge to wake for");
+        clk.advance(100000000);
+        f.poll(clk);
+        CHECK(f.busy() && f.drq(), "...and waits for its next byte however long it takes");
+        CHECK((f.readStatus(clk) & 0x04) == 0, "...with no Lost Data");
+    }
+
     // ---- `timing = real`: the READY hold (issue #637) ----
     //
     // holdUntilReady() is the access the board's wait-state logic stalls: it returns the

@@ -323,6 +323,11 @@ public:
     // correctly unreachable. Off by default: a DRQ-polling card leaves it alone and gets the
     // byte-timed model above, Lost Data and all.
     //
+    // One thing the wait states cannot hold back is the disk. A Write Track still ends at the
+    // index pulse: when the guest has left a DRQ unserviced for one revolution, the rest of
+    // the track is zeros and the command ends with Lost Data (with nothing written, if it
+    // was the first DRQ). That is the only deadline a wait-synced chip keeps.
+    //
     // `timing = real` (issue #637) leaves this OFF and charges the wait instead: the chip
     // runs its byte-timed model, and the board calls holdUntilReady() at the access the
     // hardware stalls on, then holds READY (Board::holdReady()) for what it returns.
@@ -478,6 +483,8 @@ protected:
     // Timing, all of it derived and none of it invented.
     uint64_t stepTStates(const Clock& clk) const;        // Table 1, via fdcClockHz and r1r0
     uint64_t byteTStates(const Clock& clk) const;        // dataRateBits / 8
+    void requestWriteByte(const Clock& clk);             // DRQ for a write, and its deadline
+    bool indexPassed(const Clock& clk) const;            // wait-synced Write Track: index came
     uint64_t headSettleTStates(const Clock& clk) const;  // 10 ms, or 20 at CLK=1 MHz
     uint64_t msTStates(const Clock& clk, int ms) const;
 

@@ -914,6 +914,12 @@ void Wd17xx::poll(const Clock& clk) {
     // pending FOR or FROM the guest, poll() stops and waits for readData()/writeData() to
     // service it, so exactly one byte moves per access and Lost Data never fires (the
     // wait-state hardware is precisely what makes it unreachable). See setWaitSynced().
+    //
+    // ONE EXCEPTION: WRITE TRACK ENDS AT THE INDEX PULSE, wait states or not. The wait-state
+    // hardware stalls a CPU that is ON the data port; it does nothing for a guest that has
+    // stopped sending. A formatter that sends a counted track shorter than one revolution and
+    // then polls status for the end is waiting for the index pulse, and the disk turns whether
+    // or not anyone is writing. See indexPassed().
     while (phase_ != Phase::Idle && (waitSynced_ || now(clk) >= due_)) {
         switch (phase_) {
             case Phase::Settle: {
@@ -1082,8 +1088,9 @@ void Wd17xx::poll(const Clock& clk) {
             case Phase::WriteWait: {
                 // WAIT-SYNCED: the first DRQ is up and the guest has not written its byte
                 // yet -- it is stalled on PRDY doing exactly that. Wait for writeData();
-                // do not treat this as the fatal missed-first-DRQ below.
-                if (waitSynced_ && drq_) return;
+                // do not treat this as the fatal missed-first-DRQ below. Unless a Write
+                // Track has waited a whole revolution: then it IS the missed first DRQ.
+                if (waitSynced_ && drq_ && !indexPassed(clk)) return;
 
                 if (drq_) {
                     // The first DRQ went unserviced. The command dies here and NOTHING is
@@ -1099,15 +1106,25 @@ void Wd17xx::poll(const Clock& clk) {
                     else commitSector(clk);
                     break;
                 }
-                drq_ = true;
-                due_ += byteTStates(clk);
+                requestWriteByte(clk);
                 break;
             }
 
             case Phase::Write: {
                 // WAIT-SYNCED: a byte is requested and the guest has not written it -- it
                 // is stalled on PRDY. Wait for writeData(); no zero-fill, no Lost Data.
-                if (waitSynced_ && drq_) return;
+                if (waitSynced_ && drq_) {
+                    if (!indexPassed(clk)) return;
+                    // The guest stopped sending and the index hole came round. Every byte
+                    // time from the last byte to the index was an unserviced DRQ: Lost Data,
+                    // a zero each, and the command ends -- what the byte-timed path below
+                    // reaches one deadline at a time.
+                    lost_ = true;
+                    buf_.resize((size_t)id_.size, 0x00);
+                    drq_ = false;
+                    commitTrack(clk);
+                    break;
+                }
 
                 if (drq_) {
                     // "If the DRQ is not serviced in time for continuous writing the Lost
@@ -1124,8 +1141,7 @@ void Wd17xx::poll(const Clock& clk) {
                     else commitSector(clk);
                     break;
                 }
-                drq_ = true;
-                due_ += byteTStates(clk);
+                requestWriteByte(clk);
                 break;
             }
 
@@ -1135,6 +1151,26 @@ void Wd17xx::poll(const Clock& clk) {
     }
 }
 
+// Raise DRQ for the next byte of a write, and set the deadline for it.
+//
+// Byte-timed, the deadline is one byte time. WAIT-SYNCED, a byte has no deadline -- except in
+// a Write Track, which ends at the index pulse: there the deadline is one revolution from
+// this DRQ (id_.size is the revolution in bytes; see afterHeadSettle()). A guest that keeps
+// sending never reaches it, however slowly the bytes come.
+void Wd17xx::requestWriteByte(const Clock& clk) {
+    drq_ = true;
+    if (waitSynced_ && end_ == Ending::CommitTrack)
+        due_ = now(clk) + (uint64_t)id_.size * byteTStates(clk);
+    else
+        due_ += byteTStates(clk);
+}
+
+// A wait-synced Write Track whose pending DRQ is one revolution old: the index pulse has
+// come, and the command ends there. Nothing else in the wait-synced model has a deadline.
+bool Wd17xx::indexPassed(const Clock& clk) const {
+    return end_ == Ending::CommitTrack && now(clk) >= due_;
+}
+
 uint64_t Wd17xx::nextEdge(const Clock& clk) const {
     if (phase_ == Phase::Idle) return 0;
     // WAIT-SYNCED: nothing happens with nobody touching the chip -- the CPU is stalled ON
@@ -1142,7 +1178,16 @@ uint64_t Wd17xx::nextEdge(const Clock& clk) const {
     // autonomous edge to wake for, and arming one would only spin: a mid-transfer DRQ stays
     // up until the guest reads it, and a timer for it would fire, find DRQ still up, do
     // nothing, and re-arm forever. A polling card (the default) has real byte deadlines.
-    if (waitSynced_) return 0;
+    //
+    // The one edge a wait-synced chip does have is the index pulse that ends a Write Track
+    // the guest has stopped feeding. That timer fires once and the command is over, so it
+    // cannot spin.
+    if (waitSynced_) {
+        const bool writing = (phase_ == Phase::WriteWait || phase_ == Phase::Write);
+        if (writing && drq_ && end_ == Ending::CommitTrack)
+            return (due_ > now(clk)) ? due_ : now(clk) + 1;
+        return 0;
+    }
     // STRICTLY IN THE FUTURE, always. A deadline already past is one poll() has yet to
     // run, not one to wake up for -- and arming a timer for now() would fire inside the
     // drain loop that is running us, and arm it again, and never stop. (Mc6850::nextEdge

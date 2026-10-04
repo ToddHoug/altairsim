@@ -440,6 +440,49 @@ void test_versafloppy() {
         CHECK(allE5(after, 128), "the reformatted track reads back 0xE5");
     }
 
+    // ---- A COUNTED TRACK, SHORTER THAN ONE REVOLUTION (issue #693) ----
+    // The SD Systems FORMAT.COM for CP/M Plus does not pad to the end of the track. It sends a
+    // counted image (9,672 bytes for 8" DD-256; a revolution holds 10,416), then reads status
+    // until the FD1791 ends the command at the index pulse. The chip is wait-synced here, and
+    // the index pulse must still come: the rest of the track is zeros and status shows Lost Data.
+    {
+        withRampDisk(512512);
+        Clock c;
+        VersaFloppyBoard b;
+        b.attachClock(&c);
+        b.power();
+        std::string err;
+        CHECK(b.mount("drive0", "ramp.dsk", false, err), "the 8\" DD-256 image mounts");
+
+        control(b, /*dd=*/true, /*side=*/0);
+        seekTo(b, 5);
+        const std::vector<uint8_t> stream = mkTrack(5, Density::DD, 26, 256);
+        CHECK(stream.size() < 10416, "the counted track is shorter than one revolution");
+
+        out(b, CMD, 0xF4);  // Write Track
+        for (uint8_t v : stream) out(b, DAT, v);
+        CHECK((in(b, CMD) & 0x03) == 0x03, "after the last byte the chip is Busy with DRQ up");
+
+        // The guest's status loop. One revolution is 1/6 s; allow two seconds of machine time.
+        const uint64_t slice = c.tStatesPer(1000);  // 1 ms
+        int            ms    = 0;
+        while ((in(b, CMD) & 0x01) != 0 && ms < 2000) {
+            c.advance(slice);
+            ++ms;
+        }
+        const uint8_t st = in(b, CMD);
+        CHECK((st & 0x01) == 0, "the Write Track ends at the index pulse");
+        CHECK(ms >= 160 && ms <= 175, "...one revolution (1/6 s) after the last DRQ");
+        CHECK((st & 0x04) != 0, "...with Lost Data for the bytes the guest did not send");
+        CHECK((st & 0x20) == 0, "...and no WRITE FAULT");
+
+        std::vector<uint8_t> first = readSectorVf(b, 5, 1, 256);
+        CHECK(allE5(first, 256), "the first sector of the track reads back 0xE5");
+        std::vector<uint8_t> last = readSectorVf(b, 5, 26, 256);
+        CHECK(allE5(last, 256), "...and so does the last");
+        CHECK((in(b, CMD) & 0x1C) == 0, "...with no RNF/CRC/Lost-Data error");
+    }
+
     // ---- THE 512,512 COLLISION: fC by default, f1 only when forced ----
     // 8" SS-DD-256 (fC) and 8" DS-SD-128 (f1) are both 512,512 bytes. An unforced probe must land
     // on fC (the SDOS master, single-sided); media=8sd-ds forces the double-sided f1. The tell is
