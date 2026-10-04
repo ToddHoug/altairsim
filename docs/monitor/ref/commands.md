@@ -818,9 +818,10 @@ printer:    QUEUE -- a real print queue on this host (only where the build found
             guest cannot tell it is there. ?fmt=dump|cols|jsonl picks the layout,
             ?ts=elapsed|wall|none the timestamps, ?pins=off drops the modem edges.
 <endpoint>|socket:PORT   a live MIRROR: append |socket:PORT to ANY endpoint above
-            and a second person can `telnet localhost PORT` to WATCH the session --
-            and TYPE, sharing the line (take-over). ?ro makes it watch-only. The
-            watcher never paces the guest; a slow one loses scrollback, not a byte.
+            and a second person can `nc localhost PORT` (or telnet) to WATCH the
+            session -- and TYPE, sharing the line (take-over). ?ro makes it
+            watch-only. The watcher never paces the guest; a slow one loses
+            scrollback, not a byte.
 ```
 
 Exactly ONE unit may hold the console; connecting a second STEALS it and says

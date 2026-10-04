@@ -456,8 +456,9 @@ altairsim> CONNECT sio0:a in:reader.tap?cps=300|trace.log?fmt=jsonl
 ## Mirror a line so a person can watch and take over
 
 A **mirror** sends the line to a *socket*, in both directions. Add `|socket:PORT` to any
-endpoint. A second person can then type `telnet localhost PORT` to see every character that the
-guest prints, and can also **type on the line**:
+endpoint. A second person can then type `nc localhost PORT` (or `telnet localhost PORT`; a new
+Mac has `nc` but no `telnet`) to see every character that the guest prints, and can also **type
+on the line**:
 
 ```
 altairsim> CONNECT sio0:a console|socket:2323

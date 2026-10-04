@@ -6,6 +6,12 @@ as it is now; this document is the record of how it got there.
 
 ---
 
+## Unreleased
+
+**The mirror text names `nc`.** A new Mac has `nc` but no `telnet`, and `nc localhost PORT` shows
+a mirror correctly. The manual, the `CONNECT` help and `DRIVING-WITH-AI.md` now give `nc` first
+and `telnet` second.
+
 ## 1.3.1
 
 **1.3.1 is a small release that starts the SBC-200 in its monitor, and makes the monitor show the
