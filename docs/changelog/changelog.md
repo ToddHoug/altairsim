@@ -8,6 +8,15 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+**`--log FILE` keeps a text log of the console while an AI assistant controls the machine.**
+With `--mcp --log session.log`, the program writes each character that the guest prints to the
+file, at the time that the guest prints it. The log is an ordinary text file that holds the full
+session. Read it, search it or copy from it at any time, or follow it in a second window, for
+example with `tail -f`, or with `Get-Content -Wait` in PowerShell. The log only records; `--mirror` is still
+the way to type at the guest, and the two work together. In the monitor and in a machine file,
+the same log is `<endpoint>|FILE?fmt=text`. The file tap also has a new `append` option, and a
+tap can now go on a mirror: `<endpoint>|socket:PORT|FILE`.
+
 **The AI driving guide says how to select an `until`, and which `altairsim` a server runs.**
 A `run` stops at the first place where `until` occurs, so an `until` that is only the start of
 a longer prompt returns too early. `DRIVING-WITH-AI.md` and the `altairsim` skill now say to

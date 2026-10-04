@@ -1176,6 +1176,16 @@ add_test(NAME acceptance-mcp-stdout
                  -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/acceptance/mcp-stdout.cmake)
 set_tests_properties(acceptance-mcp-stdout PROPERTIES LABELS acceptance TIMEOUT 60)
 
+# `--log FILE` under --mcp writes the console to a text file a person can follow (#666):
+# refused without --mcp, refused at startup when the file cannot be opened, and started
+# empty each session.
+add_test(NAME acceptance-mcp-log
+         COMMAND ${CMAKE_COMMAND}
+                 -DSIM=$<TARGET_FILE:altairsim>
+                 -DBIN=${CMAKE_CURRENT_BINARY_DIR}
+                 -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/acceptance/mcp-log.cmake)
+set_tests_properties(acceptance-mcp-log PROPERTIES LABELS acceptance TIMEOUT 120)
+
 # ---------------------------------------------------------------------------
 # SNAPSHOT / RESTORE through the real monitor -- the command wiring (DESIGN.md 13).
 # The state round-trip is proved at the unit level (tests/test_snapshot.cpp); this

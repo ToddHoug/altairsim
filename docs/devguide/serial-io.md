@@ -138,6 +138,21 @@ split on `|` and rebase **both** sides (a machine-file relative log path is conf
 other), and the timestamps come from an **injectable host wall clock** (the printer/tape pattern),
 never the emulated `Clock` — a trace whose timestamps freeze at a monitor prompt is a trace of nothing.
 
+**`fmt=text` is a transcript, not a trace.** It writes the bytes the inner line *accepted* on
+`write()`, raw, and flushes at once so `tail -f` is live. It writes no header, no timestamps, no
+pin edges and no read side — the guest echoes what it reads, so logging RX would double each
+typed key (the mirror's rule, for the same reason). The resolver opens the file in binary mode
+for this format only, so Windows does not turn LF into CR LF, and refuses `ts`/`width`/`gap`/`pins`
+with it instead of ignoring them. `append` (any format) opens the file to add to it.
+
+**Sinks stack, and the spec splits on the LAST `|`.** `scripted|socket:2323|s.log?fmt=text` is a
+tap on a mirror on a scripted line: the last sink is the outermost decorator and the left side
+recurses. `resolveEndpoint` and `rebaseEndpointPaths` both use `rfind('|')`. This is what `--mcp
+--mirror … --log …` builds (`mcp/server.cpp`, `console()`): Filter → Tee → Mirror → Scripted.
+The MCP server adds `append` because `console()` runs again after a CONFIG LOAD; `main.cpp`
+truncates the file once at startup. Anything that peels decorators to reach the scripted line
+(`asScripted`, `mcpScriptedConsole` in the monitor) must peel `TeeStream` too.
+
 ### Installing the resolver — in both mains
 
 The grammar travels to a board as a function it is handed, never as knowledge it holds:

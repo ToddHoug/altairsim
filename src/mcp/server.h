@@ -25,6 +25,12 @@ namespace altair {
 // WATCH the session the assistant is running and TYPE back onto the line to take over
 // (issue #381). The assistant still feed()/out()s the inner scripted line unchanged --
 // the wrapper is transparent to the run loop.
-int runMcp(Machine& m, std::istream& in, std::ostream& out, const std::string& mirror = "");
+//
+// `log` (empty = off) is a file path: when set, the same console is also tapped to that
+// file as plain text (`|FILE?fmt=text&append`), a transcript a person follows with
+// `tail -f`. Watch-only, and independent of `mirror` -- a session may have both. The file
+// is opened to append; whoever wants it to start empty truncates it first (main.cpp does).
+int runMcp(Machine& m, std::istream& in, std::ostream& out, const std::string& mirror = "",
+           const std::string& log = "");
 
 } // namespace altair

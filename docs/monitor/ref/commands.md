@@ -817,6 +817,9 @@ printer:    QUEUE -- a real print queue on this host (only where the build found
             both directions, to a hex FILE -- a poor man's protocol analyzer. The
             guest cannot tell it is there. ?fmt=dump|cols|jsonl picks the layout,
             ?ts=elapsed|wall|none the timestamps, ?pins=off drops the modem edges.
+            ?fmt=text writes no hex: only what the guest prints, as it prints it,
+            a transcript in an ordinary text file. ?append adds to the FILE. A tap
+            can go on a mirror: <endpoint>|socket:PORT|FILE.
 <endpoint>|socket:PORT   a live MIRROR: append |socket:PORT to ANY endpoint above
             and a second person can `nc localhost PORT` (or telnet) to WATCH the
             session -- and TYPE, sharing the line (take-over). ?ro makes it

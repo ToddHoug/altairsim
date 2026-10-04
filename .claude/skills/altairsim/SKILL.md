@@ -58,6 +58,11 @@ returns at once and the guest runs until `stop {}`, a HLT or a breakpoint. Every
 still works meanwhile; `recv` collects the output, `status` says `running` or why it stopped.
 `run` and `step` are refused until you `stop`.
 
+**For a person who wants to watch**, start the server with `--log FILE`: it writes what the
+guest prints to `FILE` as plain text. It is an ordinary file — they can `cat` it, open it, or
+follow it live, for example with `tail -f FILE` (PowerShell: `Get-Content -Wait FILE`). It is
+watch-only; `--mirror socket:PORT` is for a person who must type.
+
 ## Do not hand-roll a pty
 
 Driving a guest with `expect` or a bare pty fights console pacing and recurring prompts. Use

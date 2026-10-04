@@ -169,6 +169,23 @@ as after `RUN` at the monitor, and answers what the person types at once. (This 
 mirror the monitor's `CONNECT` offers on any line; the *Serial lines* chapter of the User Manual
 covers it in full.)
 
+### A text log a person can follow: `--log`
+
+`--log FILE` next to `--mcp` writes what the guest prints to `FILE` as plain text, as it is
+printed. It is an ordinary text file: a person can `cat` it, open it in an editor, search it or
+copy from it at any time, and can follow it live with, for example, `tail -f FILE` (PowerShell:
+`Get-Content -Wait FILE`). It holds the whole session from the first character, where
+a mirror shows only what is printed while a watcher is connected.
+
+```
+altairsim examples/cpm/cpm22-buffered.toml --mcp --log session.log
+```
+
+The log is watch-only; use `--mirror` when the person must type. The two can be given together.
+The file is emptied at each start, a bare name lands in the folder `altairsim` was started in,
+and a file that cannot be opened is an error before the session starts. You can read the file
+too, when you want the full console history and not only what your last `run` returned.
+
 ## The tools
 
 `tools/list` is authoritative — ask it rather than working from the tables below. Each tool's

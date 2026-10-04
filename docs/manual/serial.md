@@ -431,8 +431,9 @@ Connect with telnet, and use the guest. `bbs.hex` fills with the conversation:
 - A line in `[...]` is a change on a **modem control line**, such as carrier, DTR or RTS. `^` is
   a rising edge, and `_` is a falling edge.
 
-The program empties the file each time that you connect. `SHOW` prints the tap, and
-`CONFIG SAVE` saves it, so a machine file can have a line that is always traced.
+The program empties the file each time that you connect. Add the `append` option to keep what
+the file holds, and to add to the end of it. `SHOW` prints the tap, and `CONFIG SAVE` saves it,
+so a machine file can have a line that is always traced.
 
 ### The layouts and the options
 
@@ -452,6 +453,47 @@ altairsim> CONNECT sio0:a in:reader.tap?cps=300|trace.log?fmt=jsonl
 - `width=N`: the bytes in each hex row. The default is 16
 - `gap=MS`: how long a quiet line waits before it writes a part row. The default is 200 ms
 - `pins=off`: leave out the changes on the modem control lines
+- `append`: add to the end of the file. Without `append`, the program empties the file first
+
+### A log of plain text: `fmt=text`
+
+**`fmt=text`** writes no hex. The file holds only the characters that the guest prints, with
+nothing added. Use it to keep a record of a session that you can read:
+
+```
+altairsim> CONNECT sio0:a console|session.log?fmt=text
+```
+
+In a machine file:
+
+```toml
+[[board]]
+id = "sio0"
+
+  [board.unit.a]
+  connect = "console|session.log?fmt=text"
+```
+
+- The program writes each character to the file at the time that the guest prints it. The file
+  is an ordinary text file, and you can read it, search it or copy it while the line is in use.
+  For example, `tail -f session.log` in a second window follows the session. In PowerShell on
+  Windows, the command is `Get-Content -Wait session.log`.
+- The file does not hold what you type. If the guest echoes a character, the echo is in the
+  file, as it is on a terminal.
+- The file holds each byte as the guest sent it. The `[console]` settings do not change the
+  bytes on a line (see "The console settings change bytes, and a line does not", below).
+- `append` is the only option that `fmt=text` accepts. The options `ts`, `width`, `gap` and
+  `pins` are for the hex layouts, and `fmt=text` refuses them.
+
+### A tap on a mirror
+
+A line can have a mirror and a tap together. Put the tap last:
+
+```
+altairsim> CONNECT sio0:a console|socket:2323|session.log?fmt=text
+```
+
+The next section describes the mirror.
 
 ## Mirror a line so a person can watch and take over
 

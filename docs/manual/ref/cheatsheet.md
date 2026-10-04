@@ -41,6 +41,8 @@ altairsim [machine] [options]
       --mcp          MCP server on stdio.
       --mirror <sock>  with --mcp: mirror the console to socket:PORT so a person
                      can telnet in to watch and take over. Add ?ro for watch-only.
+      --log <file>   with --mcp: write what the guest prints to a text file, as
+                     it prints it. An ordinary file; starts empty each run.
   -v, --version      print the version and exit.
   -h, --help         print this help and exit.
 ```
@@ -286,6 +288,6 @@ base      = octal          # read/print the wire class in split octal (MITS styl
 | `out:PATH` | a host file as a punch — 8-bit clean, never truncating. |
 | `terminal` | a window the simulator draws itself (SDL builds). `?emulation=vt100\|adm3a\|vt52\|h19`, `?size=COLSxROWS`. |
 | `printer:QUEUE` | a real print queue on this host. |
-| `<endpoint>\|FILE` | a tap: append `\|FILE` to any endpoint to also log the line. |
+| `<endpoint>\|FILE` | a tap: append `\|FILE` to any endpoint to also log the line. `?fmt=text` = plain text, only what the guest prints. |
 | `<endpoint>\|socket:PORT` | a live mirror: `telnet` in to watch and take over. `?ro` = watch-only. |
 

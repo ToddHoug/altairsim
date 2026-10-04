@@ -578,6 +578,8 @@ void cheatsheet(const std::string& dir) {
          "      --mcp          MCP server on stdio.\n"
          "      --mirror <sock>  with --mcp: mirror the console to socket:PORT so a person\n"
          "                     can telnet in to watch and take over. Add ?ro for watch-only.\n"
+         "      --log <file>   with --mcp: write what the guest prints to a text file, as\n"
+         "                     it prints it. An ordinary file; starts empty each run.\n"
          "  -v, --version      print the version and exit.\n"
          "  -h, --help         print this help and exit.\n"
          "```\n\n";
@@ -685,7 +687,8 @@ void cheatsheet(const std::string& dir) {
          "| `terminal` | a window the simulator draws itself (SDL builds). "
          "`?emulation=vt100\\|adm3a\\|vt52\\|h19`, `?size=COLSxROWS`. |\n"
          "| `printer:QUEUE` | a real print queue on this host. |\n"
-         "| `<endpoint>\\|FILE` | a tap: append `\\|FILE` to any endpoint to also log the line. |\n"
+         "| `<endpoint>\\|FILE` | a tap: append `\\|FILE` to any endpoint to also log the line. "
+         "`?fmt=text` = plain text, only what the guest prints. |\n"
          "| `<endpoint>\\|socket:PORT` | a live mirror: `telnet` in to watch and take over. "
          "`?ro` = watch-only. |\n\n";
 }

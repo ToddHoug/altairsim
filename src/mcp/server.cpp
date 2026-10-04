@@ -13,6 +13,7 @@
 #include "host/endpoint.h"
 #include "host/filter.h"
 #include "host/mirror_stream.h"
+#include "host/tee_stream.h"
 #include "host/stream.h"
 #include "isa/isa.h"
 #include "util/json.h"
@@ -773,6 +774,10 @@ struct McpSession {
     // MirrorStream so a human can telnet in and share the session (issue #381). Empty =
     // the bare scripted line. Set once at startup (runMcp), read by console().
     std::string mirror;
+    // `--log FILE`: when set, the console is also tapped to a text file (issue #666). The
+    // tap is outside the mirror and inside the console filter, so the file holds what a
+    // terminal would show. Set once at startup, read by console().
+    std::string log;
 
     // #490: guards `status` below. Every read/write is a whole-struct copy under this
     // lock -- see RunSnapshot's own comment for why individual atomics are not enough
@@ -835,14 +840,15 @@ Json statusResult(McpSession& sess, std::mutex& queueMu, const bool& haveCurrent
 
 // The scripted line the interactive tools drive -- reached THROUGH whatever wraps it.
 // Bare, the unit's stream IS the ScriptedStream; the console binding wraps it in the
-// console's transform FilterStream (always) and, under --mirror, a MirrorStream too, so
-// the stack is Filter -> [Mirror ->] Scripted. Peel any of those decorators to reach the
+// console's transform FilterStream (always), under --log a TeeStream and under --mirror a
+// MirrorStream, so the stack is Filter -> [Tee ->] [Mirror ->] Scripted. Peel any of those decorators to reach the
 // ScriptedStream the guest ultimately talks to, which is the one we feed()/out().
 ScriptedStream* asScripted(ByteStream* s) {
     while (s) {
         if (auto* ss = dynamic_cast<ScriptedStream*>(s)) return ss;
         if (auto* f = dynamic_cast<FilterStream*>(s)) { s = f->inner(); continue; }
         if (auto* mir = dynamic_cast<MirrorStream*>(s)) { s = mir->inner(); continue; }
+        if (auto* tee = dynamic_cast<TeeStream*>(s)) { s = tee->inner(); continue; }
         return nullptr;
     }
     return nullptr;
@@ -863,8 +869,10 @@ ScriptedStream* console(Machine& m, McpSession& s, std::string& err) {
 
     // Bare `scripted`, or `scripted|socket:PORT` when a mirror was asked for. The mirror
     // rides the same tap grammar the resolver already knows (host/endpoint.cpp).
-    const std::string baseSpec = s.mirror.empty() ? std::string("scripted")
-                                                   : "scripted|" + s.mirror;
+    // A `--log` file is one more tap on the end. APPEND, not truncate: this runs again
+    // after a CONFIG LOAD, and the transcript so far must survive that.
+    std::string baseSpec = s.mirror.empty() ? std::string("scripted") : "scripted|" + s.mirror;
+    if (!s.log.empty()) baseSpec += "|" + s.log + "?fmt=text&append";
 
     for (const auto& b : m.boards())
         for (const auto& u : b->units()) {
@@ -2136,13 +2144,15 @@ constexpr size_t kMaxPending = 4096;
 
 } // namespace
 
-int runMcp(Machine& m, std::istream& in, std::ostream& out, const std::string& mirror) {
+int runMcp(Machine& m, std::istream& in, std::ostream& out, const std::string& mirror,
+           const std::string& log) {
     // Take the console off "console" NOW, before anything runs: under --mcp stdin is the
     // JSON-RPC channel, not a keyboard, and a guest reading it would eat our next request.
     // A scripted line is one the interactive tools own. Quietly does nothing if the
     // machine has no console line (an empty backplane, a socket-only machine).
     McpSession sess;
     sess.mirror = mirror;
+    sess.log    = log;
     std::string bindErr;
     console(m, sess, bindErr);
 
@@ -2160,8 +2170,14 @@ int runMcp(Machine& m, std::istream& in, std::ostream& out, const std::string& m
     // to STDERR, never `out`, which is the JSON-RPC channel a stray line would corrupt.
     // The session still runs; the console just falls back to being un-rebound until a
     // tool call retries and surfaces the same error to the client.
-    if (!mirror.empty() && !bindErr.empty())
-        std::cerr << "altairsim: --mirror " << mirror << " failed: " << bindErr << "\n";
+    // The same goes for a --log file that could not be opened; with both asked for, the
+    // error text itself says which one it was (a port, or a file).
+    if (!bindErr.empty() && (!mirror.empty() || !log.empty())) {
+        std::cerr << "altairsim:";
+        if (!mirror.empty()) std::cerr << " --mirror " << mirror;
+        if (!log.empty()) std::cerr << " --log " << log;
+        std::cerr << " failed: " << bindErr << "\n";
+    }
 
     // ^C AS AN OUT-OF-BAND STOP for a wedged `run` (#488, part 1): belt-and-braces for an
     // external `kill -INT` on the whole process. Installed for the whole session, restored

@@ -113,7 +113,9 @@ std::string rebaseEndpointPaths(const std::string&                              
     // be an in:/out: file, and the log FILE itself is a path. Split on the `|` first,
     // rebase each independently, and rejoin -- otherwise a machine-file relative
     // `in:tape.tap|../logs/cap.hex` resolves its log against the shell cwd.
-    if (size_t bar = spec.find('|'); bar != std::string::npos) {
+    // The LAST `|`: the right side is the outermost sink and the left side recurses, so a
+    // tap on a mirror (`a|socket:2323|cap.log`) splits into `a|socket:2323` and `cap.log`.
+    if (size_t bar = spec.rfind('|'); bar != std::string::npos) {
         std::string inner = spec.substr(0, bar);
         std::string file  = spec.substr(bar + 1);
         std::string path = file, opts;
@@ -267,7 +269,12 @@ std::unique_ptr<ByteStream> resolveEndpoint(const std::string& spec, std::string
     // handed to the socket: branch. Split on the FIRST `|`: the left is any endpoint
     // (recursed here, options and all), the right is the log path plus the tee's own
     // `?key=value&...`. The board never learns any of this -- it gets a ByteStream.
-    if (size_t bar = spec.find('|'); bar != std::string::npos) {
+    //
+    // SPLIT ON THE LAST `|`. Sinks stack: `scripted|socket:2323|session.log?fmt=text` is a
+    // log tap on a mirror on a scripted line. The last sink is the outermost decorator and
+    // everything to its left is the line it wraps, resolved by the recursion below -- so
+    // describe(), which appends `|sink` to the inner's own, reads back in the same order.
+    if (size_t bar = spec.rfind('|'); bar != std::string::npos) {
         std::string inner = spec.substr(0, bar);
         std::string file  = spec.substr(bar + 1);
         if (inner.empty()) {
@@ -353,6 +360,8 @@ std::unique_ptr<ByteStream> resolveEndpoint(const std::string& spec, std::string
         // The tee's options ride the same `?key[=value][&key...]` grammar as in:/printer:,
         // and every value goes through the one parseValue -- no second convention.
         TeeStream::Params params;
+        bool              append = false;  // open the log to add to it, not to start it over
+        std::string       layoutOpt;       // the first hex-layout option given, for fmt=text
         for (size_t start = 0; start <= query.size();) {
             size_t      amp = query.find('&', start);
             std::string tok =
@@ -368,8 +377,9 @@ std::unique_ptr<ByteStream> resolveEndpoint(const std::string& spec, std::string
                     if (val == "dump") params.fmt = TeeStream::Fmt::Dump;
                     else if (val == "cols") params.fmt = TeeStream::Fmt::Cols;
                     else if (val == "jsonl") params.fmt = TeeStream::Fmt::Jsonl;
+                    else if (val == "text") params.fmt = TeeStream::Fmt::Text;
                     else {
-                        err = "capture: fmt is dump, cols or jsonl (got '" + val + "')";
+                        err = "capture: fmt is dump, cols, jsonl or text (got '" + val + "')";
                         return nullptr;
                     }
                 } else if (key == "width") {
@@ -398,15 +408,33 @@ std::unique_ptr<ByteStream> resolveEndpoint(const std::string& spec, std::string
                         return nullptr;
                     }
                     params.pins = v.b();
+                } else if (key == "append") {
+                    if (!parseValue(val, Kind::Bool, v, perr)) {
+                        err = "capture: append wants a boolean: " + perr;
+                        return nullptr;
+                    }
+                    append = v.b();
                 } else {
                     err = "capture: unknown option '" + key +
-                          "'. Options are fmt, width, gap, ts, pins -- the log file comes "
-                          "before '?'";
+                          "'. Options are fmt, width, gap, ts, pins, append -- the log file "
+                          "comes before '?'";
                     return nullptr;
                 }
+                if (layoutOpt.empty() &&
+                    (key == "width" || key == "gap" || key == "ts" || key == "pins"))
+                    layoutOpt = key;
             }
             if (amp == std::string::npos) break;
             start = amp + 1;
+        }
+
+        // fmt=text is the guest's bytes and nothing else, so the options that shape a hex
+        // trace mean nothing there. Refuse one rather than accept it and ignore it.
+        const bool text = params.fmt == TeeStream::Fmt::Text;
+        if (text && !layoutOpt.empty()) {
+            err = "capture: " + layoutOpt + " has no meaning with fmt=text, which writes the "
+                  "guest's output as it is. The only option that applies is append";
+            return nullptr;
         }
 
         // Recurse for the wrapped line; its error (a bad inner spec) is the operator's.
@@ -414,8 +442,13 @@ std::unique_ptr<ByteStream> resolveEndpoint(const std::string& spec, std::string
         if (!innerStream) return nullptr;
 
         // The resolver opens the log so it can REFUSE cleanly here (a bad path is a
-        // failed CONNECT, not a half-built tap). Truncate: a capture is a fresh trace.
-        std::ofstream log(path, std::ios::out | std::ios::trunc);
+        // failed CONNECT, not a half-built tap). Truncate: a capture is a fresh trace --
+        // unless `append` asks to add to what is there. A transcript is opened BINARY: its
+        // bytes are the guest's, and a text-mode stream on Windows would turn each LF
+        // into CR LF. The hex layouts are lines of our own text and stay text-mode.
+        std::ios::openmode mode = std::ios::out | (append ? std::ios::app : std::ios::trunc);
+        if (text) mode |= std::ios::binary;
+        std::ofstream log(path, mode);
         if (!log) {
             err = "cannot open '" + path + "' for capture";
             return nullptr;
