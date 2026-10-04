@@ -101,6 +101,15 @@ mine.toml: line 8: [console] is already at line 5 -- a table is written one time
 mine.toml: line 6: 'name' is already set at line 2
 ```
 
+**The wrong brackets on a table are an error also.** `[board]` with single brackets does not
+add a board, and `[[console]]` with double brackets is not the console. The error gives the
+correct form:
+
+```
+mine.toml: line 6: [board] must be [[board]] -- double brackets, one for each
+mine.toml: line 4: [[console]] must be [console] -- a table that is written one time
+```
+
 Each key must be below a table. A key above the first table is an error.
 
 ## The tables

@@ -859,6 +859,43 @@ void test_toml_errors() {
         if (!err.empty()) std::printf("      %s\n", err.c_str());
     }
 
+    SECTION("the brackets of a table header are checked: [[board]] is a list, [machine] is not");
+
+    // Issue #678: the header was read by its name only, so this loaded as two boards.
+    CHECK(refusedWith("[machine]\n"
+                      "name = \"t\"\n"
+                      "[board]\n"                  // 3
+                      "type = \"memory\"\n"
+                      "id = \"m0\"\n"
+                      "[board]\n"
+                      "type = \"memory\"\n"
+                      "id = \"m1\"\n",
+                      {"t.toml: line 3: [board] must be [[board]]"}),
+          "[board] written twice is refused, at the first one");
+    CHECK(refusedWith("[machine]\nbase = \"default\"\n[board]\nid = \"sio0\"\n",
+                      {"line 3: [board] must be [[board]]"}),
+          "a single [board] is refused too, and the error gives the form");
+    for (const char* sub : {"drive", "region", "socket"}) {
+        std::string text = "[machine]\nbase = \"default\"\n[[board]]\nid = \"dsk0\"\n  [board." +
+                           std::string(sub) + "]\n";
+        std::string want = "line 5: [board." + std::string(sub) + "] must be [[board." +
+                           std::string(sub) + "]]";
+        CHECK(refusedWith(text, {want.c_str()}), "a list a board owns takes double brackets");
+    }
+    for (const char* tbl : {"machine", "console", "display", "terminal"}) {
+        std::string text = "[[" + std::string(tbl) + "]]\n";
+        std::string want = "line 1: [[" + std::string(tbl) + "]] must be [" + std::string(tbl) + "]";
+        CHECK(refusedWith(text, {want.c_str()}), "a table written one time takes single brackets");
+    }
+    CHECK(refusedWith("[machine]\nbase = \"default\"\n[[board]]\nid = \"sio0\"\n"
+                      "  [[board.unit.a]]\n"
+                      "  baud = 9600\n",
+                      {"line 5: [[board.unit.a]] must be [board.unit.a]"}),
+          "a unit's table takes single brackets");
+    CHECK(refusedWith("[machine]\nbase = \"default\"\n[widgets]\n[[widgets]]\n",
+                      {"line 3: unknown table [widgets]"}),
+          "a table we do not know is still reported as unknown, in either form");
+
     SECTION("the syntax checks: a key twice, a key in no table, a header with a tail");
 
     CHECK(refusedWith("[machine]\n"

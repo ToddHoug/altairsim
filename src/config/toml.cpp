@@ -374,6 +374,30 @@ bool loadInto(const std::string& text, const std::string& source, Machine& m,
             continue;
         }
 
+        // THE BRACKETS ARE PART OF THE NAME. [[board]] is "one more board" and [machine]
+        // is "the machine", and the header used to be read by its name only -- so a file
+        // with [board] written twice loaded as two boards, and [[console]] loaded as
+        // [console]. A LIST of things takes double brackets: a board, and everything a
+        // board owns a list of (region, drive, socket). A table written one time takes
+        // single: the four host tables, and a unit's properties. A name we do not know is
+        // left for "unknown table" below.
+        {
+            bool once1 = t.name == "machine" || t.name == "console" || t.name == "display" ||
+                         t.name == "terminal" || t.name == "board.unit" ||
+                         t.name.rfind("board.unit.", 0) == 0;
+            bool list = !once1 && (t.name == "board" || t.name.rfind("board.", 0) == 0);
+            if (list && !t.array) {
+                err = at(t.line) + "[" + t.name + "] must be [[" + t.name +
+                      "]] -- double brackets, one for each";
+                return false;
+            }
+            if (once1 && t.array) {
+                err = at(t.line) + "[[" + t.name + "]] must be [" + t.name +
+                      "] -- a table that is written one time";
+                return false;
+            }
+        }
+
         if (t.name == "machine" || t.name == "console" || t.name == "display" ||
             t.name == "terminal") {
             if (!once(onceTables, t.name, t.name, t.line)) return false;
@@ -561,7 +585,8 @@ bool loadInto(const std::string& text, const std::string& source, Machine& m,
         // A sub-unit table: [[board.region]], [[board.drive]], [board.unit.a].
         if (t.name.rfind("board.", 0) == 0) {
             if (!current) {
-                err = at(t.line) + "[[" + t.name + "]] before any [[board]]";
+                err = at(t.line) + (t.array ? "[[" : "[") + t.name + (t.array ? "]]" : "]") +
+                      " before any [[board]]";
                 return false;
             }
             std::string sub = t.name.substr(6);
