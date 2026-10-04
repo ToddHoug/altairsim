@@ -1323,6 +1323,32 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
+# THE WATCH SCRIPT WE SHIP SEES A LIVE MIRROR.
+#
+# tools/user/mirror-watch.sh goes into the package as tools/mirror-watch.sh (issue #664): the
+# viewer a person runs to watch an assistant drive a machine. This starts it BEFORE the
+# simulator, as its README allows, runs a ROM monitor over --mcp --mirror, and reads what the
+# watcher showed -- that it waited, connected, showed the guest, and waited again when the
+# simulator stopped. `amon` because it prints a banner with no media and no key.
+#
+# bash, not sh: the script connects through bash's /dev/tcp. There is no bash test on Windows;
+# mirror-watch.ps1 is that platform's script, and it is checked by hand before a release.
+# ---------------------------------------------------------------------------
+find_program(BASH_EXECUTABLE bash)
+if(BASH_EXECUTABLE AND NOT WIN32)
+  add_test(NAME mirror-watch
+           COMMAND ${BASH_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/acceptance/mirror-watch.sh
+                   $<TARGET_FILE:altairsim>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/tools/user/mirror-watch.sh
+                   amon 63488 "AMON 3.1 by M. Eberhard")
+  set_tests_properties(mirror-watch PROPERTIES
+                       LABELS acceptance TIMEOUT 120
+                       PASS_REGULAR_EXPRESSION "mirror-watch: PASS")
+else()
+  message(STATUS "bash not found (or Windows) -- the mirror-watch test is not registered")
+endif()
+
+# ---------------------------------------------------------------------------
 # EVERY reference/ DISTILLATION MUST BE CATALOGUED.
 #
 # reference/*.md are the text-only hardware references. reference/README.md indexes them and

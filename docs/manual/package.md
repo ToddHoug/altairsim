@@ -16,6 +16,7 @@ LICENSE-SDL3             the license of SDL3, which is built into the program.
 LICENSE-MAME-HD63484     the notice for the source of the HD63484 model's structure (MAME).
 examples/                machines that boot, with their media.
 hostbridge/              the file-transfer utilities: source, HEX and COM.
+tools/                   scripts that show a mirror in a second window.
 skills/                  the AI briefing again, and the rules for guest programs, as Agent Skills.
 ```
 
@@ -130,6 +131,14 @@ You do not need this folder to use the utilities on the CP/M disk in the package
 already has the `.COM` files. The folder is for a disk that does not have the utilities. The
 file-transfer chapter tells you how to put them on that disk, by pasting `R.HEX` through the
 console.
+
+## The watch scripts
+
+`tools/` contains two scripts that show the console of the machine in a second window, while
+an AI assistant controls the machine: `tools/mirror-watch.sh` for macOS and Linux, and
+`tools/mirror-watch.ps1` for Windows. Each script waits for the mirror, shows its output, and
+connects again after the simulator starts again. `tools/README.pdf` gives the commands. The
+chapter *The MCP server* tells you how to start a mirror.
 
 ## What is *not* in the package: everything else to run
 

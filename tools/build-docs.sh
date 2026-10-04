@@ -388,3 +388,7 @@ for abs in "$root"/examples/README.md "$root"/examples/*/README.md; do
   [ -f "$abs" ] || continue
   build_readme "${abs#"$root"/}"
 done
+
+# The user tools' README, the same way and for the same reason: tools/user/ ships as tools/ in
+# the package, and build-package.sh strips the .md and ships this PDF in its place.
+build_readme tools/user/README.md

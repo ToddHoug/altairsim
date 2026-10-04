@@ -4,6 +4,12 @@ This directory holds the scripts and small programs that build the documents, th
 package and the media, and that CI uses. Nothing here is part of the simulator. Each file
 starts with a long comment that gives its usage and the reason that it exists.
 
+## For the user
+
+| File | What it does |
+|---|---|
+| `user/` | The tools that a person with the release package uses. This is the only part of `tools/` that ships: it is `tools/` in the package. It has the two `mirror-watch` scripts, which show a `--mirror` in a second window. |
+
 ## Release
 
 | File | What it does |

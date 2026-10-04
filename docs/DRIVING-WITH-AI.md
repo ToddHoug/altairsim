@@ -150,6 +150,13 @@ Add `?ro` to watch without being able to type — quote it (`--mirror 'socket:23
 `?` is a shell wildcard and an unquoted `socket:2323?ro` makes the shell fail with `no matches
 found`. One watcher at a time.
 
+`nc` and `telnet` exit each time you restart the simulator, and Windows installs neither. For a
+person who wants one window that stays open, the package has `tools/mirror-watch.sh` (macOS,
+Linux; bash only) and `tools/mirror-watch.ps1` (Windows; PowerShell only). Each waits for the
+mirror, shows it, and reconnects after a restart. With no argument it watches `localhost:2323`;
+`PORT` or `HOST PORT` picks another. They are watch-only — to type, use `nc`. On Windows, tell
+the person to start it with `powershell -ExecutionPolicy Bypass -File tools\mirror-watch.ps1`.
+
 Between two `run`s the guest is stopped, so a character you type then waits on the line and is
 read on the next `run` — the same as staging input with `send`. To hand the console to a person,
 **`start`** the guest instead (see *Leaving the guest running* below): it then runs between calls,

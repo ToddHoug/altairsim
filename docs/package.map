@@ -81,6 +81,20 @@ DIR  examples/ai-mcp     <=  examples/ai-mcp
 # they get their own top-level folder. The repo path is unchanged -- cpm/hostbridge/ in the
 # tree, hostbridge/ in the zip.
 DIR  hostbridge          <=  cpm/hostbridge
+# ALSO NOT AN EXAMPLE: the tools a package holder runs. tools/user/ is the ONE part of the
+# repository's tools/ that ships -- everything else there builds the documents, the package and
+# the media, and is no use to someone holding a release. Keeping the shipped tools in their own
+# subfolder is what lets this be a plain DIR line and not a list of FILEs to keep in step.
+#
+# THE PACKAGE PATH IS tools/, not tools/user/: in the zip there are no build tools to tell them
+# apart from, so the extra level would only be a puzzle. The clone path and the package path
+# differ, as they do for hostbridge/ above. build-package.sh strips the README.md and ships its
+# rendered README.pdf, as it does for an example.
+#
+# TODAY IT HOLDS the two mirror-watch scripts (issue #664): a viewer for `--mirror socket:PORT`
+# that waits for the mirror and connects again after the simulator restarts. Windows installs
+# neither telnet nor nc, so without mirror-watch.ps1 a Windows user has no viewer at all.
+DIR  tools               <=  tools/user
 
 # ALSO NOT AN EXAMPLE. skills/altairsim/ is DRIVING-WITH-AI.md's front door for an assistant
 # that reads Agent Skills: a short SKILL.md whose frontmatter `description` is what makes a
