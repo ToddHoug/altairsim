@@ -8,6 +8,11 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+**A machine file with the wrong brackets on a table is refused.** `[board]` with single
+brackets loaded as if it was `[[board]]`, and `[[console]]` loaded as if it was `[console]`.
+Now each is an error that gives the line and the correct form. A file that has this mistake
+loaded before and does not load now; change the brackets as the error says.
+
 **The configuring chapter has the right title, and says how a machine file is loaded.** The
 chapter that was called "The machine file" is now "Configuring a machine", like the other
 chapters call it. It says how a file is loaded (the command line, `CONFIG LOAD`, or `base`), why
