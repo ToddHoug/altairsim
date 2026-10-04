@@ -81,7 +81,8 @@ assistant works on the disk in the machine, and not on a copy of the file on you
 
 ## Watch it work: `--mirror`
 
-Add `--mirror socket:PORT` with `--mcp`, and you can type `telnet localhost PORT` to **watch the
+Add `--mirror socket:PORT` with `--mcp`, and you can type `nc localhost PORT` (or `telnet
+localhost PORT`; a new Mac has `nc` but no `telnet`) in a second window to **watch the
 session that the assistant controls**, with every character that the guest prints. You can also
 **type on the line to take over**, and share the console:
 

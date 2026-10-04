@@ -134,8 +134,9 @@ directory — so there, use absolute paths.
 ## Watching over its shoulder — and taking the keyboard
 
 You do not have to read a transcript after the fact to see what the assistant is doing. Add
-`--mirror socket:PORT` next to `--mcp` and a person can `telnet localhost PORT` to watch the
-**very session the assistant is driving** — every character the guest prints as it prints it —
+`--mirror socket:PORT` next to `--mcp` and a person can `nc localhost PORT` (or `telnet localhost
+PORT` — a clean Mac has `nc` but no `telnet`) to watch the **very session the assistant is
+driving** — every character the guest prints as it prints it —
 and **type back onto the line to take over**, sharing the console with the assistant:
 
 ```
@@ -144,7 +145,7 @@ altairsim examples/cpm/cpm22-buffered.toml --mcp --mirror socket:2323
 
 The assistant keeps driving through `run`/`send`/`recv` exactly as before — the mirror is
 invisible to it — while whatever it types and whatever the guest prints also crosses the socket to
-you. Type at your `telnet` and the guest reads it as if you had reached over and used the keyboard.
+you. Type there and the guest reads it as if you had reached over and used the keyboard.
 Add `?ro` to watch without being able to type — quote it (`--mirror 'socket:2323?ro'`), since
 `?` is a shell wildcard and an unquoted `socket:2323?ro` makes the shell fail with `no matches
 found`. One watcher at a time.
