@@ -131,6 +131,9 @@ uint8_t CromemcoFdcBoard::read(const BusCycle& c) {
     Clock&  k = clk();
     uint8_t p = c.port();
     uint8_t v = 0xFF;
+    // Any read of the board is the "next access" a pending Type I command steps on, the
+    // track register included (Wd17xx::stepPending()).
+    if (chip_->stepPending()) chip_->touch(k);
     switch (p) {
         // ---- TMS 5501 (00-09) ----
         case 0x00: v = uart_.readStatus(k);   break;
@@ -183,6 +186,9 @@ void CromemcoFdcBoard::write(const BusCycle& c) {
             break;
         default: break;
     }
+    // ...and so is any write but the one that loads the command: a drive select written
+    // straight after a Restore gets the step pulses (Wd17xx::stepPending()).
+    if (p != 0x30 && chip_->stepPending()) chip_->touch(k);
     refresh();
 }
 
@@ -241,7 +247,7 @@ uint8_t CromemcoFdcBoard::readPort34() {
     // With Auto Wait armed this access holds READY until DRQ or EOJ. Under `timing = real`
     // that wait is charged to the clock; under `full` the chip is wait-synced and it is not.
     if (timingReal_ && (control_ & 0x80)) holdReady(chip_->holdUntilReady(k));
-    else chip_->poll(k);
+    else chip_->touch(k);
     // Port 34 IN (16FDC/64FDC): D7 DRQ, D6 ¬BOOT, D5 SELECT REQUEST, D4 ¬INHIBIT INIT,
     // D3 MOTOR ON, D2 MOTOR TIMEOUT, D1 AUTOWAIT TIMEOUT, D0 EOJ (reference §4).
     //   * D5 SELECT REQUEST -- the glue asserts this when the selected drive is ready to be

@@ -45,10 +45,21 @@ initFormat(0, 0,  0, 0, SD, 26, 128, 1);   // track 0:      26 × 128, single de
 initFormat(1, 76, 0, 0, DD, 51, 128, 1);   // tracks 1-76:  51 × 128, double density
 ```
 
-On a **read**, the density is decided **by the medium**, not the `OUT FC` density strap: a read
-takes its byte count entirely from the track's declared format, so the boot works because track 0 is
-*declared* SD and the card powers up density-clear. The strap (`dataRate_` 250k/500k) drives the
-chip's `dataRateBits` for fidelity and for anything that reads it back.
+On a **read**, the `OUT FC` density bit must match the density the track is recorded at. The bit
+sets the chip's `dataRateBits` (250k/500k), and the board turns on the chip's density check
+(`Wd17xx::setDensityChecked`): an FD1791 clocked for one density finds no ID field recorded at the
+other, and the command ends in **Record Not Found**. The boot works because track 0 is single
+density and the card powers up density-clear; the CBIOS sets the bit for tracks 1-76. The byte count
+of a sector still comes from the track's declared format.
+
+**The cold loader must set the bit too.** The loader in the boot sector reads the rest of track 0,
+then steps in and reads the system from track 1, which is double density. Tarbell's loader source,
+`2DBOOT24.ASM` on Tarbell Public Domain Disk 2, has an option for this: with `DOUBDEN TRUE` it
+writes 08 to `OUT FC` and changes its sectors-per-track count to 51 before the step, and it puts
+`DD` in byte 7E of the sector to tell the CBIOS that the disk is double density. Both tracked
+masters carry that loader, assembled with `MSIZE 48`, `DOUBDEN TRUE` and `DMACNTL FALSE`. A loader
+assembled with `DOUBDEN FALSE` reads track 1 with the bit clear and stops with Record Not Found —
+on this board as on the card.
 
 ### Reading SD media and formatting a blank
 
