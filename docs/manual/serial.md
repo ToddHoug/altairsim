@@ -77,7 +77,8 @@ This is the complete list.
 | `scripted` | a terminal that a program types into, for the MCP tools and the tests |
 
 You can add two things to any endpoint. `|FILE` writes every byte on the line to a log file, and
-`|socket:PORT` lets a second person watch the line and type on it. See "Tap a line to a log
+`|socket:PORT` lets a second person watch the line and type on it (`|pty` does the same for a
+terminal program, on macOS and Linux). See "Tap a line to a log
 file" and "Mirror a line", below.
 
 ### `null` is not an error
@@ -527,6 +528,41 @@ bytes. `SHOW` prints the mirror, and `CONFIG SAVE` saves it.
 again when the simulator starts again. They only watch. The chapter *The MCP server* describes
 them.
 
+### A mirror on a pseudo-terminal
+
+On macOS and Linux, a mirror can go to a **pseudo-terminal** as an alternative to a socket. A
+terminal program, such as `screen`, `minicom` or `cu`, opens a pseudo-terminal as it opens a
+serial port. Add `|pty` to any endpoint:
+
+```
+altairsim> CONNECT sio0:a console|pty
+sio0:a: connected to console|pty
+mirror: /tmp/altairsim0 (/dev/ttys004)
+```
+
+The first mirror is `/tmp/altairsim0`, and the next one is `/tmp/altairsim1`. A second person
+types `screen /tmp/altairsim0` to watch the line and to type on it. The name is a link to the
+device in the brackets, and the program removes the link when the line disconnects.
+
+To select the name, give a path after `pty:`. A path that is not absolute is relative to the
+folder of the machine file. Use this form in a machine file, because the name stays the same:
+
+```
+altairsim> CONNECT sio0:a console|pty:/tmp/console
+```
+
+In a machine file:
+
+```toml
+[[board]]
+id = "sio0"
+a = "console|pty:/tmp/console"
+```
+
+`?ro` makes this mirror watch-only also. When no program has the name open, the mirror discards
+what the guest prints. If `pty:` names a file that is not a link, the program refuses, and does
+not replace the file. Windows has no pseudo-terminal, and refuses `|pty`.
+
 ## An endpoint that `CONNECT` does not understand is an error
 
 If the program cannot read your endpoint, it **refuses, and lists the forms that it accepts**:
@@ -536,7 +572,7 @@ altairsim> CONNECT sio0:a sockit:2323
 no endpoint 'sockit:2323'. Try: console | null | loopback | scripted | socket:PORT[?banner] | socket:HOST:PORT |
 telnet:PORT[?banner=off] | telnet:HOST:PORT | serial:DEVICE | in:PATH |
 out:PATH | terminal[?emulation=vt100&size=80x24] | printer:QUEUE |
-<endpoint>|FILE | <endpoint>|socket:PORT
+<endpoint>|FILE | <endpoint>|socket:PORT | <endpoint>|pty[:LINK]
 ```
 
 It never uses `null` in its place. A machine that boots and prints nothing sends you to look for

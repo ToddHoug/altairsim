@@ -257,6 +257,7 @@ if(WIN32)
   set(PLATFORM_SOURCES
     src/platform/win32/home_win32.cpp
     src/platform/win32/localtime_win32.cpp
+    src/platform/win32/pty_win32.cpp
     src/platform/win32/serial_win32.cpp
     src/platform/win32/socket_win32.cpp
     src/platform/win32/terminal_win32.cpp)
@@ -264,6 +265,7 @@ else()
   set(PLATFORM_SOURCES
     src/platform/posix/home_posix.cpp
     src/platform/posix/localtime_posix.cpp
+    src/platform/posix/pty_posix.cpp
     src/platform/posix/serial_posix.cpp
     src/platform/posix/socket_posix.cpp
     src/platform/posix/terminal_posix.cpp)
@@ -1185,6 +1187,15 @@ add_test(NAME acceptance-mcp-log
                  -DBIN=${CMAKE_CURRENT_BINARY_DIR}
                  -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/acceptance/mcp-log.cmake)
 set_tests_properties(acceptance-mcp-log PROPERTIES LABELS acceptance TIMEOUT 120)
+
+# `--mirror pty` under --mcp mirrors the console to a pseudo-terminal (#683): the session
+# says where the link is and removes it at exit; on Windows it is refused at startup.
+add_test(NAME acceptance-mcp-mirror-pty
+         COMMAND ${CMAKE_COMMAND}
+                 -DSIM=$<TARGET_FILE:altairsim>
+                 -DBIN=${CMAKE_CURRENT_BINARY_DIR}
+                 -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/acceptance/mcp-mirror-pty.cmake)
+set_tests_properties(acceptance-mcp-mirror-pty PROPERTIES LABELS acceptance TIMEOUT 120)
 
 # ---------------------------------------------------------------------------
 # SNAPSHOT / RESTORE through the real monitor -- the command wiring (DESIGN.md 13).

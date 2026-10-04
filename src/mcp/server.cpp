@@ -889,6 +889,17 @@ ScriptedStream* console(Machine& m, McpSession& s, std::string& err) {
             // made mid-session reaches the guest (issue #529).
             auto base = resolveEndpoint(baseSpec, err);
             if (!base) return nullptr;
+
+            // A pseudo-terminal mirror gets its name at run time, so say where it is --
+            // to STDERR, never the JSON-RPC channel. Said again after a CONFIG LOAD,
+            // because a rebuilt mirror is a new device.
+            {
+                ByteStream* p = base.get();
+                if (auto* t = dynamic_cast<TeeStream*>(p)) p = t->inner();
+                if (auto* ms = dynamic_cast<MirrorStream*>(p))
+                    if (std::string note = ms->sinkNote(); !note.empty())
+                        std::cerr << "altairsim: --mirror: open " << note << "\n";
+            }
             auto filt = std::make_unique<FilterStream>(std::move(base));
             filt->follow(Console::instance().filter());
 
@@ -2278,6 +2289,20 @@ int runMcp(Machine& m, std::istream& in, std::ostream& out, const std::string& m
                     !cv.wait_until(lk, sess.free.nextSlice, ready)) {
                     lk.unlock();
                     freeRunSlice(m, sess);
+                    continue;
+                }
+            } else if (!sess.mirror.empty()) {
+                // #683: A MIRROR NEEDS HOST I/O WHILE NOTHING RUNS. The watcher's wire is
+                // serviced from pump(), and between requests nothing called it: the tail
+                // of a long listing sat in the mirror's queue (a pseudo-terminal's kernel
+                // buffer is about a kilobyte) and a watcher who arrived was not noticed
+                // until the next `run`. So with a mirror, wake on a short tick and pump --
+                // on THIS thread, the only one that may touch the machine. Without a
+                // mirror the wait is the plain one it always was. The tick is short because
+                // each one moves at most a kernel buffer's worth of a queued tail.
+                if (!cv.wait_for(lk, std::chrono::milliseconds(10), ready)) {
+                    lk.unlock();
+                    m.pump();
                     continue;
                 }
             } else {

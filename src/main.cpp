@@ -44,6 +44,7 @@
 #include "host/terminal/emulator.h"
 #include "host/terminal/stream.h"
 #include "mcp/server.h"
+#include "platform/pty.h"
 
 #include <algorithm>
 #include <fstream>
@@ -120,8 +121,10 @@ static void usage(std::ostream& o) {
          "  -i, --interactive  after --script/--exec, stay in the monitor.\n"
          "\n"
          "      --mcp          MCP server on stdio (for Claude).\n"
-         "      --mirror <sock>  with --mcp: mirror the console to socket:PORT so a person\n"
-         "                     can telnet in to watch and take over. Add ?ro for watch-only.\n"
+         "      --mirror <sink>  with --mcp: mirror the console so a person can watch and\n"
+         "                     take over. socket:PORT (telnet in), or on macOS and Linux\n"
+         "                     pty or pty:LINK (open the link with a terminal program).\n"
+         "                     Add ?ro for watch-only.\n"
          "      --log <file>   with --mcp: write what the guest prints to a text file, as\n"
          "                     it prints it. An ordinary file; starts empty each run.\n"
          "  -v, --version      print the version and exit.\n"
@@ -178,9 +181,11 @@ int main(int argc, char** argv) {
         } else if (s == "--mcp") {
             mcp = true;
         } else if (s == "--mirror") {
-            if (!need(i, "a socket (--mirror socket:2323)")) return 2;
+            if (!need(i, "a sink (--mirror socket:2323, or --mirror pty)")) return 2;
             // Accept a bare port for convenience: `--mirror 2323` is `socket:2323`.
-            mirror = a[i].rfind("socket:", 0) == 0 ? a[i] : "socket:" + a[i];
+            // `pty` and `pty:LINK` name the other sink, a pseudo-terminal (issue #683).
+            const bool named = a[i].rfind("socket:", 0) == 0 || a[i].rfind("pty", 0) == 0;
+            mirror = named ? a[i] : "socket:" + a[i];
         } else if (s == "--log") {
             if (!need(i, "a file (--log session.log)")) return 2;
             log = a[i];
@@ -220,7 +225,15 @@ int main(int argc, char** argv) {
     if (!mirror.empty() && !mcp) {
         std::cerr << "--mirror needs --mcp (it mirrors the console the MCP tools drive).\n"
                      "Without --mcp, mirror a line from the monitor: CONNECT <u> <ep>|"
-                     "socket:PORT\n";
+                     "socket:PORT"
+                  << (altair::platform::havePty() ? " (or |pty)" : "") << "\n";
+        return 2;
+    }
+
+    // A pseudo-terminal mirror on a host that has none can never work, so it is refused
+    // here -- not left as a session that runs with no mirror and one line on stderr.
+    if (mirror.rfind("pty", 0) == 0 && !platform::havePty()) {
+        std::cerr << "--mirror pty is not available on Windows; use --mirror socket:PORT\n";
         return 2;
     }
 

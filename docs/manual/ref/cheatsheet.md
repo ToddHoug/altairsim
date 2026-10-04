@@ -39,8 +39,10 @@ altairsim [machine] [options]
   -x, --exec <cmd>   run one monitor command (repeatable), then exit.
   -i, --interactive  after --script/--exec, stay in the monitor.
       --mcp          MCP server on stdio.
-      --mirror <sock>  with --mcp: mirror the console to socket:PORT so a person
-                     can telnet in to watch and take over. Add ?ro for watch-only.
+      --mirror <sink>  with --mcp: mirror the console so a person can watch and
+                     take over. socket:PORT (telnet in), or on macOS and Linux
+                     pty or pty:LINK (open the link with a terminal program).
+                     Add ?ro for watch-only.
       --log <file>   with --mcp: write what the guest prints to a text file, as
                      it prints it. An ordinary file; starts empty each run.
   -v, --version      print the version and exit.
@@ -290,4 +292,5 @@ base      = octal          # read/print the wire class in split octal (MITS styl
 | `printer:QUEUE` | a real print queue on this host. |
 | `<endpoint>\|FILE` | a tap: append `\|FILE` to any endpoint to also log the line. `?fmt=text` = plain text, only what the guest prints. |
 | `<endpoint>\|socket:PORT` | a live mirror: `telnet` in to watch and take over. `?ro` = watch-only. |
+| `<endpoint>\|pty[:LINK]` | the same mirror on a pseudo-terminal (macOS and Linux): open `/tmp/altairsim0`, or `LINK`, with a terminal program. |
 

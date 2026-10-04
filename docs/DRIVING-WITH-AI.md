@@ -162,6 +162,16 @@ mirror, shows it, and reconnects after a restart. With no argument it watches `l
 `PORT` or `HOST PORT` picks another. They are watch-only — to type, use `nc`. On Windows, tell
 the person to start it with `powershell -ExecutionPolicy Bypass -File tools\mirror-watch.ps1`.
 
+**On macOS and Linux the mirror can be a pseudo-terminal: `--mirror pty`.** The simulator prints
+`altairsim: --mirror: open /tmp/altairsim0 (/dev/ttys004)` on stderr, and the person opens that
+name with a terminal program — `screen /tmp/altairsim0`, `minicom -D /tmp/altairsim0` — which
+sends each key as it is typed and adds no echo of its own, where `nc` does both badly. There is no
+port to pick. The first mirror is `/tmp/altairsim0`, the next `/tmp/altairsim1`; `--mirror
+pty:PATH` puts the name where you say, and `?ro` makes it watch-only. The name is a link that the
+simulator removes when it stops. With nobody on it the output is dropped, so the person sees the
+session from the moment they open it. Windows has no pseudo-terminal: `--mirror pty` is refused
+there, so use `socket:PORT`.
+
 Between two `run`s the guest is stopped, so a character you type then waits on the line and is
 read on the next `run` — the same as staging input with `send`. To hand the console to a person,
 **`start`** the guest instead (see *Leaving the guest running* below): it then runs between calls,

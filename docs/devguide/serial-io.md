@@ -153,6 +153,27 @@ The MCP server adds `append` because `console()` runs again after a CONFIG LOAD;
 truncates the file once at startup. Anything that peels decorators to reach the scripted line
 (`asScripted`, `mcpScriptedConsole` in the monitor) must peel `TeeStream` too.
 
+**A mirror's sink is a `MirrorSink`.** `MirrorStream` (`host/mirror_stream.h`) owns the rules —
+output is dropped with no watcher, the queue is bounded and drops its oldest bytes, typed keys
+are injected, `ro` discards them — and the sink is only the wire: `poll()`, `attached()`,
+`read()`, `write()`. `SocketMirrorSink` is the TCP listener; `PtyMirrorSink` wraps
+`platform::Pty` (`|pty`, `|pty:LINK`, issue #683). A new sink, such as a real serial port, is a
+third class and one branch in the resolver.
+
+**The pseudo-terminal has three traps, all in `platform/posix/pty_posix.cpp`.** (1) A master
+whose slave was never opened reads `EAGAIN`, the same as "open and quiet", so `openPty()` opens
+and closes the slave once; after that `POLLHUP` means nobody is there. (2) macOS puts the slave
+back in cooked mode with echo at every reopen, and an echo would return the guest's output as
+typed keys, so `poll()` sets raw mode through the master on every edge where a program arrives.
+(3) The name is a symbolic link claimed with `symlink()`, which fails if the name exists, so two
+simulators cannot take the same `/tmp/altairsim{n}`. A test reaches the slave side through
+`platform::openPtyPeer`, because the platform lint covers `tests/` too.
+
+**`runMcp` pumps while it waits, but only with a mirror.** Between requests the worker used to
+block in `cv.wait`, and nothing called `pump()`: the tail of a long listing stayed in the
+mirror's queue until the next `run`. With `--mirror` it now wakes every 10 ms and calls
+`m.pump()` on the worker thread. Without a mirror the wait is unchanged.
+
 ### Installing the resolver — in both mains
 
 The grammar travels to a board as a function it is handed, never as knowledge it holds:

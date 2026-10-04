@@ -114,8 +114,40 @@ port, or a host and a port, to watch a different mirror. `tools/README.pdf` give
 and tells you how to let Windows run the script.
 
 The scripts only watch. They do not send the keys that you type. One watcher can connect at a
-time, and the mirror accepts a watcher only while the guest runs. Until then, the script shows
-`Connected` and nothing more.
+time. The guest prints only while it runs. Until then, the script shows `Connected` and nothing
+more.
+
+### A mirror for a terminal program: `--mirror pty`
+
+On macOS and Linux, the mirror can be a **pseudo-terminal**. A pseudo-terminal looks like a
+serial port to a terminal program, such as `screen`, `minicom` or `cu`. A terminal program
+sends each key when you press it, and does not print the key a second time. There is no port
+number to select.
+
+```
+$ altairsim examples/cpm/cpm22-buffered.toml --mcp --mirror pty
+altairsim: --mirror: open /tmp/altairsim0 (/dev/ttys004)
+```
+
+1. Read the name that the program prints. The first mirror is `/tmp/altairsim0`, and the next
+   one is `/tmp/altairsim1`.
+2. Open that name in a second window:
+
+   ```
+   $ screen /tmp/altairsim0
+   ```
+
+3. To leave `screen`, press `Ctrl-A`, then `K`, then `Y`.
+
+The name in `/tmp` is a link to the device in the brackets. The device has a different name at
+each start, and the link keeps the same one. The program removes the link when it stops.
+
+To select the name, give a path: `--mirror pty:/tmp/console`. Add `?ro` to make the mirror
+watch-only, with quotes as for a socket: `--mirror 'pty?ro'`.
+
+When no program has the name open, the mirror discards what the guest prints. You see the
+output from the time that you open it. Windows has no pseudo-terminal, and `--mirror pty` is
+refused there. Use `--mirror socket:PORT`.
 
 Without the quotes, the shell tries to find a file called `socket:2323?ro`, and fails before
 `altairsim` sees it. (zsh reports `no matches found`.) One watcher can connect at a time.

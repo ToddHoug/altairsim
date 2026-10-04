@@ -780,7 +780,7 @@ in the machine knows what any of these words mean.
 Endpoints: console | null | loopback | scripted | socket:PORT[?banner] | socket:HOST:PORT |
 telnet:PORT[?banner=off] | telnet:HOST:PORT | serial:DEVICE | in:PATH |
 out:PATH | terminal[?emulation=vt100&size=80x24] | printer:QUEUE |
-<endpoint>|FILE | <endpoint>|socket:PORT
+<endpoint>|FILE | <endpoint>|socket:PORT | <endpoint>|pty[:LINK]
 
 ```
 console     the host's terminal -- the keyboard and screen you are typing at
@@ -825,6 +825,10 @@ printer:    QUEUE -- a real print queue on this host (only where the build found
             session -- and TYPE, sharing the line (take-over). ?ro makes it
             watch-only. The watcher never paces the guest; a slow one loses
             scrollback, not a byte.
+<endpoint>|pty   the same MIRROR on a pseudo-terminal (macOS and Linux only): the
+            simulator prints a name, /tmp/altairsim0 for the first, and a person
+            opens it with a terminal program (`screen /tmp/altairsim0`).
+            |pty:LINK puts the name where you say. ?ro makes it watch-only.
 ```
 
 Exactly ONE unit may hold the console; connecting a second STEALS it and says

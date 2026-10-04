@@ -10,6 +10,7 @@
 #include "host/stream.h"
 #include "host/tee_stream.h"
 #include "mcp/server.h"
+#include "platform/pty.h"
 #include "platform/socket.h"
 #include "util/json.h"
 
@@ -308,7 +309,8 @@ struct LiveMcp {
     int          id = 0;
     std::thread  worker;  // last: everything it touches is built first
 
-    explicit LiveMcp(Machine& m) : worker([this, &m] { runMcp(m, in, out, ""); }) {}
+    explicit LiveMcp(Machine& m, std::string mirror = "")
+        : worker([this, &m, sink = std::move(mirror)] { runMcp(m, in, out, sink); }) {}
     ~LiveMcp() { close(); }
 
     // The reply's `result`; null if none came within 30 s.
@@ -602,6 +604,62 @@ void test_mcp() {
             CHECK(seen.find("3E 03 D3 10") != std::string::npos,
                   "the watcher's typed command was executed by the guest, dump came back down the socket");
         }
+    }
+
+    SECTION("MCP: --mirror pty -- a queued tail reaches the watcher with no further request");
+    if (platform::havePty()) {
+        // #683. The watcher's wire is serviced from pump(). After a `run` returns nothing
+        // called it, so output the kernel buffer had no room for stayed in the mirror's
+        // queue until the NEXT request. A watcher that reads late must still get it all.
+        const BuiltinMachine* altmon = nullptr;
+        for (const auto& b : builtinMachines())
+            if (std::string(b.name) == "altmon") altmon = &b;
+        CHECK(altmon != nullptr, "the altmon built-in is compiled in");
+        if (!altmon) return;
+
+        auto        mp = std::make_unique<Machine>();
+        Machine&    m  = *mp;
+        std::string err;
+        CHECK(loadMachine(*altmon, m, err), "altmon loads");
+
+        namespace fs = std::filesystem;
+        const std::string link = tmpPath("altairsim-test-mcp-pty");
+        std::error_code   ec;
+        fs::remove(link, ec);
+        {
+            LiveMcp mcp(m, "pty:" + link);
+            CHECK(waitFor([&] { return fs::is_symlink(link, ec); }), "the link is made at start");
+            auto watcher = platform::openPtyPeer(link, err);
+            CHECK(watcher != nullptr, "a program opens the link");
+            if (watcher) {
+                Json boot = mcp.data("run", R"({"from":63488,"until":"*","timeout_ms":4000})");
+                CHECK(boot.at("output").str().find("ALTMON") != std::string::npos,
+                      "the assistant boots the monitor");
+                // A 16K dump is about 74 KB of text -- far past a pseudo-terminal's buffer.
+                // The watcher reads NOTHING while it prints.
+                Json dump =
+                    mcp.data("run", R"({"input":"D00003FFF","until":"3FF0 ","timeout_ms":20000})");
+                const std::string want = dump.at("output").str();
+                CHECK(want.size() > 60000, "the guest printed a long listing");
+
+                // No more requests. Only the idle pump can move the rest.
+                std::string seen;
+                uint8_t     buf[4096];
+                bool        all = waitFor(
+                    [&] {
+                        for (size_t r; (r = watcher->read(buf, sizeof buf)) != 0;)
+                            seen.append((const char*)buf, r);
+                        return seen.find("3FF0 ") != std::string::npos;
+                    },
+                    10000);
+                CHECK(all, "the watcher receives the end of the listing");
+                CHECK(seen.find("DUMP 0000 3FFF") != std::string::npos &&
+                          seen.find("\r\n2000 ") != std::string::npos,
+                      "and the start and the middle of it: nothing was dropped on the way");
+            }
+        }
+        mp.reset();  // the line lives on the machine's board, and goes with it
+        CHECK(!fs::is_symlink(link, ec), "the link is removed with the machine");
     }
 
     SECTION("MCP: CONFIG LOAD via the monitor tool re-adopts the console and --mirror at once");

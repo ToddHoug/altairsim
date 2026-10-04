@@ -3,11 +3,14 @@
 #include "host/endpoint.h"
 #include "host/mirror_stream.h"
 #include "host/stream.h"
+#include "platform/pty.h"
 #include "platform/socket.h"
 
 #include <chrono>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <memory>
 #include <string>
 #include <thread>
@@ -108,6 +111,64 @@ bool waitFor(Fn ready, int ms = 2000) {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
     return ready();
+}
+
+// The watcher's end of a pseudo-terminal mirror: a program that opens the link, as
+// `screen` would.
+struct Watcher {
+    std::unique_ptr<platform::PtyPeer> peer;
+    explicit Watcher(const std::string& link) {
+        std::string err;
+        peer = platform::openPtyPeer(link, err);
+    }
+    bool ok() const { return peer != nullptr; }
+    void type(const std::string& keys) {
+        peer->write((const uint8_t*)keys.data(), keys.size());
+    }
+    // Everything that has arrived, appended to `seen`.
+    void drain(std::string& seen) {
+        uint8_t buf[4096];
+        for (;;) {
+            size_t r = peer->read(buf, sizeof buf);
+            if (r == 0) break;
+            seen.append((const char*)buf, r);
+        }
+    }
+    bool echoes() const { return peer->echoes(); }
+};
+
+// A link path of our own in the temp folder -- removed first, so a run that died does
+// not decide this one.
+std::string ptyLink(const char* leaf) {
+    namespace fs = std::filesystem;
+    fs::path        p = fs::temp_directory_path() / leaf;
+    std::error_code ec;
+    fs::remove(p, ec);
+    return p.string();
+}
+
+bool isLink(const std::string& p) {
+    std::error_code ec;
+    return std::filesystem::is_symlink(p, ec);
+}
+
+// The path itself is there -- a link counts even when what it points at is gone.
+bool pathExists(const std::string& p) {
+    std::error_code ec;
+    return std::filesystem::symlink_status(p, ec).type() != std::filesystem::file_type::not_found;
+}
+
+bool isCharDevice(const std::string& p) {
+    std::error_code ec;
+    return std::filesystem::is_character_file(p, ec);
+}
+
+// Pump until the mirror has noticed the watcher (or its leaving).
+bool pumpUntil(MirrorStream& m, bool watching) {
+    return waitFor([&] {
+        m.pump();
+        return m.watching() == watching;
+    });
 }
 
 } // namespace
@@ -353,5 +414,234 @@ void test_mirror() {
         CHECK(rebaseEndpointPaths("in:tape.tap|cap.hex", rebase) ==
                   "in:/cfg/tape.tap|/cfg/cap.hex",
               "a FILE sink still rebases, as the tee always has");
+    }
+    if (platform::havePty()) {
+    SECTION("mirror pty: `|pty:LINK` makes a pseudo-terminal and a link to it");
+    {
+        const std::string link = ptyLink("altairsim-test-make");
+        std::string       err;
+        auto              s = resolveEndpoint("scripted|pty:" + link, err);
+        CHECK(s != nullptr, "scripted|pty:LINK resolves");
+        if (s) {
+            CHECK(isLink(link), "the link is there, and it is a symbolic link");
+            CHECK(isCharDevice(link), "and it points at a character device");
+            CHECK(s->describe() == "scripted|pty:" + link,
+                  "describe() round-trips the operator's text for SHOW / CONFIG SAVE");
+            auto* ms = dynamic_cast<MirrorStream*>(s.get());
+            CHECK(ms && has(ms->sinkNote(), link) && has(ms->sinkNote(), "/dev/"),
+                  "the note names the link and the device behind it");
+            auto log = s->drainLog();
+            CHECK(log.size() == 1 && has(log[0], link), "the operator is told where it is, once");
+            CHECK(s->drainLog().empty(), "...and only once");
+        }
+        s.reset();
+        CHECK(!pathExists(link), "the link is removed with the line");
+    }
+
+    SECTION("mirror pty: with nobody on it the guest's output is dropped, not kept");
+    {
+        const std::string link = ptyLink("altairsim-test-drop");
+        std::string       err;
+        auto              s  = resolveEndpoint("scripted|pty:" + link, err);
+        auto*             ms = dynamic_cast<MirrorStream*>(s.get());
+        CHECK(ms != nullptr, "the mirror resolves");
+        if (ms) {
+            ms->pump();
+            CHECK(!ms->watching(), "nobody has opened the link: no watcher");
+            put(*ms, "EARLY");
+
+            Watcher w(link);
+            CHECK(w.ok(), "a program opens the link");
+            CHECK(pumpUntil(*ms, true), "and the mirror sees it arrive");
+            put(*ms, "HELLO");
+            std::string seen;
+            CHECK(waitFor([&] { w.drain(seen); return seen.size() >= 5; }),
+                  "the watcher sees what the guest prints now");
+            CHECK(seen == "HELLO", "and none of what it printed before anyone was there");
+        }
+    }
+
+    SECTION("mirror pty: every byte value arrives unchanged, with no echo back");
+    {
+        const std::string link = ptyLink("altairsim-test-raw");
+        std::string       err;
+        auto              s  = resolveEndpoint("scripted|pty:" + link, err);
+        auto*             ms = dynamic_cast<MirrorStream*>(s.get());
+        CHECK(ms != nullptr, "the mirror resolves");
+        if (ms) {
+            Watcher w(link);
+            CHECK(pumpUntil(*ms, true), "the watcher is on the line");
+            CHECK(!w.echoes(), "the line is raw before a byte is sent: no echo");
+
+            std::string all;
+            for (int i = 0; i < 256; ++i) all.push_back((char)i);
+            put(*ms, all);
+            std::string seen;
+            CHECK(waitFor([&] { ms->pump(); w.drain(seen); return seen.size() >= 256; }),
+                  "all 256 arrive");
+            CHECK(seen == all, "byte for byte: no CR added to LF, nothing eaten as a control key");
+            ms->pump();
+            CHECK(!ms->readable(), "and none of it came back to the guest as typed keys");
+        }
+    }
+
+    SECTION("mirror pty: what the watcher types reaches the guest; ?ro throws it away");
+    {
+        const std::string link = ptyLink("altairsim-test-type");
+        std::string       err;
+        {
+            auto  s  = resolveEndpoint("scripted|pty:" + link, err);
+            auto* ms = dynamic_cast<MirrorStream*>(s.get());
+            CHECK(ms != nullptr, "the mirror resolves");
+            if (ms) {
+                Watcher w(link);
+                CHECK(pumpUntil(*ms, true), "the watcher is on the line");
+                w.type("DIR\r");
+                CHECK(waitFor([&] { ms->pump(); return ms->readable(); }), "the keys arrive");
+                CHECK(get(*ms, 16) == "DIR\r", "and the guest reads them, CR and all");
+            }
+        }
+        {
+            auto  s  = resolveEndpoint("scripted|pty:" + link + "?ro", err);
+            auto* ms = dynamic_cast<MirrorStream*>(s.get());
+            CHECK(ms != nullptr, "the read-only mirror resolves");
+            if (ms) {
+                Watcher w(link);
+                CHECK(pumpUntil(*ms, true), "the watcher is on the line");
+                w.type("DIR\r");
+                for (int i = 0; i < 20; ++i) {
+                    ms->pump();
+                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                }
+                CHECK(!ms->readable(), "read-only: the keys go nowhere");
+                put(*ms, "A>");
+                std::string seen;
+                CHECK(waitFor([&] { w.drain(seen); return seen == "A>"; }),
+                      "but the watcher still sees the guest");
+            }
+        }
+    }
+
+    SECTION("mirror pty: a watcher leaves and another arrives, and the line is raw again");
+    {
+        const std::string link = ptyLink("altairsim-test-again");
+        std::string       err;
+        auto              s  = resolveEndpoint("scripted|pty:" + link, err);
+        auto*             ms = dynamic_cast<MirrorStream*>(s.get());
+        CHECK(ms != nullptr, "the mirror resolves");
+        if (ms) {
+            {
+                Watcher w(link);
+                CHECK(pumpUntil(*ms, true), "the first watcher is on the line");
+            }
+            CHECK(pumpUntil(*ms, false), "it closes, and the mirror sees it go");
+            put(*ms, "UNSEEN");
+
+            Watcher w2(link);
+            CHECK(pumpUntil(*ms, true), "the next watcher is noticed");
+            CHECK(!w2.echoes(), "a reopened line is raw again (it comes back cooked on macOS)");
+            put(*ms, "LINE\n");
+            std::string seen;
+            CHECK(waitFor([&] { ms->pump(); w2.drain(seen); return seen.size() >= 5; }),
+                  "it sees the guest");
+            CHECK(seen == "LINE\n", "unchanged, and with nothing from while nobody was there");
+        }
+    }
+
+    SECTION("mirror pty: a watcher that does not read never stalls the guest");
+    {
+        const std::string link = ptyLink("altairsim-test-slow");
+        std::string       err;
+        auto              s  = resolveEndpoint("scripted|pty:" + link, err);
+        auto*             ms = dynamic_cast<MirrorStream*>(s.get());
+        CHECK(ms != nullptr, "the mirror resolves");
+        if (ms) {
+            Watcher w(link);
+            CHECK(pumpUntil(*ms, true), "the watcher is on the line");
+            const std::string chunk(1000, 'x');
+            size_t            took = 0;
+            for (int i = 0; i < 400; ++i)  // 400 KB: past the kernel buffer and the queue cap
+                took += ms->write((const uint8_t*)chunk.data(), chunk.size());
+            CHECK(took == 400u * 1000u, "the guest's every write is accepted in full");
+            auto* sc = dynamic_cast<ScriptedStream*>(ms->inner());
+            CHECK(sc && sc->out().size() == 400u * 1000u, "and its own line has every byte");
+            CHECK(ms->watching(), "the watcher is still on the line");
+        }
+    }
+
+    SECTION("mirror pty: a leftover link is replaced; anything else at LINK is refused");
+    {
+        const std::string link = ptyLink("altairsim-test-left");
+        std::error_code ec;
+        std::filesystem::create_symlink("/dev/altairsim-no-such-device", link, ec);
+        CHECK(!ec && isLink(link), "a link from a run that did not clean up");
+        std::string err;
+        auto        s = resolveEndpoint("scripted|pty:" + link, err);
+        CHECK(s != nullptr, "the leftover link is replaced");
+        CHECK(isCharDevice(link), "and now points at ours");
+        s.reset();
+
+        { std::ofstream f(link); f << "mine"; }
+        err.clear();
+        CHECK(resolveEndpoint("scripted|pty:" + link, err) == nullptr,
+              "an ordinary file at LINK is refused");
+        CHECK(has(err, "not a link"), "and the error says why");
+        std::ifstream f(link);
+        std::string   body;
+        f >> body;
+        CHECK(body == "mine", "the file is untouched");
+        f.close();
+        std::filesystem::remove(link, ec);
+    }
+
+    SECTION("mirror pty: bare `|pty` takes the first free /tmp/altairsim{n}");
+    {
+        std::string err;
+        auto        a  = resolveEndpoint("scripted|pty", err);
+        auto        b  = resolveEndpoint("scripted|pty?ro", err);
+        auto*       ma = dynamic_cast<MirrorStream*>(a.get());
+        auto*       mb = dynamic_cast<MirrorStream*>(b.get());
+        CHECK(ma && mb, "two numbered mirrors resolve");
+        if (ma && mb) {
+            auto linkOf = [](const std::string& note) { return note.substr(0, note.find(' ')); };
+            const std::string la = linkOf(ma->sinkNote()), lb = linkOf(mb->sinkNote());
+            CHECK(la.rfind("/tmp/altairsim", 0) == 0 && lb.rfind("/tmp/altairsim", 0) == 0,
+                  "each is /tmp/altairsim{n}");
+            CHECK(la != lb, "and they are two different names");
+            CHECK(isLink(la) && isLink(lb), "both links are there");
+            CHECK(a->describe() == "scripted|pty" && b->describe() == "scripted|pty?ro",
+                  "describe() keeps the operator's text, not the number");
+            a.reset();
+            b.reset();
+            CHECK(!pathExists(la) && !pathExists(lb), "both are removed with their lines");
+        }
+    }
+    } else {
+    SECTION("mirror pty: refused where there is no pseudo-terminal, with what to use");
+    {
+        std::string err;
+        CHECK(resolveEndpoint("scripted|pty", err) == nullptr, "|pty is refused");
+        CHECK(has(err, "not available on Windows") && has(err, "socket:PORT"),
+              "and the error names the sink that works");
+    }
+    }
+
+    SECTION("mirror pty: the grammar -- options, and what rebases");
+    {
+        std::string err;
+        CHECK(resolveEndpoint("scripted|pty:", err) == nullptr, "`pty:` with no link is refused");
+        CHECK(has(err, "link"), "and the error asks for the link");
+        err.clear();
+        CHECK(resolveEndpoint("scripted|pty?bogus", err) == nullptr,
+              "an unknown option is refused before anything is made");
+        CHECK(has(err, "ro"), "and the error names the one option there is");
+
+        auto rebase = [](const std::string& p) { return "/cfg/" + p; };
+        CHECK(rebaseEndpointPaths("scripted|pty", rebase) == "scripted|pty",
+              "a bare pty sink is not a path");
+        CHECK(rebaseEndpointPaths("scripted|pty?ro", rebase) == "scripted|pty?ro",
+              "with or without an option");
+        CHECK(rebaseEndpointPaths("scripted|pty:con", rebase) == "scripted|pty:/cfg/con",
+              "the link after `pty:` is a path, and rebases like one");
     }
 }
