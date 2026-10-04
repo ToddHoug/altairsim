@@ -629,11 +629,24 @@ altairsim> CONFIG LOAD mine.toml
 property, with every change that you made with `SET`. When you load the file, you get the same
 machine. Give the machine a name with `SET MACHINE name=` before you save it.
 
+**`CONFIG SAVE` marks each setting that has the default value.** The mark is a comment that
+names the release the default belongs to:
+
+```toml
+baud = 9600  # default X.Y.Z
+stop_bits = 2
+```
+
+Here `baud` has the default value, and `stop_bits` does not. A setting without a mark is a
+value that was set on purpose. The comment does nothing when you load the file. A default can
+change in a new release, so the mark tells you which release it was true for.
+
 **`CONFIG SAVE` saves a new file each time. It does not edit the file that is there.** If you
 save to the name of a machine file that has comments or a `base` line, these things from that
 file are not in the new file:
 
-- **Each `#` comment and each `#>` note.** The saved file has no comments.
+- **Each `#` comment and each `#>` note.** The only comments in the saved file are the
+  `# default` marks.
 - **The `base` line.** The saved file contains every board in full, so that it does not need a
   base.
 
