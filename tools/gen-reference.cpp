@@ -684,6 +684,8 @@ void cheatsheet(const std::string& dir) {
          "Greets each caller; `?banner=off` stops it. |\n"
          "| `telnet:HOST:PORT` | **calls out**, taking the telnet client's part. |\n"
          "| `serial:DEVICE` | a real serial port on this host. |\n"
+         "| `pty` | a pseudo-terminal (macOS and Linux): open `/tmp/altairsim0` with a terminal "
+         "program. `pty:LINK` selects the name. |\n"
          "| `in:PATH` | a host file as a reader (paper tape). `?cps=N` paces it. |\n"
          "| `out:PATH` | a host file as a punch — 8-bit clean, never truncating. |\n"
          "| `terminal` | a window the simulator draws itself (SDL builds). "

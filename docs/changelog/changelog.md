@@ -8,6 +8,17 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+**A serial line can go to a pseudo-terminal: `CONNECT sio0:b pty`, on macOS and Linux.** The
+program prints a name, `/tmp/altairsim0` for the first line. Open that name with a terminal
+program as you open a serial port, for example `screen /tmp/altairsim0`. No cable and no port
+number are necessary, and a file transfer program can use the line. `pty:PATH` selects the
+name, so that a machine file gets the same name each time. The carrier of the line is on while
+a program has the name open. When no program has it open, the line discards what the guest
+sends, and the guest does not wait. Windows has no pseudo-terminal, and refuses `pty`.
+
+**A machine file that has a `|pty` mirror now prints the name of the mirror at startup.**
+Before, only `CONNECT` printed it.
+
 **`--mirror pty` puts the mirror of the console on a pseudo-terminal, on macOS and Linux.**
 With `--mcp --mirror pty`, the program prints a name, `/tmp/altairsim0` for the first mirror.
 Open that name with a terminal program, for example `screen /tmp/altairsim0`, to watch the

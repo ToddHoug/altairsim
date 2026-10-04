@@ -397,8 +397,20 @@ std::string Machine::isa() {
 // through it. Board::drainLog() is virtual and the default is silence.
 std::vector<std::string> Machine::drainBoardLog() {
     std::vector<std::string> out;
-    for (auto& b : boards_)
+    for (auto& b : boards_) {
         for (auto& s : b->drainLog()) out.push_back(s);
+        // ...AND THE FAR END OF EVERY LINE, for a board that speaks for itself. A board
+        // that overrides drainLog() (the 2SIO: "this cable cannot do that baud rate")
+        // returns its chips' messages and never asked the stream, so what the STREAM had
+        // to say was lost: where a `pty` line is (issue #685), a log file that could not
+        // be written. Board's default has already taken these, and then this finds none.
+        for (const auto& u : b->units()) {
+            ByteStream* line = b->unitStream(u.name);
+            if (!line) continue;
+            for (auto& s : line->drainLog())
+                out.push_back(b->id + ":" + u.name + ": " + std::move(s));
+        }
+    }
     // A medium with no board at its failing sync() call site speaks here instead --
     // a TNFS mount whose write-back to the server just failed (or recovered). See
     // host/media.h's logMediaMessage.

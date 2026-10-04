@@ -26,6 +26,7 @@
 #include "host/media.h"  // writeHostFile -- MOUNT ... CREATE makes an empty file
 #include "host/tee_stream.h"    // TeeStream -- peeled the same way, under --log
 #include "host/mirror_stream.h" // MirrorStream -- peeled to reach the --mcp scripted console
+#include "host/pty_stream.h"    // PtyStream -- CONNECT prints the name of its link
 #include "host/terminal/stream.h"  // [terminal] transforms + the banner's console label
 #include "isa/isa.h"
 
@@ -4034,6 +4035,11 @@ bool Monitor::exec(const std::string& line, std::ostream& out) {
                 } else if (auto* tee = dynamic_cast<TeeStream*>(s)) {
                     s = tee->inner();
                 } else {
+                    // The line itself on a pseudo-terminal (`pty`): the same need.
+                    if (auto* pt = dynamic_cast<PtyStream*>(s)) {
+                        if (std::string note = pt->takeNote(); !note.empty())
+                            out << "pty: " << note << "\n";
+                    }
                     break;
                 }
             }

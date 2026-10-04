@@ -92,7 +92,7 @@ std::unique_ptr<ByteStream> resolveEndpoint(const std::string& spec, std::string
 ```
 
 `src/host/endpoint.cpp` is the **only** file in the program that knows the endpoint grammar —
-`console`, `socket:PORT`, `socket:HOST:PORT`, `serial:DEVICE`, `null`, `loopback`, `in:PATH`,
+`console`, `socket:PORT`, `socket:HOST:PORT`, `serial:DEVICE`, `pty`, `null`, `loopback`, `in:PATH`,
 `out:PATH`, `file:PATH`, `printer:QUEUE`. `CONNECT` and `MOUNT` are generic monitor commands, not
 per-board ones (DESIGN.md §7.7): the monitor opens the endpoint, the board decides what the bytes
 mean. That division is why a serial card gets every backend the day it lands without one line
@@ -159,6 +159,20 @@ are injected, `ro` discards them — and the sink is only the wire: `poll()`, `a
 `read()`, `write()`. `SocketMirrorSink` is the TCP listener; `PtyMirrorSink` wraps
 `platform::Pty` (`|pty`, `|pty:LINK`, issue #683). A new sink, such as a real serial port, is a
 third class and one branch in the resolver.
+
+**`pty` alone is the line itself, not a mirror.** `PtyStream` (`host/pty_stream.h`, issue #685)
+holds the same `platform::Pty` as a plain `ByteStream`, and is built like `TcpStream`: a program
+that has the link open is carrier (DCD and DSR), and a full kernel buffer drops CTS, so the
+guest waits and loses no byte. One thing differs from the socket. With nobody on the line, CTS
+stays up and `write()` discards the bytes, so a board with wired CTS does not stop on a line
+that nobody reads. The name of the link reaches the operator two ways: `CONNECT` prints
+`takeNote()` at once, and a machine file gets it through `drainLog()`.
+
+**`Machine::drainBoardLog()` drains each serial line too.** A board that overrides
+`drainLog()`, as the 2SIO does, returns the messages of its chips and never asks the stream.
+The machine therefore walks `units()` and `unitStream()` after each board, and prints what the
+stream has to say as `id:unit: message`. A board that uses the default `Board::drainLog()` has
+already taken those messages, and the walk finds none.
 
 **The pseudo-terminal has three traps, all in `platform/posix/pty_posix.cpp`.** (1) A master
 whose slave was never opened reads `EAGAIN`, the same as "open and quiet", so `openPty()` opens

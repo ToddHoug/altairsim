@@ -778,8 +778,8 @@ at your terminal, a telnet session, a real RS-232 port, or nothing at all. No bo
 in the machine knows what any of these words mean.
 
 Endpoints: console | null | loopback | scripted | socket:PORT[?banner] | socket:HOST:PORT |
-telnet:PORT[?banner=off] | telnet:HOST:PORT | serial:DEVICE | in:PATH |
-out:PATH | terminal[?emulation=vt100&size=80x24] | printer:QUEUE |
+telnet:PORT[?banner=off] | telnet:HOST:PORT | serial:DEVICE | pty[:LINK] |
+in:PATH | out:PATH | terminal[?emulation=vt100&size=80x24] | printer:QUEUE |
 <endpoint>|FILE | <endpoint>|socket:PORT | <endpoint>|pty[:LINK]
 
 ```
@@ -798,6 +798,10 @@ telnet:     the same, but speaks the Telnet protocol, so a stock `telnet` client
 serial:     a real port on this host. It is opened at 9600 8N1 and then
             immediately re-programmed by the board, which is the only thing that
             knows what it is strapped to.
+pty         a pseudo-terminal (macOS and Linux only), for a terminal program.
+            The simulator prints a name, /tmp/altairsim0 for the first; open it
+            as a serial port (`screen /tmp/altairsim0`). pty:LINK puts the name
+            where you say. Carrier is up while a program has the name open.
 in:         PATH -- a host file as a READER (a paper-tape reader): its bytes
             feed the line. ?cps=N (or ?baud=N) paces it -- in:tape.tap?cps=300
             is the 88-HSR; no option means full speed.
@@ -843,6 +847,7 @@ CONN sio0:b telnet:2323                         ; ...the same, but no double ech
 CONN sio0:b socket:bbs.example:23               ; the guest dials OUT, to somebody else's port
 CONN sio0:b serial:/dev/tty.usbserial-AL009KFH  ; a real cable, real hardware
 CONN sio0:b serial:COM3                         ; ...the same, on Windows
+CONN sio0:b pty                                 ; `screen /tmp/altairsim0` now reaches the guest
 CONN lpt0:prn out:printout.txt                  ; capture a printer to a file
 CONN 4pio0:ja in:TAPE.TAP?cps=300               ; a paper-tape reader (88-HSR)
 CONN 4pio0:jb out:TAPE.PUN                      ; a paper-tape punch
