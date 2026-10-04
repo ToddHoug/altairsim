@@ -69,6 +69,7 @@ This is the complete list.
 | `telnet:PORT` | **listens** like `socket:PORT`, and uses the **Telnet protocol**, so that a `telnet` client works well. Use it when a **person** connects. It greets each caller, and `?banner=off` stops that |
 | `telnet:HOST:PORT` | **calls** like `socket:HOST:PORT`, as a telnet client |
 | `serial:DEVICE` | a real serial port on your computer |
+| `pty` | a pseudo-terminal that a terminal program opens as a serial port. Only on macOS and Linux. `pty:LINK` selects the name |
 | `in:PATH` | a file that the board reads: a **paper-tape reader** |
 | `out:PATH` | a file that the board writes: a **paper-tape punch** |
 | `in:PATH,out:PATH` | a reader and a punch on one line, with two files |
@@ -305,6 +306,59 @@ id = "sio0"
 
 A `SET` on a board is a key in the `[[board]]` of that board. A `SET` on a unit is a key in the
 table of that unit.
+
+## A pseudo-terminal for a terminal program
+
+On macOS and Linux, a line can go to a **pseudo-terminal**. A terminal program, such as
+`screen`, `minicom` or `cu`, opens a pseudo-terminal as it opens a serial port. No cable and no
+port number are necessary. A file transfer program can use the line also, because each byte
+goes through unchanged.
+
+```
+altairsim> CONNECT sio0:b pty
+sio0:b: connected to pty
+pty: /tmp/altairsim0 (/dev/ttys004)
+```
+
+The program prints the name of the line. The first line is `/tmp/altairsim0`, and the next one
+is `/tmp/altairsim1`. Type `screen /tmp/altairsim0` in a second window to use the line. The
+name is a link to the device in the brackets. The program removes the link when the line
+disconnects, and when the program stops.
+
+To select the name, give a path after `pty:`. The name is then the same each time. A path that
+is not absolute is relative to the folder of the machine file.
+
+```
+altairsim> CONNECT sio0:b pty:/tmp/altair-line
+sio0:b: connected to pty:/tmp/altair-line
+pty: /tmp/altair-line (/dev/ttys004)
+```
+
+In a machine file:
+
+```toml
+[[board]]
+id = "sio0"
+
+  [board.unit.b]
+  connect = "pty:/tmp/altair-line"
+```
+
+When the machine file starts the machine, the program prints the same `pty:` line, with the
+name of the unit before it.
+
+- **When no program has the name open, the line discards what the guest sends.** The guest
+  does not wait.
+- **A program that has the name open is the carrier.** The DCD and DSR pins of the line are on
+  while a program has the name open, and off when it closes the name. On a 2SIO, the guest
+  sees DCD only after `SET sio0:b dcd=wired`.
+- **A program that reads slowly makes the guest wait.** The guest loses no bytes.
+- **`pty:` replaces a link that is at the path.** If the path is a file that is not a link,
+  the program refuses, and does not replace the file.
+- **Windows has no pseudo-terminal, and refuses `pty`.** Use `socket:PORT` or `telnet:PORT`.
+
+To let a second person watch a line that goes to a different endpoint, use `|pty`. See "A
+mirror on a pseudo-terminal", below.
 
 ## A paper-tape reader and punch: `in:` and `out:`
 
@@ -570,8 +624,8 @@ If the program cannot read your endpoint, it **refuses, and lists the forms that
 ```
 altairsim> CONNECT sio0:a sockit:2323
 no endpoint 'sockit:2323'. Try: console | null | loopback | scripted | socket:PORT[?banner] | socket:HOST:PORT |
-telnet:PORT[?banner=off] | telnet:HOST:PORT | serial:DEVICE | in:PATH |
-out:PATH | terminal[?emulation=vt100&size=80x24] | printer:QUEUE |
+telnet:PORT[?banner=off] | telnet:HOST:PORT | serial:DEVICE | pty[:LINK] |
+in:PATH | out:PATH | terminal[?emulation=vt100&size=80x24] | printer:QUEUE |
 <endpoint>|FILE | <endpoint>|socket:PORT | <endpoint>|pty[:LINK]
 ```
 

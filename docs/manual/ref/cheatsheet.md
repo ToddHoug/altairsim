@@ -286,6 +286,7 @@ base      = octal          # read/print the wire class in split octal (MITS styl
 | `telnet:PORT` | **listens**, speaking Telnet — this is telnet-in for a person. Greets each caller; `?banner=off` stops it. |
 | `telnet:HOST:PORT` | **calls out**, taking the telnet client's part. |
 | `serial:DEVICE` | a real serial port on this host. |
+| `pty` | a pseudo-terminal (macOS and Linux): open `/tmp/altairsim0` with a terminal program. `pty:LINK` selects the name. |
 | `in:PATH` | a host file as a reader (paper tape). `?cps=N` paces it. |
 | `out:PATH` | a host file as a punch — 8-bit clean, never truncating. |
 | `terminal` | a window the simulator draws itself (SDL builds). `?emulation=vt100\|adm3a\|vt52\|h19`, `?size=COLSxROWS`. |

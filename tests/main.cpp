@@ -136,6 +136,7 @@ const struct {
     {"printer", test_printer},
     {"tee", test_tee},
     {"mirror", test_mirror},
+    {"pty", test_ptystream},
     {"pio", test_pio},
     {"4pio", test_4pio},
     {"vdm1", test_vdm1},

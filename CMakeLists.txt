@@ -377,6 +377,9 @@ add_library(altair_core STATIC
   # tee's twin (same decorator shape) but the sink is a socket, not a file, and it is
   # two-way. The watcher never paces the guest (host/mirror_stream.h).
   src/host/mirror_stream.cpp
+  # `pty` / `pty:LINK` -- a line on a pseudo-terminal, for a terminal program (issue #685).
+  # The line itself, where `|pty` is a mirror of one: carrier follows the program.
+  src/host/pty_stream.cpp
   src/host/media.cpp
 
   # A MediaFile that lives on a TNFS server (FujiNet's network filesystem), so a disk
@@ -812,6 +815,7 @@ add_executable(altair_tests
   tests/test_printer.cpp
   tests/test_tee.cpp
   tests/test_mirror.cpp
+  tests/test_ptystream.cpp
   tests/test_pio.cpp
   tests/test_vdb8024.cpp
   tests/test_terminal.cpp
@@ -1196,6 +1200,15 @@ add_test(NAME acceptance-mcp-mirror-pty
                  -DBIN=${CMAKE_CURRENT_BINARY_DIR}
                  -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/acceptance/mcp-mirror-pty.cmake)
 set_tests_properties(acceptance-mcp-mirror-pty PROPERTIES LABELS acceptance TIMEOUT 120)
+
+# The `pty` endpoint -- a serial line on a pseudo-terminal (#685): CONNECT says where the
+# link is, a machine file puts it in its own folder; on Windows CONNECT refuses it by name.
+add_test(NAME acceptance-pty-endpoint
+         COMMAND ${CMAKE_COMMAND}
+                 -DSIM=$<TARGET_FILE:altairsim>
+                 -DBIN=${CMAKE_CURRENT_BINARY_DIR}
+                 -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/acceptance/pty-endpoint.cmake)
+set_tests_properties(acceptance-pty-endpoint PROPERTIES LABELS acceptance TIMEOUT 120)
 
 # ---------------------------------------------------------------------------
 # SNAPSHOT / RESTORE through the real monitor -- the command wiring (DESIGN.md 13).

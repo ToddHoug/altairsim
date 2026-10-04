@@ -5,6 +5,7 @@
 #include "host/file.h"
 #include "host/hostserial.h"
 #include "host/mirror_stream.h"
+#include "host/pty_stream.h"
 #include "host/tcp.h"
 #include "host/tee_stream.h"
 #include "host/telnet_stream.h"
@@ -64,9 +65,12 @@ bool parseHostPort(const std::string& spec, std::string& host, uint16_t& port,
 std::string endpointHelp(bool all) {
     std::vector<std::string> parts = {
         "console", "null", "loopback", "scripted", "socket:PORT[?banner]", "socket:HOST:PORT",
-        "telnet:PORT[?banner=off]", "telnet:HOST:PORT", "serial:DEVICE", "in:PATH", "out:PATH",
-        "terminal[?emulation=vt100&size=80x24]",
+        "telnet:PORT[?banner=off]", "telnet:HOST:PORT", "serial:DEVICE",
     };
+    // A pseudo-terminal only where the host has one (not Windows); the docs generator
+    // lists it regardless, like `printer:` below.
+    if (all || platform::havePty()) parts.emplace_back("pty[:LINK]");
+    parts.insert(parts.end(), {"in:PATH", "out:PATH", "terminal[?emulation=vt100&size=80x24]"});
     // `printer:` only where a host print system was found at build time -- absent, the
     // grammar does not advertise a door it cannot open (docs/printing.md 3.1). The docs
     // generator passes all=true: the committed manual is one document for every platform,
@@ -137,6 +141,10 @@ std::string rebaseEndpointPaths(const std::string&                              
         }
         return rebaseEndpointPaths(inner, rebase) + "|" + path + opts;
     }
+
+    // `pty:LINK` names the link, and that is a path (issue #685). A bare `pty` has none.
+    if (spec.rfind("pty:", 0) == 0)
+        return spec.size() > 4 ? "pty:" + rebase(spec.substr(4)) : spec;
 
     // Only in:/out: name a path; everything else is returned byte-for-byte.
     if (spec.rfind("in:", 0) != 0 && spec.rfind("out:", 0) != 0) return spec;
@@ -656,6 +664,28 @@ std::unique_ptr<ByteStream> resolveEndpoint(const std::string& spec, std::string
             return nullptr;
         }
         return std::make_unique<HostSerialStream>(std::move(port), spec);
+    }
+
+    // ---- pty / pty:LINK -- a pseudo-terminal, for a terminal program (issue #685) ----
+    //
+    // The line itself, not a mirror of one: `screen`, `minicom` or a file transfer
+    // program opens the link as it opens a serial port (host/pty_stream.h). A bare
+    // `pty` takes the first free /tmp/altairsim{n}; `pty:LINK` names the link, which is
+    // the form a saved machine file wants. NOT behind havePty(): on Windows openPty()
+    // refuses by name, and that is a better answer than "no endpoint 'pty'".
+    if (spec == "pty" || spec.rfind("pty:", 0) == 0 || spec.rfind("pty?", 0) == 0) {
+        if (spec.find('?') != std::string::npos) {
+            err = "pty: has no options (pty, or pty:LINK)";
+            return nullptr;
+        }
+        std::string link = spec.size() > 3 ? spec.substr(4) : std::string();
+        if (spec != "pty" && link.empty()) {
+            err = "pty: wants a path for the link (or use a bare 'pty')";
+            return nullptr;
+        }
+        auto pty = platform::openPty(link, err);
+        if (!pty) return nullptr;
+        return std::make_unique<PtyStream>(std::move(pty), spec);
     }
 
     // ---- in:PATH / out:PATH -- a host file as a reader and/or a punch ----

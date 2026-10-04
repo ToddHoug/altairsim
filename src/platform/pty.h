@@ -1,7 +1,7 @@
 #pragma once
 //
-// A pseudo-terminal, for the `pty` mirror sink (issue #683) -- and, later, a `pty`
-// endpoint (issue #685).
+// A pseudo-terminal, for the `pty` mirror sink (issue #683) and the `pty` endpoint
+// (issue #685).
 //
 // The same contract as serial.h and socket.h: pure declarations, no OS type in any
 // signature, one implementation file per OS. POSIX has pseudo-terminals; Windows has
