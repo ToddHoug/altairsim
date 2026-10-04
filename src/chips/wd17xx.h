@@ -334,6 +334,21 @@ public:
     void setWaitSynced(bool on) { waitSynced_ = on; }
     bool waitSynced() const { return waitSynced_; }
 
+    // A wait-synced Type I command (Restore, Seek, Step) that has not stepped yet.
+    //
+    // The step pulses go to the drive that is selected WHEN THEY HAPPEN, and they happen
+    // milliseconds after the command is loaded. A driver may load the command and select
+    // another drive in the next few instructions without waiting -- the Tarbell CBIOS HOME
+    // does exactly that -- and it is the new drive that moves. So loading the command moves
+    // nothing, and poll() leaves it alone: the stepping happens on the guest's next access
+    // to the board, which the board reports with touch(), or one step time on (nextEdge())
+    // if the guest never comes back. The register accesses below touch() by themselves; the
+    // board calls it for the ports that never reach the chip -- its drive-select latch, and
+    // the track and sector registers. A real part may get its first pulse out before the
+    // select lands; here the new drive takes them all.
+    bool stepPending() const { return waitSynced_ && phase_ == Phase::Settle; }
+    void touch(const Clock& clk);
+
     // ---- THE DENSITY CHECK -- a board strap ----
     //
     // A real part clocked for FM cannot see an MFM address mark, and the reverse: Read
@@ -349,8 +364,9 @@ public:
     // track with, so what a card formats at a rate it reads back at that rate.
     //
     // OFF (the default): the medium decides, and the strap is fidelity only. That is the
-    // Tarbell double-density card and the Cromemco FDCs as they stand (issue #691 turned it
-    // on for the VersaFloppy alone).
+    // Cromemco FDCs as they stand: they read 5.25" double density at 250 kbit/s, so the
+    // rate does not give the density there (issue #692). The VersaFloppy (issue #691) and
+    // the Tarbell double-density card turn it on.
     void setDensityChecked(bool on) { densityChecked_ = on; }
     bool densityChecked() const { return densityChecked_; }
 
@@ -504,6 +520,7 @@ protected:
     void commitSector(const Clock& clk);
     void commitTrack(const Clock& clk);
     void finish(const Clock& clk);  // INTRQ, drop BUSY, go Idle
+    void advance(const Clock& clk, bool access);  // poll() and touch(): see stepPending()
 
     bool findSector(FloppyDrive::SectorId& out);  // an ID matching TR + SR
 

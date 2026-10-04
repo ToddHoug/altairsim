@@ -102,6 +102,9 @@ uint8_t TarbellBoardBase::read(const BusCycle& c) {
     Clock&  k   = clk();
     uint8_t off = (uint8_t)(c.port() - port_);
     uint8_t v   = 0xFF;
+    // Any read of the board is the "next access" a pending Type I command steps on, the
+    // track register included (Wd17xx::stepPending()).
+    if (chip_->stepPending()) chip_->touch(k);
     switch (off) {
         case 0: v = chip_->readStatus(k);   break;  // F8 status
         case 1: v = chip_->readTrackReg();  break;  // F9 track
@@ -138,6 +141,9 @@ void TarbellBoardBase::write(const BusCycle& c) {
         case 4: writeControl(c.data);            break;  // FC control
         default: writeExtra(off, c.data);        break;  // FD (DD only) / FE-FF
     }
+    // ...and so is any write but the one that loads the command: a drive select written
+    // straight after a Restore gets the step pulses (Wd17xx::stepPending()).
+    if (off != 0 && chip_->stepPending()) chip_->touch(k);
     refresh();
 }
 
@@ -204,8 +210,9 @@ void TarbellBoardBase::snoop(const BusCycle& c) {
 
 // ---------------------------------------------------------------------------
 // The card's own clock discipline (the VersaFloppy idiom): advance the chip, re-drive
-// the interrupt wire, re-arm the one deadline. Under wait-synced operation the chip
-// has no autonomous edge, so no timer is armed -- everything happens on an access.
+// the interrupt wire, re-arm the one deadline. Under wait-synced operation the chip has
+// two edges of its own (the index pulse that ends a Write Track, and a Type I command the
+// guest never came back for); everything else happens on an access.
 // ---------------------------------------------------------------------------
 void TarbellBoardBase::refresh() {
     if (!clock_) return;
@@ -637,6 +644,9 @@ void TarbellBoardBase::deserialize(StateReader& r) {
 void TarbellDdBoard::buildChip() {
     chip_ = std::make_unique<Wd1791>("fdc");
     chip_->setWaitSynced(!timingReal_);
+    // The FD1791 clocked for one density finds no ID field recorded at the other, so the
+    // OUT-FC density bit has to match the track (writeControl). Issue #692.
+    chip_->setDensityChecked(true);
     if (clock_) chip_->powerOn(*clock_);
     applySelection();
 }
@@ -718,9 +728,9 @@ StepResult TarbellDdBoard::transferOne(Bus& bus) {
 
 // OUT FC on the DD card is a PLAIN BITMAP LATCH (not the SD function decoder):
 //   bit3 = density (0 = SD, 1 = DD), bits4-5 = binary drive select, bit6 = side.
-// Density is fidelity-only here -- the read path takes geometry entirely from the
-// image's per-track TrackFormat -- but the strap is set so it is right for anyone who
-// reads it (and matches the media bit rate).
+// The density bit sets the chip's data rate. The chip checks that rate against the density
+// each track is recorded at (setDensityChecked, buildChip), so a read or a write with the
+// bit wrong for the track is Record Not Found, and Write Track records a track at it.
 void TarbellDdBoard::writeControl(uint8_t v) {
     dataRate_ = ((v >> 3) & 1) ? 500000 : 250000;
     sel_      = (v >> 4) & 0x03;

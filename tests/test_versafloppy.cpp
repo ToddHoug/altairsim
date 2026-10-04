@@ -639,4 +639,38 @@ void test_versafloppy() {
                   "...and the same loop reads the same sector");
         }
     }
+
+    // ---- A drive select straight after a Restore homes the NEW drive ----
+    // The step pulses go to the drive that is selected when they happen. The board does not
+    // step in the cycle that loads the command (Wd17xx::stepPending()).
+    SECTION("boards/sd-versafloppy: a drive select straight after a Restore homes the new drive");
+    {
+        withRampDisk(77ull * 26 * 256);
+        Clock c;
+        VersaFloppyBoard b;
+        b.attachClock(&c);
+        b.power();
+        std::string err;
+        b.mount("drive0", "a.dsk", false, err);
+        b.mount("drive1", "b.dsk", false, err);
+        const uint8_t selA = (uint8_t)~0x41, selB = (uint8_t)~0x42;  // negative-true: drive + DD
+
+        out(b, SEL, selB);
+        out(b, TRK, 0);
+        out(b, DAT, 5);
+        out(b, CMD, 0x10);  // Seek, no verify
+        CHECK((in(b, CMD) & 0x04) == 0, "drive 1 is off track 0");
+        out(b, SEL, selA);
+        out(b, TRK, 0);
+        out(b, DAT, 2);
+        out(b, CMD, 0x10);
+        CHECK((in(b, CMD) & 0x04) == 0, "drive 0 is off track 0");
+
+        out(b, CMD, 0x00);  // Restore...
+        b.pump();           // (the run loop may poll the board in between: it moves nothing)
+        out(b, SEL, selB);  // ...and the other drive is selected at once
+        CHECK((in(b, CMD) & 0x05) == 0x04, "drive 1 is home and the command is over");
+        out(b, SEL, selA);
+        CHECK((in(b, CMD) & 0x04) == 0, "drive 0 did not move");
+    }
 }

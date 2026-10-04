@@ -260,7 +260,7 @@ void Wd17xx::masterReset(const Clock& clk) {
 // ELSE does, which is the whole reason a driver that only ever polls DRQ leaves the
 // interrupt line stuck.
 uint8_t Wd17xx::readStatus(const Clock& clk) {
-    poll(clk);
+    touch(clk);
     intrq_ = false;
 
     uint8_t s = status_;  // the LATCHED bits: S6..S3, whatever they mean in this context
@@ -284,7 +284,7 @@ uint8_t Wd17xx::readStatus(const Clock& clk) {
 }
 
 uint8_t Wd17xx::readData(const Clock& clk) {
-    poll(clk);
+    touch(clk);
 
     // DRQ IS CLEARED BY *SERVICING* IT, AND A WRITE IS NOT SERVICED BY A READ.
     //
@@ -300,7 +300,7 @@ uint8_t Wd17xx::readData(const Clock& clk) {
 }
 
 void Wd17xx::writeData(uint8_t v, const Clock& clk) {
-    poll(clk);
+    touch(clk);
     data_ = v;
     if (phase_ == Phase::WriteWait || phase_ == Phase::Write) {
         // The guest made the deadline. Take the byte and drop the request; the streamer
@@ -313,7 +313,7 @@ void Wd17xx::writeData(uint8_t v, const Clock& clk) {
 }
 
 void Wd17xx::writeCommand(uint8_t v, const Clock& clk) {
-    poll(clk);
+    touch(clk);  // a command loaded on top of a pending Type I: that one steps first
     intrq_ = false;  // loading the command register resets INTRQ
     startCommand(v, clk);
 }
@@ -396,7 +396,11 @@ void Wd17xx::startTypeI(uint8_t cmd, const Clock& clk) {
     switch (op) {
         case kRestore:
             // Step OUT until TR00, up to 255 times, then give up with a Seek Error.
-            if (drive_ && drive_->trackZero()) {
+            //
+            // WAIT-SYNCED: TR00 is not sampled here. The stepping waits for the next access
+            // to the board (stepPending()), and the drive selected THEN is the one that
+            // answers -- so its TR00 is read there, in poll(), not this drive's here.
+            if (!waitSynced_ && drive_ && drive_->trackZero()) {
                 track_     = 0;
                 stepsLeft_ = 0;
             } else {
@@ -886,7 +890,11 @@ std::vector<std::string> Wd17xx::drainLog() {
 // THE STATE MACHINE
 // ---------------------------------------------------------------------------
 
-void Wd17xx::poll(const Clock& clk) {
+void Wd17xx::poll(const Clock& clk) { advance(clk, false); }
+
+void Wd17xx::touch(const Clock& clk) { advance(clk, true); }
+
+void Wd17xx::advance(const Clock& clk, bool access) {
     // ---- The armed Force Interrupt conditions, which are EDGES on pins ----
     const bool nowReady = ready();
     const bool nowIndex = drive_ && drive_->index();
@@ -920,12 +928,31 @@ void Wd17xx::poll(const Clock& clk) {
     // stopped sending. A formatter that sends a counted track shorter than one revolution and
     // then polls status for the end is waiting for the index pulse, and the disk turns whether
     // or not anyone is writing. See indexPassed().
-    while (phase_ != Phase::Idle && (waitSynced_ || now(clk) >= due_)) {
+    //
+    // THE OTHER: A TYPE I COMMAND DOES NOT STEP UNTIL THE GUEST COMES BACK (stepPending()).
+    // The step pulses go to the drive that is selected when they happen, and a driver may
+    // select another drive right after it loads the command. So a plain poll() -- a board's
+    // timer, the run loop's pump -- leaves a wait-synced Settle alone until one step time has
+    // passed, and only an ACCESS (touch()) starts it at once. Once started it runs every step.
+    bool stepGo = access;
+    auto ripe = [&] {
+        if (now(clk) >= due_) return true;
+        return waitSynced_ && (phase_ != Phase::Settle || stepGo);
+    };
+    while (phase_ != Phase::Idle && ripe()) {
         switch (phase_) {
             case Phase::Settle: {
-                stepOnce();
-
-                if ((command_ >> 4) == kRestore) {
+                stepGo = true;
+                // A Restore tests TR00 BEFORE each step: a drive that is already home takes
+                // no step. Off the wait-synced model startTypeI() has made that test for the
+                // first step; on it, this is the first look at the drive the guest has
+                // selected (see stepPending()).
+                const bool restore = (command_ >> 4) == kRestore;
+                if (restore && drive_ && drive_->trackZero()) {
+                    track_     = 0;
+                    stepsLeft_ = 0;
+                } else if (restore) {
+                    stepOnce();
                     // Step out until TR00, and count -- 255 steps without finding it is a
                     // drive that is not moving, and the data sheet calls that a Seek Error.
                     if (drive_ && drive_->trackZero()) {
@@ -937,6 +964,7 @@ void Wd17xx::poll(const Clock& clk) {
                         break;
                     }
                 } else {
+                    stepOnce();
                     // Seek, Step, Step In, Step Out.
                     //
                     // THE TRACK REGISTER FOLLOWS THE STEP, NOT THE OTHER WAY ROUND. Seek
@@ -1182,7 +1210,13 @@ uint64_t Wd17xx::nextEdge(const Clock& clk) const {
     // The one edge a wait-synced chip does have is the index pulse that ends a Write Track
     // the guest has stopped feeding. That timer fires once and the command is over, so it
     // cannot spin.
+    //
+    // ...and a Type I command the board has not stepped yet (stepPending()). The guest may
+    // never touch the board again -- it may be waiting for INTRQ -- so the stepping happens
+    // one step time after the command at the latest. That timer fires once too: a
+    // wait-synced poll() runs every step of the command in one go.
     if (waitSynced_) {
+        if (phase_ == Phase::Settle) return (due_ > now(clk)) ? due_ : now(clk) + 1;
         const bool writing = (phase_ == Phase::WriteWait || phase_ == Phase::Write);
         if (writing && drq_ && end_ == Ending::CommitTrack)
             return (due_ > now(clk)) ? due_ : now(clk) + 1;
@@ -1200,7 +1234,7 @@ uint64_t Wd17xx::nextEdge(const Clock& clk) const {
 // crosses here -- in order, each at its own time, exactly as poll() would if the clock were
 // running. Then the board holds READY for what it took.
 uint32_t Wd17xx::holdUntilReady(const Clock& clk) {
-    poll(clk);
+    touch(clk);
     if (waitSynced_) return 0;  // that model takes no time at all
 
     const uint64_t from = now(clk);

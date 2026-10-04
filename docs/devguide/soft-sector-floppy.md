@@ -47,6 +47,15 @@ the chip/drive split is spelled out there at length. The essentials for a board 
   generator (PRDY) sets `setWaitSynced(true)`; then every command completes on the register
   access that would have stalled, one byte per access, and Lost Data is correctly unreachable.
   Both Tarbell boards are wait-synced. A DRQ-polling card leaves it off and gets byte timing.
+  **A Type I command (Restore, Seek, Step) does not step in the cycle that loads it.** The step
+  pulses go to the drive that is selected when they happen, and a driver may select another drive
+  straight after it loads the command — the Tarbell CBIOS `HOME` does. So the stepping waits for
+  the guest's next access to the board (`Wd17xx::touch()`), or for one step time if the guest
+  never comes back; a plain `poll()` from the board's timer or the run loop leaves it alone. The
+  chip's own register accesses call `touch()`. **The board must call it for every other port it
+  decodes** — the drive-select latch (after the latch is applied), and the track and sector
+  registers — guarded by `stepPending()`. A real part may get its first pulse out before the
+  select lands; the model gives the new drive all of them.
   The one deadline a wait-synced chip keeps is the index pulse that ends a `Write Track`. See
   "The `trackImageBytes(rate)` budget" below.
 
@@ -159,7 +168,8 @@ models this with a board strap, `Wd17xx::setDensityChecked(bool)`, which is **of
 | Board | Strap | Why |
 |---|---|---|
 | VersaFloppy I / II | **on** | The DDBIOS finds the disk type by trying each density until `Read Address` succeeds (`DDB200.ASM`, `USL1`). Issue #691. |
-| Tarbell DD, Cromemco 16FDC / 64FDC | off | The medium decides, as before. No guest is known to need the check; turning it on there is issue #692. |
+| Tarbell DD | **on** | The data rate follows the `OUT FC` density bit, so the check is correct as it stands. Issue #692. |
+| Cromemco 16FDC / 64FDC | off | The medium decides, as before. Turning it on there is the rest of issue #692; see below. |
 
 The check rests on `dataRateBits`, so it is correct only for a board that sets 500 kbit/s for
 every double-density disk. The Cromemco boards run 5.25″ double density at 250 kbit/s; turning

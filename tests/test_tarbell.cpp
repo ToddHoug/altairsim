@@ -494,7 +494,7 @@ void test_tarbell() {
         out(b, SECR, 1);
         out(b, CMD, 0x88);
         CHECK(pollRead(b).empty(), "the DD bitmap latch selected the empty drive 1");
-        out(b, CTL, 0x08);  // density DD, drive 0, side 0
+        out(b, CTL, 0x00);  // density SD (track 0 is single density), drive 0, side 0
         out(b, TRK, 0);
         out(b, SECR, 1);
         out(b, CMD, 0x88);
@@ -506,8 +506,9 @@ void test_tarbell() {
         CHECK((in(b, EXT) & 0x80) != 0, "...and busy again once a status read resets INTRQ");
 
         // EVERY sector of the SD track 0 (26) and a DD track (51) delivers exactly 128
-        // bytes and completes -- a mixed-density boot reads straight down track 0.
-        out(b, CTL, 0x08);  // density DD, drive 0
+        // bytes and completes -- a mixed-density boot reads straight down track 0. The
+        // density bit follows the track, as the CBIOS sets it: clear for track 0, set after.
+        out(b, CTL, 0x00);  // density SD, drive 0
         bool t0ok = true;
         for (int s = 1; s <= 26; ++s) {
             out(b, TRK, 0);
@@ -518,6 +519,7 @@ void test_tarbell() {
         }
         CHECK(t0ok, "all 26 SD sectors of track 0 read exactly 128 bytes and complete");
 
+        out(b, CTL, 0x08);  // density DD, drive 0
         out(b, DAT, 1);
         out(b, CMD, 0x18);  // seek to track 1 (DD)
         bool t1ok = true;
@@ -528,6 +530,27 @@ void test_tarbell() {
             if (got.size() != 128 || (in(b, CMD) & 0x1C) != 0) t1ok = false;
         }
         CHECK(t1ok, "all 51 DD sectors of track 1 read exactly 128 bytes and complete");
+
+        // THE WRONG DENSITY READS NOTHING (issue #692). An FD1791 clocked for one density
+        // finds no ID field recorded at the other: Record Not Found (S4), and no data.
+        out(b, CTL, 0x00);  // density SD -- but the head is on track 1, which is DD
+        out(b, SECR, 1);
+        out(b, CMD, 0x88);
+        CHECK(pollRead(b).empty(), "a DD track read with the density bit clear gives no data");
+        CHECK((in(b, CMD) & 0x10) != 0, "...and Record Not Found");
+
+        out(b, CTL, 0x08);  // density DD
+        out(b, DAT, 0);
+        out(b, CMD, 0x18);  // seek to track 0 (SD)
+        out(b, SECR, 1);
+        out(b, CMD, 0x88);
+        CHECK(pollRead(b).empty(), "the SD track 0 read with the density bit set gives no data");
+        CHECK((in(b, CMD) & 0x10) != 0, "...and Record Not Found");
+
+        out(b, CTL, 0x00);  // density SD: the same sector is there again
+        out(b, CMD, 0x88);
+        CHECK(pollRead(b).size() == 128 && (in(b, CMD) & 0x1C) == 0,
+              "...and with the bit right for the track the sector reads clean");
     }
 
     // ---- THE ON-CARD 8257 STEALS THE BUS: a DMA sector read (DESIGN.md 4.5) ----
@@ -858,5 +881,44 @@ void test_tarbell() {
 
         delete tar;
         delete mem;
+    }
+
+    // ---- THE CBIOS `HOME`: Restore, then select the new drive, with no wait between ----
+    //
+    // 2ABIOS24.ASM does `MVI A,STPRAT / OUT DCOM` and falls into SETTRK, which does
+    // `OUT DCONT`. The step pulses go to the drive selected when they happen, so it is the NEW
+    // drive that goes home. The board must not step in the cycle that loads the command.
+    SECTION("boards/tarbell: a drive select straight after a Restore homes the new drive");
+    for (int oldTrack : {2, 0}) {  // the old drive off track 0, and already on it
+        withRampDisk(77ull * 26 * 128);
+        Clock c;
+        TarbellDdBoard b;
+        b.attachClock(&c);
+        b.power();
+        std::string err;
+        b.mount("drive0", "a.dsk", false, err);
+        b.mount("drive1", "b.dsk", false, err);
+        const uint8_t selA = 0x00, selB = 0x10;  // FC bits 4-5 = drive, bit 3 clear = SD
+
+        // Put drive B on track 5 and drive A on `oldTrack`, each with its own Seek.
+        out(b, CTL, selB);
+        out(b, TRK, 0);
+        out(b, DAT, 5);
+        out(b, CMD, 0x10);  // Seek, no verify
+        CHECK((in(b, CMD) & 0x04) == 0, "drive B is off track 0");
+        out(b, CTL, selA);
+        out(b, TRK, 0);
+        out(b, DAT, (uint8_t)oldTrack);
+        out(b, CMD, 0x10);
+        CHECK(((in(b, CMD) & 0x04) != 0) == (oldTrack == 0), "drive A is where the test put it");
+
+        out(b, CMD, 0x00);   // HOME: Restore...
+        b.pump();            // (the run loop may poll the board in between: it moves nothing)
+        out(b, CTL, selB);   // ...and SETTRK selects drive B at once
+        CHECK((in(b, CTL) & 0x80) == 0, "the wait port reports the command done");
+        CHECK((in(b, CMD) & 0x04) != 0, "drive B is home");
+        CHECK(in(b, TRK) == 0, "...and the track register is zero");
+        out(b, CTL, selA);
+        CHECK(((in(b, CMD) & 0x04) != 0) == (oldTrack == 0), "drive A did not move");
     }
 }

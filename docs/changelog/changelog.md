@@ -18,6 +18,19 @@ comment does nothing when the file loads.
 setting, it now gives a `default:` line: the value the setting has when a machine file does not
 set it. A setting that only shows live state has no default, and has no line.
 
+**The Tarbell double-density board checks the density.** The `OUT FC` density bit of the
+`tarbelldd` board must now agree with the density of the track, as on the hardware. A read or a
+write at the wrong density gives Record Not Found. The two double-density CP/M disks in the
+Tarbell example have a new boot loader, built from Tarbell's own source with the double-density
+option on; the old loader read track 1 with the bit clear. A disk of your own that has the old
+loader no longer boots: write the boot sector again from `2DBOOT24.ASM` with `DOUBDEN TRUE`.
+
+**A drive select written directly after a Restore or a Seek is obeyed with the default `timing`.**
+The Tarbell CBIOS writes a Restore command and then selects the new drive, with no wait between
+them. With `timing = full` the old drive moved and the new drive did not. Now the drive that is
+selected when the head moves is the drive that moves, on the Tarbell, VersaFloppy and Cromemco
+boards.
+
 **A single-density disk boots on the SD Systems VersaFloppy.** The DDBIOS PROM finds the type
 of a disk by a read of an address at each density, double density first. The `versafloppy`
 board gave a good address at each density, so the PROM used a single-density disk as a

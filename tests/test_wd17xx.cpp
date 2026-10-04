@@ -1248,4 +1248,87 @@ void test_wd17xx() {
         CHECK(d.lastTrack == stream, "...and writeTrackImage got the whole revolution");
         CHECK(d.lastRate == 500000, "...and the chip handed the drive its 500 kbit/s DD rate");
     }
+
+    // ---- A WAIT-SYNCED TYPE I COMMAND STEPS THE DRIVE THAT IS SELECTED WHEN IT STEPS ----
+    //
+    // The step pulses come milliseconds after the command is loaded, and they go to whichever
+    // drive is selected then. The Tarbell CBIOS HOME loads Restore and selects the new drive in
+    // the next few instructions, with no wait between: the NEW drive goes home. So loading the
+    // command moves nothing, and reports stepPending() for the board to hold its poll on.
+    SECTION("chips/wd17xx: a wait-synced Type I command steps on the next access");
+    {
+        Clock clk;
+        FakeDrive a, b;
+        a.head = 2;
+        b.head = 5;
+        Wd1771 f("fdc");
+        f.attach(&a);
+        f.powerOn(clk);
+        f.setWaitSynced(true);
+
+        f.writeCommand(0x00, clk);  // Restore
+        CHECK(f.stepPending(), "the Restore is loaded and has not stepped");
+        CHECK(a.head == 2, "...so the selected drive has not moved");
+        f.poll(clk);                // the board's own poll (its timer, the run loop)
+        CHECK(a.head == 2 && f.stepPending(), "...and a poll that is not the guest moves nothing");
+        CHECK(f.nextEdge(clk) > clk.now(), "...but one step time on it steps with nobody asking");
+        f.attach(&b);               // the guest selects the other drive
+        const uint8_t st = f.readStatus(clk);
+        CHECK(b.head == 0, "the drive selected at the next access is the one that goes home");
+        CHECK(a.head == 2, "...and the drive selected at the command did not move");
+        CHECK((st & 0x01) == 0 && (st & 0x04) != 0, "...not busy, TR00 up");
+        CHECK(!f.stepPending(), "...and nothing is pending any more");
+    }
+    // Nobody comes back: a guest waiting for INTRQ. The stepping happens one step time on.
+    {
+        Clock clk;
+        FakeDrive a;
+        a.head = 2;
+        Wd1771 f("fdc");
+        f.attach(&a);
+        f.powerOn(clk);
+        f.setWaitSynced(true);
+
+        f.writeCommand(0x00, clk);
+        clk.advance(f.nextEdge(clk) - clk.now());
+        f.poll(clk);
+        CHECK(a.head == 0 && f.intrq(), "with no access the Restore runs one step time later");
+        CHECK(f.nextEdge(clk) == 0, "...and the chip is idle again");
+    }
+    // TR00 is the new drive's too. A Restore loaded while the OLD drive is home must still
+    // step the new one: sampling TR00 at the command would end it there with nothing moved.
+    {
+        Clock clk;
+        FakeDrive a, b;
+        a.head = 0;
+        b.head = 5;
+        Wd1771 f("fdc");
+        f.attach(&a);
+        f.powerOn(clk);
+        f.setWaitSynced(true);
+
+        f.writeCommand(0x00, clk);  // Restore, with drive a already on track 0
+        f.attach(&b);
+        f.readStatus(clk);
+        CHECK(b.head == 0, "a Restore loaded on a homed drive still homes the one selected next");
+        CHECK(a.steps == 0, "...and the homed drive took no step");
+    }
+    // The other way round: the new drive is already home, so it takes no step at all.
+    {
+        Clock clk;
+        FakeDrive a, b;
+        a.head = 3;
+        b.head = 0;
+        Wd1771 f("fdc");
+        f.attach(&a);
+        f.powerOn(clk);
+        f.setWaitSynced(true);
+
+        f.writeCommand(0x00, clk);
+        f.attach(&b);
+        f.readStatus(clk);
+        CHECK(b.steps == 0 && a.steps == 0, "a drive that is already home takes no step");
+        CHECK(a.head == 3, "...and the other drive stays where it was");
+        CHECK(f.readTrackReg() == 0, "...and the track register is zero");
+    }
 }

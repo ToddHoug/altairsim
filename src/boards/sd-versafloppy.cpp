@@ -158,6 +158,9 @@ uint8_t VersaFloppyBoard::read(const BusCycle& c) {
     Clock&  k   = clk();
     uint8_t off = (uint8_t)(c.port() - port_);
     uint8_t v   = 0xFF;
+    // Any read of the board is the "next access" a pending Type I command steps on, the
+    // track register included (Wd17xx::stepPending()).
+    if (chip_->stepPending()) chip_->touch(k);
     switch (off) {
         case 0: break;  // 60H reset strobe: nothing to read
         case 1:
@@ -202,6 +205,9 @@ void VersaFloppyBoard::write(const BusCycle& c) {
             chip_->writeData(c.data, k);
             break;
     }
+    // ...and so is any write but the one that loads the command: a drive select written
+    // straight after a Restore gets the step pulses (Wd17xx::stepPending()).
+    if (off != 4 && chip_->stepPending()) chip_->touch(k);
     refresh();
 }
 
@@ -232,8 +238,9 @@ uint8_t VersaFloppyBoard::assertsVi() const {
 
 // ---------------------------------------------------------------------------
 // The card's own clock discipline (the 2SIO idiom): advance the chip, re-drive pin 73,
-// re-arm the one deadline. Under wait-synced operation the chip has no autonomous edge
-// (nextEdge() returns 0), so no timer is armed -- everything happens on a register access.
+// re-arm the one deadline. Under wait-synced operation the chip has two edges of its own (the
+// index pulse that ends a Write Track, and a Type I command the guest never came back for);
+// everything else happens on a register access.
 // ---------------------------------------------------------------------------
 void VersaFloppyBoard::refresh() {
     if (!clock_) return;
