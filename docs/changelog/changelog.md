@@ -6,7 +6,10 @@ as it is now; this document is the record of how it got there.
 
 ---
 
-## Unreleased
+## 1.3.2
+
+**1.3.2 puts a serial line or the mirror of the console on a pseudo-terminal, adds a text log of
+the console, and corrects a tape bug.**
 
 **A serial line can go to a pseudo-terminal: `CONNECT sio0:b pty`, on macOS and Linux.** The
 program prints a name, `/tmp/altairsim0` for the first line. Open that name with a terminal
@@ -16,69 +19,43 @@ name, so that a machine file gets the same name each time. The carrier of the li
 a program has the name open. When no program has it open, the line discards what the guest
 sends, and the guest does not wait. Windows has no pseudo-terminal, and refuses `pty`.
 
-**A machine file that has a `|pty` mirror now prints the name of the mirror at startup.**
-Before, only `CONNECT` printed it.
-
 **`--mirror pty` puts the mirror of the console on a pseudo-terminal, on macOS and Linux.**
 With `--mcp --mirror pty`, the program prints a name, `/tmp/altairsim0` for the first mirror.
-Open that name with a terminal program, for example `screen /tmp/altairsim0`, to watch the
-session that the AI assistant controls and to type on it. A terminal program sends each key
-when you press it and does not print it a second time, and there is no port number to select.
-`--mirror pty:PATH` selects the name. In the monitor and in a machine file, the same mirror is
-`<endpoint>|pty`. Windows has no pseudo-terminal, so `--mirror socket:PORT` is the mirror there.
-A mirror now also sends the end of a long listing to the watcher immediately, and does not wait
-for the next command from the assistant.
+Open that name with a terminal program to watch the session that the AI assistant controls and
+to type on it. `--mirror pty:PATH` selects the name. In the monitor and in a machine file, the
+same mirror is `<endpoint>|pty`, and a machine file that has it prints the name at startup.
+Windows has no pseudo-terminal, so `--mirror socket:PORT` is the mirror there. A mirror now also
+sends the end of a long listing to the watcher immediately, and does not wait for the next
+command from the assistant.
 
 **`--log FILE` keeps a text log of the console while an AI assistant controls the machine.**
 With `--mcp --log session.log`, the program writes each character that the guest prints to the
-file, at the time that the guest prints it. The log is an ordinary text file that holds the full
-session. Read it, search it or copy from it at any time, or follow it in a second window, for
-example with `tail -f`, or with `Get-Content -Wait` in PowerShell. The log only records; `--mirror` is still
-the way to type at the guest, and the two work together. In the monitor and in a machine file,
-the same log is `<endpoint>|FILE?fmt=text`. The file tap also has a new `append` option, and a
-tap can now go on a mirror: `<endpoint>|socket:PORT|FILE`.
+file, at the time that the guest prints it. Read it, search it or follow it in a second window,
+for example with `tail -f`, or with `Get-Content -Wait` in PowerShell. In the monitor and in a
+machine file, the same log is `<endpoint>|FILE?fmt=text`. The file tap also has a new `append`
+option, and a tap can now go on a mirror: `<endpoint>|socket:PORT|FILE`.
 
-**The AI driving guide says how to select an `until`, and which `altairsim` a server runs.**
-A `run` stops at the first place where `until` occurs, so an `until` that is only the start of
-a longer prompt returns too early. `DRIVING-WITH-AI.md` and the `altairsim` skill now say to
-give the full prompt. They also say that a server registered as `./altairsim` can be a
-different release from `altairsim` on `PATH`.
-
-**The AI driving guide says to send one line in each `run`.** A guest that reads the console
-with interrupts and has no type-ahead buffer, such as the MITS Programming System II monitor on
-`ps2int`, loses characters when one `run` sends more than one line. `DRIVING-WITH-AI.md` now
-gives the rule, the symptom and the reason.
+**The package has two scripts that watch a mirror.** `tools/mirror-watch.sh` (macOS and Linux)
+and `tools/mirror-watch.ps1` (Windows) show the console of the machine in a second window while
+an AI assistant controls it through `--mcp --mirror socket:2323`, and connect again after the
+simulator starts again. Windows had no viewer before, because it installs neither `nc` nor
+`telnet`. The scripts are by trgeuy. The docs now name `nc` first and `telnet` second: a new Mac
+has `nc` but no `telnet`.
 
 **A machine file with the wrong brackets on a table is refused.** `[board]` with single
 brackets loaded as if it was `[[board]]`, and `[[console]]` loaded as if it was `[console]`.
 Now each is an error that gives the line and the correct form. A file that has this mistake
 loaded before and does not load now; change the brackets as the error says.
 
-**The configuring chapter has the right title, and says how a machine file is loaded.** The
-chapter that was called "The machine file" is now "Configuring a machine", like the other
-chapters call it. It says how a file is loaded (the command line, `CONFIG LOAD`, or `base`), why
-a table has one pair of brackets or two, and what `CONFIG SAVE` leaves out of a file that has
-comments. The docs and the HELP text now say that `CONFIG SAVE` saves the machine.
-
-**The manual describes `SHOW BUS`.** A new section in the machines chapter shows what a bare
-`SHOW BUS` prints, and how to read its `MEMORY`, `I/O` and `INTERRUPTS` parts. The Monitor and
-Debugger documents and the HELP text now say what the bare command does.
-
-**The package has two scripts that watch a mirror.** `tools/mirror-watch.sh` (macOS and Linux)
-and `tools/mirror-watch.ps1` (Windows) show the console of the machine in a second window while
-an AI assistant controls it through `--mcp --mirror socket:2323`. A script waits for the mirror,
-and connects again after the simulator starts again. Windows had no viewer before, because it
-installs neither `nc` nor `telnet`. The scripts are by trgeuy. `tools/README.pdf` gives the
-commands.
-
-**The mirror text names `nc`.** A new Mac has `nc` but no `telnet`, and `nc localhost PORT` shows
-a mirror correctly. The manual, the `CONNECT` help and `DRIVING-WITH-AI.md` now give `nc` first
-and `telnet` second.
-
 **A tape that you mount after another tape starts at its first byte.** After a program loaded
 from a cassette, the next `MOUNT` on that recorder gave the guest one byte of the old tape
 before the new tape. A bootstrap loader stored that byte, and the program did not start. This
 is corrected for the 88-ACR, the 88-UIO and the Sol-20. `UNMOUNT` also removes that byte.
+
+**The documents are corrected and extended.** The manual describes `SHOW BUS`, and its
+configuring chapter says how a machine file is loaded and what `CONFIG SAVE` saves. The AI
+driving guide says to send one line in each `run`, to give the full prompt as `until`, and that
+a server registered as `./altairsim` can be a different release from the one on `PATH`.
 
 ## 1.3.1
 

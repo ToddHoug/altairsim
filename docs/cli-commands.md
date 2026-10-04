@@ -92,7 +92,7 @@ derived from. It is here for the notes; the list itself is `HELP`'s, which print
 
 ## HELP has two forms
 
-**Bare `HELP` lists the names and nothing else** — the whole set in about ten lines:
+**Bare `HELP` lists the names and a few tips** — the whole set in about ten lines:
 
 ```
 altairsim> HELP
@@ -102,13 +102,26 @@ altairsim> HELP
   DISC[ONNECT]      DO                D[UMP]            E[DIT]
   EX[AMINE]         F[ILL]            HE[LP]            H[ISTORY]
   I[N]              L[OAD]            MA[CHINE]         M[OUNT]
-  MOV[E]            N[EXT]            NO[BREAK]         O[UT]
-  P[OWER]           Q[UIT]            REGI[ON]          RE[GS]
-  RES[ET]           REST[ORE]         R[UN]             SA[VE]
-  ...
+  MOV[E]            N[EXT]            NO[BREAK]         NOP[ASTE]
+  O[UT]             PA[STE]           P[OWER]           Q[UIT]
+  REGI[ON]          RE[GS]            RES[ET]           REST[ORE]
+  R[UN]             SA[VE]            SEA[RCH]          SE[T]
+  SH[OW]            SN[APSHOT]        STA[RTUP]         S[TEP]
+  SY[MBOLS]         T[RACE]           TY[PE]            U[NMOUNT]
+  W[HO]
+
+  Type the part before the [brackets].
+  HELP <command> for the usage and examples -- e.g. HELP DUMP.
+  . repeats your last command -- e.g. DI to disassemble, then . . . to keep going.
+  !<command> runs a command in your host shell -- e.g. !vi HELLO.PRN.
+
+  Numbers: on the wire is HEX (addresses, ports, bytes) -- or OCTAL
+  under SET CONSOLE base=octal; never on the wire is DECIMAL (counts,
+  widths, sizes). 0x/$/h force hex, 0o/q force octal, # forces decimal,
+  and a K/M suffix is always decimal.
 ```
 
-The list is **alphabetical**, not ranked — you are hunting for a name, and the ranking is not something you can look a name up by. The brackets are where the ranking shows through: `R[UN]` and `RES[ET]` sit two rows apart and tell you the whole story without a word of explanation.
+The list is **alphabetical**, not ranked — you are hunting for a name, and the ranking is not something you can look a name up by. The brackets are where the ranking shows through: `R[UN]` and `RES[ET]` sit on rows next to each other and tell you the whole story without a word of explanation.
 
 When you type HELP you are almost always hunting for a name you half-remember, and a wall of usage lines is the worst possible shape for that: it doesn't fit on a screen, so the thing you were looking for scrolls off the top.
 
@@ -123,9 +136,13 @@ altairsim> HELP D
   Hex and ASCII. A bare address runs to the END OF ITS PAGE, and a bare DUMP
   continues from there -- so the rows and the columns both stay page-aligned
   however you first landed. WIDTH is a count, so it is decimal.
-    D 100        0100-01FF, a whole page
-    D 0001       0001-00FF: stops on the boundary, last line full
-    D            the next page
+
+    D 100        ; 0100-01FF, a whole page
+    D 0001       ; 0001-00FF: stops on the boundary, last line full
+    D            ; the next page
+    D FF00-FF0F  ; an explicit range means exactly what it says
+    D 100/20     ; 0100-011F (LEN is part of the address expression: hex)
+    D 0 WIDTH=8  ; eight bytes per line
 ```
 
 Note that `HELP D` works — the argument goes through the same prefix resolver as everything else, so you never have to spell a command out just to ask about it.
