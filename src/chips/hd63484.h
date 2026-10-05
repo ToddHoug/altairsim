@@ -385,7 +385,16 @@ private:
 
     // A drawing access to word `addr` of screen `dn`: the frame memory, or the board's
     // character memory when that screen's MWR CHR bit is set and the board decodes CHR.
-    bool     charScreen(int dn) const { return charSpace_ && (regWord((uint8_t)(0xC2 + dn * 8)) & 0x8000); }
+    //
+    // KEEP THIS SHAPE. Written as one `charSpace_ && (regWord(..) & 0x8000)` expression, MSVC
+    // 14.51 (Visual Studio 18) compiles the function to `xor al, al; ret` -- always false -- so a
+    // CHR screen drew into the frame memory on Windows alone. The early return and the separate
+    // bit test compile correctly there; the CHR tests in test_hd63484 and test_cadzilla guard it.
+    bool     charScreen(int dn) const {
+        if (charSpace_ == nullptr) return false;
+        const uint16_t mwr = regWord((uint8_t)(0xC2 + dn * 8));
+        return (mwr & 0x8000) != 0;
+    }
     void     vramWrite(int dn, uint32_t addr, uint16_t v) {
         if (charScreen(dn)) {
             charSpace_->charWrite((uint16_t)addr, v);
