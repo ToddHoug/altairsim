@@ -224,7 +224,8 @@ constexpr char     kMagic[8]     = {'A', 'L', 'T', 'R', 'S', 'N', 'P', '1'};
 // 2: the ACR/Sol tape decks gained an auto-stop mark (`stopAt_`) in their state. A v1
 // snapshot lacks it and is rejected with the format-mismatch message rather than misread.
 // 3: the `sbc` board gained its auto-start latch and the onboard 1K RAM in its state.
-constexpr uint32_t kFormatVersion = 3;
+// 4: the `cadzilla` board gained its overlay SRAM in its state.
+constexpr uint32_t kFormatVersion = 4;
 }  // namespace
 
 bool Machine::snapshot(const std::string& path, std::string& err) const {

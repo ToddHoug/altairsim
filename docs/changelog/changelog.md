@@ -8,6 +8,22 @@ as it is now; this document is the record of how it got there.
 
 ## Unreleased
 
+**The CADzilla board has its overlay.** The board has a second picture of 1 bit for each pixel,
+in its own memory. Where a bit is 1, the Bt453 shows overlay color 2 in place of the color from
+the table. A guest draws the overlay through an ACRTC screen with the CHR bit set, and the new
+`OLSEL` bit of the MODE register selects which half of the overlay memory it draws. The `OLEN`
+bit, which did nothing before, now shows the overlay. `SHOW` gives the new `olsel` line, and the
+`wiring` line names a CHR screen that is enabled for display.
+
+**Two CADzilla display errors are corrected.** A fetch now reads 8 words that start at a
+multiple of 8, as on the hardware, so a start address that is not a multiple of 8 no longer
+moves the picture by part of a fetch. The area outside the picture is now black, as on the
+hardware; before, it had the color of entry 0 of the table.
+
+**Snapshots have a new format.** A snapshot now holds the overlay memory of a CADzilla board, so
+the snapshot format is now version 4. `RESTORE` does not accept a snapshot from an earlier
+release.
+
 **`CONFIG SAVE` marks the settings that have the default value.** A saved file used to list every
 setting, and you could not tell a default from a value that was set on purpose. Now a setting that
 has the default value ends with a comment, for example `baud = 9600  # default X.Y.Z`, and `X.Y.Z`
