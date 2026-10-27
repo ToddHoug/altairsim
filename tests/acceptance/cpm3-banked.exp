@@ -21,19 +21,24 @@
 #
 # THE DISKS MUST NOT MOVE. The fixture mounts both write-protected; shasummed before and after.
 #
-# usage: expect -f cpm3-banked.exp <altairsim>
+# usage: expect -f cpm3-banked.exp <altairsim> [<machine file>]
+#
+# The machine file defaults to cpm3-banked.toml (the ExpandoRAM II). cpm3-banked-eram3.toml
+# runs the same boot on a 256K ExpandoRAM III (bankmem card=expandoram3, config=cpm), whose
+# PROM map gives CP/M 3 the same 48K pages under a 16K common region at C000.
 #
 set timeout 90
 log_user 0
 
 set exe [lindex $argv 0]
+set toml [expr {[llength $argv] > 1 ? [lindex $argv 1] : "tests/acceptance/cpm3-banked.toml"}]
 set dsk1 "tests/media/sdsys/CPM3-B-SSDD-60K-DISK1.DSK"
 set dsk2 "tests/media/sdsys/CPM3-B-SSDD-DISK2.DSK"
 
 set before1 [exec shasum $dsk1]
 set before2 [exec shasum $dsk2]
 
-spawn $exe tests/acceptance/cpm3-banked.toml
+spawn $exe $toml
 
 # The console comes up; nothing prints until we present a CR for the auto-baud.
 expect {
@@ -103,6 +108,6 @@ if {$before1 ne $after1 || $before2 ne $after2} {
     exit 1
 }
 
-puts "OK: banked CP/M 3 cold-booted off the VersaFloppy II into the 256K ExpandoRAM to its A>\
-      prompt, DIR ran through the keyboard interrupt, and both masters are byte-identical."
+puts "OK: banked CP/M 3 cold-booted off the VersaFloppy II into the 256K ExpandoRAM ($toml)\
+      to its A> prompt, DIR ran through the keyboard interrupt, and both masters are byte-identical."
 exit 0
