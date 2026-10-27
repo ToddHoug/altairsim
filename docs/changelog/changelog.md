@@ -12,6 +12,14 @@ register, the bit or the command that was wrong.
 
 ## Unreleased
 
+**New: `bankmem card=expandoram3`, the SD Systems ExpandoRAM III.** The guest writes a page
+number to port `FF`, and the board uses only the low four bits. `ram = 256` is one board, with
+pages 0–4. `ram = 512` is two boards, with pages 0–9. `config = "cpm"` puts 48K pages under 16K
+of common RAM at `C000`. `config = "oasis"` puts the common RAM at `0000`. `bank_enable` sets
+the bank switches of S3. A page that has no RAM on the boards leaves its addresses empty, and
+the common RAM continues to answer. The SD Systems banked CP/M 3 disk for the ExpandoRAM II
+boots unchanged with `config = "cpm"`.
+
 **The manual now says how `bankmem card=expandoram2` counts `ram` with a partition.** The
 ExpandoRAM II's 32K and 48K PROM maps are for boards of 16K chips. With `ex48` or `ex32`,
 `ram` counts those 64K boards, so `ram = 256` with `ex48` is four boards. Before, the manual

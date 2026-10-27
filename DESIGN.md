@@ -549,9 +549,9 @@ An observer is **armed only while the machine is running.** The monitor's own `D
 
 Banking is its own board type, `bankmem` (`docs/boards/bankmem.md`) — the strongest possible expression of this section's conclusion, since it means a banked card cannot even *share code* with the plain `memory` board's decode. A banked card registers a bank-select I/O port; a guest write mutates the board's **own** state to decide which plane is live. This is an ordinary `IoOut` — **not** a bus special case, and the same mechanism as §4.2.1's enable/disable.
 
-**What a bank select *does* is the board's business, and this document states no rule about it.** On the four cards below it swaps a 64K plane, or several. On some other card it might not. The bus carries the `OUT` and the board decides — that is the entire point.
+**What a bank select *does* is the board's business, and this document states no rule about it.** On the cards below it swaps a 64K plane, several planes, or a page built from 16K cells. On some other card it might do something else. The bus carries the `OUT` and the board decides — that is the entire point.
 
-If you are ever tempted to hoist banking into the bus or the monitor, read this table first. These are four **real** cards (`docs/boards/bankmem.md`, each sourced from its own manual — see `reference/*.md`):
+If you are ever tempted to hoist banking into the bus or the monitor, read this table first. These are **real** cards (`docs/boards/bankmem.md`, each sourced from its own manual — see `reference/*.md`):
 
 | Card | Port | Banks | The data written selects the bank how? |
 |---|---|---|---|
@@ -559,8 +559,9 @@ If you are ever tempted to hoist banking into the bus or the monitor, read this 
 | Cromemco 64KZ/64KZ-II | **0x40** | 8 | **8-bit mask, select-many.** Bit *N* enables bank *N*, and several banks are live at once — `OUT 40,28` enables banks 3 *and* 5 together. |
 | North Star HRAM | **0xC0** | ≤6 usable | **On/off plus one-hot toggle**, not a bank number at all: bit 0 is on(0)/off(1), bits 1–7 are a one-hot address of *which* bank to toggle, and switching banks means turning the old one off and the new one on as two separate acts. |
 | SD Systems ExpandoRAM II | **0xFF** | 10 | **Page number** — an *approximation*, flagged as such in `docs/boards/bankmem.md`. The real board decodes the page through an 82S130 PROM into a 32K/48K partition that is not transcribable from the scanned manual, so we model a binary page-select over 64K planes instead. |
+| SD Systems ExpandoRAM III | **0xFF** | 5 per board, ≤10 | **Low nibble = page**, through a PROM that drives a bank enable *and* the RAM's A14–A15, so each 16K of the CPU's space comes from a different 16K cell for each page. Modelled cell by cell from the manual's Fig 2-2, with its misprinted cells fixed and named in `docs/boards/bankmem.md`. A page with no cell leaves the switched window empty. |
 
-**Four genuinely different mechanisms, not four parameters of one mechanism.** The sharpest example is that **Vector Graphic and Cromemco 64KZ sit on the same port, 0x40, with incompatible encodings** — one is select-one-of-eight, the other is a mask that can hold several banks live simultaneously. A generic "write a byte, get a bank" abstraction cannot express both, so the board must own its decode or the model silently corrupts whichever card isn't the one the code was written for.
+**Different mechanisms, not parameters of one mechanism.** The sharpest example is that **Vector Graphic and Cromemco 64KZ sit on the same port, 0x40, with incompatible encodings** — one is select-one-of-eight, the other is a mask that can hold several banks live simultaneously. A generic "write a byte, get a bank" abstraction cannot express both, so the board must own its decode or the model silently corrupts whichever card isn't the one the code was written for.
 
 No generic "bank number" abstraction survives that table. Any `BANK=<n>` in the monitor (§10.2) or any bank arbitration in the bus would have to pick one card's convention and be silently wrong about the rest. **The board owns its decode, or the model is a lie.**
 

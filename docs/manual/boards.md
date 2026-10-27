@@ -137,7 +137,7 @@ The boards are in groups, in the same order as the sections below.
 | Type | What it is |
 |---|---|
 | `memory` | RAM and ROM, as a list of regions |
-| `bankmem` | bank-switched RAM: Vector Graphic, Cromemco 64KZ, North Star HRAM, ExpandoRAM II |
+| `bankmem` | bank-switched RAM: Vector Graphic, Cromemco 64KZ, North Star HRAM, ExpandoRAM II and III |
 | `v2z80rom` | the onboard MASTER monitor ROM of the S100Computers V2 Z80 processor board. A paged EEPROM, not a processor |
 
 **Processors**
@@ -358,7 +358,7 @@ A plain `memory` board has no bank switching. Bank switching is a different boar
 
 When 64K was not enough, S-100 makers put several planes of RAM at the same addresses. A
 write-only **select port** chose which plane the processor saw. Each maker did this in a
-different way, so `bankmem` is **one board with four decoders**. Its `card` property selects the
+different way, so `bankmem` is **one board with five decoders**. Its `card` property selects the
 decoder:
 
 | `card` | Real board | Select port | What a write does |
@@ -367,9 +367,10 @@ decoder:
 | `cromemco64kz` | Cromemco 64KZ / 64KZ-II | `40` | **8-bit mask**: bit *N* turns bank *N* on. **Several banks can be on** (`28`→banks 3 and 5) |
 | `northstar` | North Star HRAM | `C0` | bit 0 = on or off, bits 1–7 = which bank. Banks change **one at a time** |
 | `expandoram2` | SD Systems ExpandoRAM II | `FF` | the byte is a **page number** (see the note below) |
+| `expandoram3` | SD Systems ExpandoRAM III | `FF` | the low four bits are a **page number** (see *The ExpandoRAM III* below) |
 
 `banks` sets the number of planes on the board: up to 8 for `vector` and `cromemco64kz`, 6 for
-`northstar`, and 10 for `expandoram2`. `fill` and `seed` work as they do on `memory`. The guest
+`northstar`, and 10 for `expandoram2`. On `expandoram3`, `ram` sets the size instead. `fill` and `seed` work as they do on `memory`. The guest
 writes the select port. At the monitor, you can write it yourself with `OUT`, and `SHOW` lists
 every plane and which plane is on.
 
@@ -404,8 +405,64 @@ commands read different bytes at the same address, because the plane changed.
 > gives 48K of banked RAM and 16K of common RAM at `C000`, and `partition = "ex32"` gives 32K of
 > banked RAM and 32K of common RAM at `8000`. `ram` sets the RAM, and the program calculates the
 > number of banks from it. With a partition, `ram` counts 64K boards of 16K chips, because the
-> PROM maps are for those boards. For example, `ram = 256` with `ex48` is four boards. The other
-> three cards are exact.
+> PROM maps are for those boards. For example, `ram = 256` with `ex48` is four boards. The
+> `vector`, `cromemco64kz`, `northstar` and `expandoram3` cards are exact.
+
+#### The ExpandoRAM III
+
+`card = "expandoram3"` models the PROM map of the SD Systems ExpandoRAM III. The board uses only
+the low four bits of the byte that the guest writes to port `FF`. For example, `OUT FF 12`
+selects page 2. Each board holds 256K of RAM in 16K cells. For each page, the PROM on the board
+connects one cell to each 16K of the address space. These settings are the switches on the board:
+
+| Setting | Values | What it does |
+|---|---|---|
+| `ram` | `256`, `512` | `256` is one board, with pages 0–4. `512` is two boards, with pages 0–9. |
+| `config` | `cpm`, `oasis` | Switch 5 of S3. `cpm` (the default) puts 48K pages at `0000`–`BFFF` and 16K of common RAM at `C000`. `oasis` puts the common RAM at `0000` and the pages at `4000`–`FFFF`. |
+| `bank_enable` | `00`–`FF` | Switches 1–4 of S3 on each board. Bit *board* × 4 + *bank* is on when that bank is on. The default `FF` turns every bank on. A bank that is off answers nothing. |
+
+The common RAM answers for every page. A page that has no cells on the boards has no RAM. Page 7
+on one board and pages `A`–`F` are examples. When the guest selects such a page, nothing answers
+in the addresses of the page, and the common RAM continues to answer. `partition` is refused on this
+card, because the PROM sets the map.
+
+A banked CP/M BIOS for the ExpandoRAM II with `partition = "ex48"` also runs on the ExpandoRAM
+III with `config = "cpm"`. Both boards write the page number to port `FF`, and both put 48K pages
+under 16K of common RAM at `C000`.
+
+The ExpandoRAM III manual prints some cells of its page map incorrectly. `bankmem` corrects them.
+The corrections change what the guest sees only when a bank is off.
+
+```
+$ altairsim bankmem --set "mem0 card=expandoram3"
+set> SET mem0 card=expandoram3
+mem0: card=expandoram3
+altairsim> OUT FF 01
+port FF <- 01
+altairsim> DEPOSIT 1000 A1
+altairsim> DEPOSIT C000 CC
+altairsim> OUT FF 12
+port FF <- 12
+altairsim> DEPOSIT 1000 A2
+altairsim> OUT FF 01
+port FF <- 01
+altairsim> DUMP 1000-1000
+1000  A1                                                .
+altairsim> DUMP C000-C000
+C000  CC                                                .
+altairsim> OUT FF 02
+port FF <- 02
+altairsim> DUMP 1000-1000
+1000  A2                                                .
+altairsim> DUMP C000-C000
+C000  CC                                                .
+altairsim> OUT FF 07
+port FF <- 07
+bank: page 7 has no RAM on expandoram3 (mem0, pages 0-4). Nothing answers 0000-BFFF; common still does.
+```
+
+`OUT FF 12` selects page 2, because the board ignores the high four bits. Address `1000` holds
+`A1` on page 1 and `A2` on page 2. Address `C000` is common RAM, so it holds `CC` on every page.
 
 ### `v2z80rom`: the S100Computers V2 Z80 processor board's onboard monitor ROM
 

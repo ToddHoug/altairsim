@@ -12,7 +12,9 @@ the page image. This file omits the circuit walk-through, the board photo, the a
 and the parts-list details that do not bear on emulation. Printed page numbers are cited (PDF
 page = printed page + 9 in Section II).
 
-**Not emulated.** `bankmem card=expandoram2` models the ExpandoRAM **II**; nothing models the III.
+Implemented as `bankmem card=expandoram3`: port FF, the Fig 2-2 map for one or two boards,
+the S3 configuration switch and the S3 bank enables. The map is built with the fixes listed at
+the end of §4.
 
 ⚠ **This is the ExpandoRAM *III*.** It shares port FF and "page number = user number" with the
 [ExpandoRAM II](SD%20Systems%20ExpandoRAM%20II.md), but its PROM, switch layout and board count
@@ -146,8 +148,16 @@ the cells above:
 - The II's last cell (board 7, bank 3) is **page A, a single 16K cell**. The III's leftover
   board-1 cell may also be page A. The III prints it as "A=3 P=0", so it stays unresolved.
 
-The only firm cure is a dump of the COSMOS-48K PROM (SD 7010479). Do not fill these cells by
-guesswork.
+The only firm cure is a dump of the COSMOS-48K PROM (SD 7010479). Until one exists,
+`bankmem card=expandoram3` builds the map with these fixes, and its table comments name each one:
+- **Page 4** gets the three quarters of the switched window: A=0/1/2 (CP/M) or A=1/2/3 (OASIS).
+  Each cell stays in the bank and RAM quarter the figure prints.
+- **Page 8** gets, in each bank, the quarter that pages 5–7 have in that bank.
+- **Board 1's leftover cell** (CP/M "S=1 A=3 P=0", OASIS "A=2, A=1, P=A") is not built. Board 0
+  carries the one common cell.
+
+Software cannot see which RAM quarter holds which CPU quarter, so the first two fixes change
+what a guest sees only when a bank is switched off.
 
 ---
 
@@ -235,7 +245,8 @@ port FF**, so it settles nothing about paging.
 - ⚠ **The PROM remaps RAM A14–A15.** A bank is 64K, not 16K; the PROM picks *which 16K* of the
   bank answers a CPU quarter. A "bank = 16K window" model will not reproduce Fig 2-2.
 - ⚠ **Fig 2-2 has cell labels that cannot be right** (page 4 and page 8 cells, board 1's second
-  page-0 cell, P=A). Recorded as printed in §4; unresolved without a PROM dump.
+  page-0 cell, P=A). Recorded as printed in §4; unresolved without a PROM dump. `bankmem`
+  builds the map with the fixes listed in §4.
 - ⚠ **§2.2.1 is stale:** it says "up to 32 (16K) dynamic random access memory elements … total
   storage capacity of the EXPANDORAM III is 65,536" (2-1). Section I, Table 1-1 (262,144 bytes)
   and the parts list (32 × 4164, U26–U57) win; the 16K figure is the E6–E8 4116 option (the

@@ -101,9 +101,9 @@ port-0x40 sharers among the sourced cards are `vram` and `cram`).
 The correction became the `bankmem` board (`docs/boards/bankmem.md`). What was done, and the
 design decisions taken:
 
-- **Banking is its own board, `bankmem`, with a `card=` variant strap** — one class, four
-  per-card decoders (`vector` one-hot select-one, `cromemco64kz` 8-bit mask, `northstar`
-  on/off + one-hot toggle, `expandoram2` PROM page-select). This was chosen over piling more knobs
+- **Banking is its own board, `bankmem`, with a `card=` variant strap** — one class, one
+  decoder per card (`vector` one-hot select-one, `cromemco64kz` 8-bit mask, `northstar`
+  on/off + one-hot toggle, `expandoram2` PROM page-select, `expandoram3` PROM cell map). This was chosen over piling more knobs
   onto `memory`: the real cards do not share one parameterization, and `DESIGN.md` §4.3 argues a
   board must own its decode. The unifying model is *segments* (a RAM slice + address window +
   enabled flag); the port write toggles the flags per the card's rule.
@@ -120,6 +120,13 @@ design decisions taken:
   bank-switch routine live in common and survive the page `OUT`. SD Systems' own banked CP/M 3 does
   exactly this (bank number → port FF, `COMBAS=C0` ⇒ `partition=ex48`); the general mechanism is now
   in place, while board-select across multiple coordinated boards remains the approximated part.
+- **`expandoram3` is built from its PROM map.** The ExpandoRAM III manual
+  ([`reference/SD Systems ExpandoRAM III.md`](../../reference/SD%20Systems%20ExpandoRAM%20III.md))
+  prints Fig 2-2 readably. Each of the board's 16K cells (4 banks × 4 RAM quarters) is one
+  segment, keyed by page, with a `bank` field for the S3 bank enables. The page is the low
+  nibble of the `OUT FF` byte. Only some quarter labels in the figure are misprints, and the
+  fixes are named in the board doc and beside the table in `bankmem.cpp`. The SD Systems CP/M 3
+  banked disk, built for the II, boots on it unchanged (`acceptance-cpm3-banked-eram3`).
 - **`v2z80rom` was kept as its own board** — its onboard paged **ROM** overlay (two 4K EEPROM pages at
   F000-FFFF, phantom-shadowing RAM, tied to a CPU card's identity) is a different thing from an
   S-100 banked-RAM card; folding it into `bankmem` (a RAM board) would reintroduce the very
