@@ -12,6 +12,29 @@ register, the bit or the command that was wrong.
 
 ## Unreleased
 
+**`bankmem card=expandoram2` uses only the low four bits of the page byte.** Before, the board
+took the whole byte written to port `FF` as the page. `OUT FF 13` was refused as page 19, and the
+old page stayed live. The real board latches only D0–D3, so `OUT FF 13` now selects page 3. A
+page that no board carries now leaves its addresses empty, and the common RAM continues to
+answer. Before, such a page left the old page live. The ExpandoRAM II's page `A` is now there. With
+`partition = "ex32"` it is a 32K page, and `ram = 384` gives pages 0–`A`. With
+`partition = "ex48"` it is 16K at `8000`, and `ram = 512` gives pages 0–9 and `A`. The SD Systems
+banked CP/M 3 disk writes only pages 0–4 and boots as before.
+
+**New: `bankmem card=expandoram3`, the SD Systems ExpandoRAM III.** The guest writes a page
+number to port `FF`, and the board uses only the low four bits. `ram = 256` is one board, with
+pages 0–4. `ram = 512` is two boards, with pages 0–9. `config = "cpm"` puts 48K pages under 16K
+of common RAM at `C000`. `config = "oasis"` puts the common RAM at `0000`. `bank_enable` sets
+the bank switches of S3. A page that has no RAM on the boards leaves its addresses empty, and
+the common RAM continues to answer. The SD Systems banked CP/M 3 disk for the ExpandoRAM II
+boots unchanged with `config = "cpm"`.
+
+**The manual now says how `bankmem card=expandoram2` counts `ram` with a partition.** The
+ExpandoRAM II's 32K and 48K PROM maps are for boards of 16K chips. With `ex48` or `ex32`,
+`ram` counts those 64K boards, so `ram = 256` with `ex48` is four boards. Before, the manual
+said that the PROM map could not be copied. The map is now read from a clean copy of the
+ExpandoRAM II manual.
+
 **The manual now says when the printer's idle flush runs and what ends a job with `?idle=0`.**
 A job's idle timer runs on the host's clock, so the job prints `?idle=N` seconds after the
 last byte even while the machine is stopped at the `altairsim>` prompt. In a session run

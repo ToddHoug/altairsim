@@ -1,7 +1,7 @@
 # Banked CP/M 3 boot acceptance fixture: the authentic single-board SBC-200 (onboard
-# MSMONR21 + DDBIOS PROM) + a VersaFloppy II, but with the RAM replaced by a 256K
-# ExpandoRAM II (bankmem card=expandoram2, partition=ex48, honors_phantom=read) so the
-# operating system can be bigger than 64K. This is the machine that proves the bankmem
+# MSMONR21 + DDBIOS PROM) + a VersaFloppy II, but with the RAM replaced by 256K of
+# ExpandoRAM II, four 64K boards of 16K chips (bankmem card=expandoram2, partition=ex48,
+# honors_phantom=read) so the operating system can be bigger than 64K. This is the machine that proves the bankmem
 # common-memory + honors_phantom path end to end: CP/M 3's resident BDOS/BIOS live in the
 # 16K common region (C000-FFFF) while it bank-switches the 48K below it via port FF, and the
 # ExpandoRAM sits UNDER the boot PROM (honors_phantom=read: the PROM shadows reads, the

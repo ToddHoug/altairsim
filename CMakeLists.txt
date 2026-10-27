@@ -1846,6 +1846,17 @@ if(EXPECT_EXECUTABLE)
                        LABELS acceptance TIMEOUT 90
                        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
+  # The same boot on a 256K ExpandoRAM III (bankmem card=expandoram3, config=cpm): its PROM
+  # cell map, not the II's per-subsystem model, carries the 48K pages and the C000 common.
+  add_test(NAME acceptance-cpm3-banked-eram3
+           COMMAND ${EXPECT_EXECUTABLE}
+                   -f ${CMAKE_CURRENT_SOURCE_DIR}/tests/acceptance/cpm3-banked.exp
+                   $<TARGET_FILE:altairsim>
+                   tests/acceptance/cpm3-banked-eram3.toml)
+  set_tests_properties(acceptance-cpm3-banked-eram3 PROPERTIES
+                       LABELS acceptance TIMEOUT 90
+                       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+
   # ---------------------------------------------------------------------------
   # THE TARBELL FLOPPY CONTROLLERS -- single density (#1011) and double density (#2022).
   #

@@ -12,7 +12,7 @@
 // honest model of the ExpandoRAM I, which has no I/O port at all) and lives here,
 // where each card owns its own decode.
 //
-// ONE MODEL, FOUR DECODERS. Every one of these cards reduces to the same shape: the
+// ONE MODEL, FIVE DECODERS. Every one of these cards reduces to the same shape: the
 // board holds a set of SEGMENTS, each a slice of RAM with an address window and an
 // ENABLED flag. A memory cycle is answered by whichever enabled segment's window
 // covers the address; the write-only select port toggles those flags per the card's
@@ -25,11 +25,20 @@
 //   northstar    North Star HRAM -- port C0: bit 0 = on(0)/off(1), bits 1-7 = a
 //                one-hot address of WHICH bank the command toggles. Banks are
 //                switched individually (old off, then new on), not selected.
-//   expandoram2  SD Systems ExpandoRAM II -- port FF, byte = page index (APPROX --
-//                the real board decodes the page through an 82S130 PROM against
-//                board-select + address bits, which is not transcribable from the
-//                scan (reference/SD Systems ExpandoRAM II.md, DESIGN.md 0.1). We
-//                model a binary page-select over 64K planes and SAY SO.)
+//   expandoram2  SD Systems ExpandoRAM II -- port FF, LOW NIBBLE = page. The real
+//                board's 82S130 PROM spreads each page over 16K banks on several
+//                boards (Fig 2-4, reference/SD Systems ExpandoRAM II.md 4). We keep
+//                one segment per page for the whole subsystem: software sees the
+//                same pages, and a page with no RAM leaves the switched window
+//                empty. ex48's page A is one 16K cell at 8000-BFFF. With
+//                partition=none (one board of 4164s) page = bank is an APPROXIMATION:
+//                the manual gives no map for that board.
+//   expandoram3  SD Systems ExpandoRAM III -- port FF, LOW NIBBLE = page. The PROM map
+//                of Fig 2-2 is built cell by cell: each board is 4 banks x 4 RAM
+//                quarters of 16K, and the PROM picks which cell answers each CPU
+//                quarter for each page (reference/SD Systems ExpandoRAM III.md 4).
+//                One or two boards (ram=256|512), config=cpm|oasis, and the S3 bank
+//                enables. A page with no cell leaves the switched window empty.
 //
 // COMMON MEMORY (expandoram2 `partition=`). Banked CP/M (CP/M 3, SD Systems COSMOS)
 // needs a region that is IDENTICAL in every bank -- the resident OS and the bank-switch
@@ -57,7 +66,7 @@ namespace altair {
 
 class MemBankBoard : public Board {
 public:
-    enum class Card { Vector, Cromemco, Northstar, Expandoram2 };
+    enum class Card { Vector, Cromemco, Northstar, Expandoram2, Expandoram3 };
     enum class Fill { Zero, Random };
     // ExpandoRAM II common-memory partition (see the header note). None = whole 64K
     // plane; Ex48 = 48K banked + 16K common @ C000; Ex32 = 32K banked + 32K common @ 8000.
@@ -68,6 +77,9 @@ public:
     // to this RAM while the PROM shadows reads); All = step aside for reads and writes.
     // Class-scoped so it does not collide with the `memory` board's altair::PhantomHonor.
     enum class PhantomHonor { None, Read, All };
+    // ExpandoRAM III S3 switch 5: which PROM map is in force. Cpm = pages in 0000-BFFF,
+    // common C000-FFFF; Oasis = pages in 4000-FFFF, common 0000-3FFF.
+    enum class Config { Cpm, Oasis };
 
     MemBankBoard() { rebuildSegments(); }
 
@@ -107,6 +119,7 @@ private:
     //   cromemco     bank-membership mask (enabled = (key & selectByte) != 0)
     //   northstar    one-hot bit position (1..7; the byte's set bit picks the segment)
     //   expandoram2  page index          (binary select-one picks key == page)
+    //   expandoram3  page index          (each segment is one 16K PROM cell)
     struct Segment {
         uint16_t lo = 0x0000, hi = 0xFFFF;   // inclusive window
         std::vector<uint8_t> ram;            // hi - lo + 1 bytes
@@ -114,6 +127,9 @@ private:
         bool resetEnabled = false;           // enable state after POC/RESET
         bool common = false;                 // the shared always-live region (partition!=none)?
         uint16_t key = 0;                    // card-specific selector (see above)
+        // expandoram3 only: where the cell is -- board x 4 + bank (the bit of
+        // bank_enable that gates it) and the RAM quarter (which 16K of the 64K bank).
+        uint8_t bank = 0, quarter = 0;
     };
 
     // Card defaults -- port, plane count, and the segment set. Called when `card` or
@@ -124,6 +140,11 @@ private:
 
     // The card's decode: recompute segment `enabled` flags from the select byte.
     void select(uint8_t data);
+    // expandoram3: set every cell's enable from the page and the bank enables.
+    // Returns false if the PROM has no cell for that page (the window is then empty).
+    bool selectEram3Page(int page);
+    void rebuildEram3();
+    int  eram3Pages() const;             // pages carried: 5 (1 board) or 10 (2 boards)
 
     // Do I take myself off the bus for THIS cycle when another board pulls PHANTOM*?
     // (See PhantomHonor.) bankmem carries no ROM, so it never asserts phantom itself --
@@ -135,13 +156,16 @@ private:
     Segment*       owner(uint16_t a);
     const Segment* owner(uint16_t a) const;
 
-    int  cardMaxBanks() const;           // vector 8, cromemco 8, northstar 6, eram2 10
-    uint8_t cardDefaultPort() const;     // 40 / 40 / C0 / FF
+    int  cardMaxBanks() const;           // vector 8, cromemco 8, northstar 6, eram2 10/11, eram3 10
+    uint8_t cardDefaultPort() const;     // 40 / 40 / C0 / FF / FF
 
     // Partition geometry (expandoram2 common memory). base 0 == no common region.
     uint16_t partitionCommonBase() const;   // None 0, Ex48 C000, Ex32 8000
     uint32_t partitionBankedSize() const;   // bytes per switchable bank window
     uint32_t partitionCommonSize() const;   // bytes of shared common region (0 if None)
+    // The RAM a subsystem of n banks holds, common included. ex48's page A (the 11th
+    // page) is one 16K cell, not a 48K bank.
+    uint32_t ramBytes(int n) const;
 
     Card card_ = Card::Vector;
     Partition partition_ = Partition::None;
@@ -150,6 +174,11 @@ private:
     int wantBanks_ = 8;                  // requested plane/bank/page count (config)
     std::vector<Segment> segs_;
     uint8_t latch_ = 0;                  // last byte written to the select port
+
+    // expandoram3 config (S3). bankEnable_ bit = board x 4 + bank, set = switch ON.
+    Config config_ = Config::Cpm;
+    uint8_t bankEnable_ = 0xFF;
+    int eram3Boards_ = 1;
 
     Fill fill_ = Fill::Random;
     uint64_t seed_ = 1;

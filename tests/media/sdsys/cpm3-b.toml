@@ -7,8 +7,8 @@
 #
 # WHAT MAKES THIS DIFFERENT FROM THE CP/M 2.2 MACHINE (cpm.toml) is the memory. CP/M 3
 # here is a BANKED system: the operating system is bigger than the 64K address space, so
-# it lives in an ExpandoRAM II -- 256K of RAM in five 48K banks under a 16K COMMON region
-# at C000-FFFF. The resident BDOS/BIOS and the bank-switch routine itself live in that
+# it lives in ExpandoRAM II memory -- 256K, the RAM of four 64K boards of 16K chips with
+# the 48K PROM: five 48K pages under a 16K COMMON region at C000-FFFF. The resident BDOS/BIOS and the bank-switch routine itself live in that
 # common region (it is the same RAM in every bank, so it survives the OUT that changes
 # banks); the switchable half of the BDOS/BIOS and the disk buffers live in the banks.
 # The ExpandoRAM II is the `bankmem` board's `expandoram2` card with `partition=ex48`
@@ -59,8 +59,8 @@ start   = E000
   at    = F000
   mount = "builtin:ddb200"             # the DDBIOS VersaFloppy boot BIOS
 
-# THE EXPANDORAM II -- 256K of banked RAM, EX-48 partition: five 48K banks (0000-BFFF)
-# under a shared 16K common region (C000-FFFF). `honors_phantom = read` lets the SBC boot
+# THE EXPANDORAM II -- 256K of banked RAM (four 64K boards of 16K chips), 48K PROM: five
+# 48K pages (0000-BFFF) under a shared 16K common region (C000-FFFF). `honors_phantom = read` lets the SBC boot
 # PROM shadow it for reads while the cold-boot loader's writes fall through -- so after the
 # boot sector's `OUT 7F,3` the whole banked machine is live and CP/M 3 runs from it.
 [[board]]
