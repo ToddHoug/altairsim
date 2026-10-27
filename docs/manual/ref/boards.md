@@ -168,7 +168,7 @@ Generic Z80 CPU board. Decodes nothing -- it drives the bus. The 88-CPU's twin, 
 
 ### `bankmem`
 
-S-100 bank-switched RAM. One card, five decoders (card=vector|cromemco64kz|northstar|expandoram2|expandoram3): a write-only select port swaps which RAM plane(s) drive the bus. Each card owns its own decode -- one-hot select (Vector 40), 8-bit bank mask (Cromemco 40), on/off+one-hot toggle (North Star C0), PROM page-select (ExpandoRAM II FF, approximated), or the ExpandoRAM III PROM map (FF, low nibble)
+S-100 bank-switched RAM. One card, five decoders (card=vector|cromemco64kz|northstar|expandoram2|expandoram3): a write-only select port swaps which RAM plane(s) drive the bus. Each card owns its own decode -- one-hot select (Vector 40), 8-bit bank mask (Cromemco 40), on/off+one-hot toggle (North Star C0), PROM page-select (ExpandoRAM II FF, low nibble), or the ExpandoRAM III PROM map (FF, low nibble)
 
 #### Board properties
 
@@ -176,11 +176,11 @@ S-100 bank-switched RAM. One card, five decoders (card=vector|cromemco64kz|north
 |---|---|---|---|---|
 | `card` | enum | `vector` | `vector` \| `cromemco64kz` \| `northstar` \| `expandoram2` \| `expandoram3` | which banked card this is -- each owns its own decode: vector \| cromemco64kz \| northstar \| expandoram2 \| expandoram3 |
 | `port` | int | `0x40` | `0x0` .. `0xFF` | the write-only bank-select port. Card default (vector/cromemco 40, northstar C0, expandoram2/expandoram3 FF); overridable, as the real boards relocate it |
-| `banks` | int | `8` | `1` .. `10` | how many switchable banks/planes/pages this subsystem carries (one per board). Card-capped: vector/cromemco 8, northstar 6, expandoram2 10. The common region (partition) is not a bank. Setting `ram` derives this. expandoram3 carries 5 pages per board, so it takes 5 or 10 |
 | `partition` | enum | `none` | `none` \| `ex48` \| `ex32` | ExpandoRAM II common-memory partition (the EX-48/EX-32 PROM): none \| ex48 \| ex32. ex48 = 48K banked (0000-BFFF) + 16K common (C000-FFFF); ex32 = 32K banked + 32K common (8000-FFFF). The common region is identical in every bank -- what a banked CP/M's resident OS and bank-switch routine live in. `none` (default) is a whole 64K plane |
+| `banks` | int | `8` | `1` .. `11` | how many switchable banks/planes/pages this subsystem carries (one per board). Card-capped: vector/cromemco 8, northstar 6, expandoram2 10 (11 with a partition: page A). The common region (partition) is not a bank. Setting `ram` derives this. expandoram3 carries 5 pages per board, so it takes 5 or 10 |
 | `config` | enum | `cpm` | `cpm` \| `oasis` | ExpandoRAM III S3 switch 5, which PROM map is in force: cpm (ON, the factory setting) = pages in 0000-BFFF under a common 16K at C000; oasis (OFF) = pages in 4000-FFFF over a common 16K at 0000 |
 | `bank_enable` | int | `0xFF` | `0x0` .. `0xFF` | ExpandoRAM III S3 bank enables: bit = board x 4 + bank, set = enabled (factory FF). On each board, S3 switch 4 is bank 0 and switch 1 is bank 3. A switched-off bank answers nothing |
-| `ram` | int | `512` | `1` .. `640` | total board RAM in KB. Sets the bank count from the current partition: with ex48, 256 -> 5 banks; with none (whole plane), 256 -> 4 banks of 64K. The real ExpandoRAM II is 64K (16K chips) or 256K (64K chips). expandoram3: 256 (one board) or 512 (two boards) |
+| `ram` | int | `512` | `1` .. `640` | total board RAM in KB. Sets the bank count from the current partition: with ex48, 256 -> 5 banks; with none (whole plane), 256 -> 4 banks of 64K. The real ExpandoRAM II is 64K (16K chips) or 256K (64K chips); with ex48 or ex32, ram counts 64K boards of 16K chips (ex48 512 = 8 boards, pages 0-A). expandoram3: 256 (one board) or 512 (two boards) |
 | `honors_phantom` | enum | `none` | `none` \| `read` \| `all` | A JUMPER. Another board pulls PHANTOM* (a boot PROM shadowing the RAM this card sits under) -- do I switch off? none \| read \| all. `read` keeps answering writes so a cold-boot loader falls through to this RAM while the PROM shadows reads (an ExpandoRAM II under the SBC-200 boot PROM). Default none -- a plain banked-RAM machine has no PROM overlay |
 | `active` | string | — | — | the live bank(s) right now -- the guest sets this by writing the select port. Read-only here **(read-only — not a key you may set)** |
 | `fill` | enum | `random` | `zero` \| `random` | RAM contents at power-on: zero \| random (real RAM is not zeroed) |

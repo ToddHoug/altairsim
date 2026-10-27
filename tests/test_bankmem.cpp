@@ -136,8 +136,7 @@ void test_bankmem() {
     }
 
     {
-        // ExpandoRAM II: port FF, binary page select (our documented approximation of the
-        // real 82S130 PROM decode).
+        // ExpandoRAM II: port FF, the low nibble is the page.
         Machine m;
         auto* b = addBank(m, "mem0", "expandoram2");
         std::string e2;
@@ -152,6 +151,97 @@ void test_bankmem() {
         CHECK(m.bus.memRead(0x1000) == 0xA0, "expandoram2: page 0 still holds A0");
         m.bus.ioWrite(0xFF, 0x03);
         CHECK(m.bus.memRead(0x1000) == 0xB3, "expandoram2: page 3 holds B3 -- the page swapped");
+
+        // Only D0-D3 reach the PROM (U13: BDO4-5 go nowhere), so OUT FF,10 is page 0.
+        m.bus.ioWrite(0xFF, 0x10);
+        CHECK(active(b) == 0x01 && m.bus.memRead(0x1000) == 0xA0,
+              "expandoram2: OUT FF,10 is page 0 (the high nibble is ignored)");
+        m.bus.ioWrite(0xFF, 0xF3);
+        CHECK(active(b) == 0x08, "expandoram2: OUT FF,F3 is page 3");
+        CHECK(m.drainBoardLog().empty(), "expandoram2: a high nibble is not an error");
+
+        // A page no board carries: the PROM drives no bank, so nothing answers.
+        m.bus.ioWrite(0xFF, (uint8_t)b->banks());
+        CHECK(active(b) == 0 && !answers(b, 0x1000),
+              "expandoram2: a page with no RAM leaves the window empty (not the old page)");
+        CHECK(!m.drainBoardLog().empty(), "expandoram2: and the board says so");
+        CHECK(prop(b, "active") == "(none)", "expandoram2: active reads (none)");
+    }
+
+    {
+        // ex48 on four 64K boards (ram=256): pages 0-4 + common. Page 7 lives on board 6,
+        // so the switched window empties and the common 16K still answers.
+        Machine m;
+        auto* b = addBank(m, "mem0", "expandoram2");
+        std::string e2;
+        setProperty(*b, "partition", "ex48", e2);
+        setProperty(*b, "ram", "256", e2);
+        setProperty(*b, "fill", "zero", e2);
+        m.power();
+        m.bus.ioWrite(0xFF, 0x07);
+        CHECK(!answers(b, 0x0000) && !answers(b, 0xBFFF) && answers(b, 0xC000),
+              "eram2/ex48: page 7 on four boards -> 0000-BFFF empty, common answers");
+        CHECK(prop(b, "active") == "(none) + common", "eram2/ex48: active reads (none) + common");
+        CHECK(!m.drainBoardLog().empty(), "eram2/ex48: the board says page 7 has no RAM");
+        m.bus.ioWrite(0xFF, 0x14);
+        CHECK(active(b) == 0x10 && answers(b, 0x0000), "eram2/ex48: OUT FF,14 is page 4");
+    }
+
+    {
+        // ex48 on eight boards (ram=512): pages 0-9 + page A, a single 16K cell at A=2
+        // (board 7 bank 3, Fig 2-4).
+        Machine m;
+        auto* b = addBank(m, "mem0", "expandoram2");
+        std::string err;
+        setProperty(*b, "partition", "ex48", err);
+        CHECK(setProperty(*b, "ram", "512", err), "eram2/ex48: ram=512 is eight boards");
+        setProperty(*b, "fill", "zero", err);
+        m.power();
+        CHECK(b->banks() == 11 && prop(b, "ram") == "512", "eram2/ex48: 512K -> pages 0-A");
+        m.bus.ioWrite(0xFF, 0x09);
+        m.bus.memWrite(0x8000, 0x99);
+        m.bus.ioWrite(0xFF, 0x0A);
+        CHECK(answers(b, 0x8000) && answers(b, 0xBFFF), "eram2/ex48: page A answers 8000-BFFF");
+        CHECK(!answers(b, 0x0000) && !answers(b, 0x7FFF), "eram2/ex48: page A has nothing below 8000");
+        CHECK(answers(b, 0xC000), "eram2/ex48: common answers on page A");
+        m.bus.memWrite(0x8000, 0xAA);
+        m.bus.ioWrite(0xFF, 0x09);
+        CHECK(m.bus.memRead(0x8000) == 0x99, "eram2/ex48: page A is its own RAM, not page 9's");
+        CHECK(m.drainBoardLog().empty(), "eram2/ex48: page A is carried, no log line");
+        CHECK(!setProperty(*b, "ram", "528", err), "eram2/ex48: more than eight boards is refused");
+
+        // CONFIG SAVE writes every settable property in properties() order; a fresh
+        // board must take them all back (partition comes before banks for this).
+        Machine m2;
+        auto* c = addBank(m2, "mem0", "vector");
+        for (const auto& p : b->properties()) {
+            if (!p.set || !p.get) continue;
+            std::string e;
+            CHECK(setProperty(*c, p.name, p.get().text(p.radix), e),
+                  ("eram2/ex48: round trip sets " + p.name).c_str());
+        }
+        CHECK(c->banks() == 11 && prop(c, "ram") == "512", "eram2/ex48: round trip keeps pages 0-A");
+    }
+
+    {
+        // ex32 on six boards (ram=384): eleven 32K pages, 0-A (board 5 holds 9 and A).
+        Machine m;
+        auto* b = addBank(m, "mem0", "expandoram2");
+        std::string err;
+        setProperty(*b, "partition", "ex32", err);
+        CHECK(setProperty(*b, "ram", "384", err) && b->banks() == 11,
+              "eram2/ex32: 384K -> pages 0-A");
+        m.power();
+        m.bus.ioWrite(0xFF, 0x0A);
+        CHECK(active(b) == 0x400 && answers(b, 0x0000) && answers(b, 0x7FFF),
+              "eram2/ex32: page A is a whole 32K page");
+        m.bus.ioWrite(0xFF, 0x0B);
+        CHECK(!answers(b, 0x0000) && answers(b, 0x8000), "eram2/ex32: page B is reserved, no RAM");
+        CHECK(!setProperty(*b, "ram", "416", err), "eram2/ex32: more than six boards is refused");
+
+        // Without a partition the board is one 256K board of 4164s.
+        setProperty(*b, "partition", "none", err);
+        CHECK(!setProperty(*b, "ram", "320", err), "eram2/none: more than 256K is refused");
     }
 
     {

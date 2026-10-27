@@ -25,11 +25,14 @@
 //   northstar    North Star HRAM -- port C0: bit 0 = on(0)/off(1), bits 1-7 = a
 //                one-hot address of WHICH bank the command toggles. Banks are
 //                switched individually (old off, then new on), not selected.
-//   expandoram2  SD Systems ExpandoRAM II -- port FF, byte = page index (APPROX --
-//                the real board decodes the page through an 82S130 PROM against
-//                board-select + address bits, which is not transcribable from the
-//                scan (reference/SD Systems ExpandoRAM II.md, DESIGN.md 0.1). We
-//                model a binary page-select over 64K planes and SAY SO.)
+//   expandoram2  SD Systems ExpandoRAM II -- port FF, LOW NIBBLE = page. The real
+//                board's 82S130 PROM spreads each page over 16K banks on several
+//                boards (Fig 2-4, reference/SD Systems ExpandoRAM II.md 4). We keep
+//                one segment per page for the whole subsystem: software sees the
+//                same pages, and a page with no RAM leaves the switched window
+//                empty. ex48's page A is one 16K cell at 8000-BFFF. With
+//                partition=none (one board of 4164s) page = bank is an APPROXIMATION:
+//                the manual gives no map for that board.
 //   expandoram3  SD Systems ExpandoRAM III -- port FF, LOW NIBBLE = page. The PROM map
 //                of Fig 2-2 is built cell by cell: each board is 4 banks x 4 RAM
 //                quarters of 16K, and the PROM picks which cell answers each CPU
@@ -153,13 +156,16 @@ private:
     Segment*       owner(uint16_t a);
     const Segment* owner(uint16_t a) const;
 
-    int  cardMaxBanks() const;           // vector 8, cromemco 8, northstar 6, eram2/3 10
+    int  cardMaxBanks() const;           // vector 8, cromemco 8, northstar 6, eram2 10/11, eram3 10
     uint8_t cardDefaultPort() const;     // 40 / 40 / C0 / FF / FF
 
     // Partition geometry (expandoram2 common memory). base 0 == no common region.
     uint16_t partitionCommonBase() const;   // None 0, Ex48 C000, Ex32 8000
     uint32_t partitionBankedSize() const;   // bytes per switchable bank window
     uint32_t partitionCommonSize() const;   // bytes of shared common region (0 if None)
+    // The RAM a subsystem of n banks holds, common included. ex48's page A (the 11th
+    // page) is one 16K cell, not a 48K bank.
+    uint32_t ramBytes(int n) const;
 
     Card card_ = Card::Vector;
     Partition partition_ = Partition::None;

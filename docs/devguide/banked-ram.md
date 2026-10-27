@@ -111,8 +111,12 @@ design decisions taken:
   a flat 64K store. This is also the honest model of the ExpandoRAM I (no port at all).
 - **`b810` removed** — unsourced (§0.1).
 - **`eram` retired** — the ExpandoRAM I is plain memory; the ExpandoRAM II is `card=expandoram2`.
-- **`expandoram2` is a documented approximation** — a binary page-select, because the real 82S130
-  PROM decode is not transcribable from the scan. The caveat is stated in the board doc and in the
+- **`expandoram2` was a documented approximation** — a binary page-select, because the real 82S130
+  PROM decode was not transcribable from the first scan. The deramp.com copy of the manual prints
+  Fig 2-4 readably, and the model now follows it: the page is the low nibble, a page with no RAM
+  leaves the switched window empty, and page A exists (a 32K page on ex32, one 16K cell at
+  8000–BFFF on ex48). It keeps one segment per page for the whole subsystem, and
+  `partition=none` stays the approximation. The caveat is stated in the board doc and in the
   code; a PROM dump would let the *page decode* be made faithful. **What the PROM's stock variants
   do is modelled, though** (follow-up, `feat/bankmem-partition-ram`): `partition=ex32|ex48` gives a
   fixed **common region** shared by every page (EX-32 = 32K banked + 32K common; EX-48 = 48K + 16K),

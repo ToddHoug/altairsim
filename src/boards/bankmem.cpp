@@ -67,6 +67,12 @@ uint32_t MemBankBoard::partitionCommonSize() const {
     return base ? (0x10000u - base) : 0u;
 }
 
+uint32_t MemBankBoard::ramBytes(int n) const {
+    if (card_ == Card::Expandoram2 && partition_ == Partition::Ex48 && n == 11)
+        return partitionCommonSize() + 10 * partitionBankedSize() + 0x4000;
+    return partitionCommonSize() + (uint32_t)n * partitionBankedSize();
+}
+
 uint8_t MemBankBoard::cardDefaultPort() const {
     switch (card_) {
         case Card::Vector:      return 0x40;
@@ -83,7 +89,9 @@ int MemBankBoard::cardMaxBanks() const {
         case Card::Vector:      return 8;   // 3-bit board number, 0-7
         case Card::Cromemco:    return 8;   // 8-bit mask, BANK 0-7
         case Card::Northstar:   return 6;   // bits 1-7, one spent on parity -> <=6
-        case Card::Expandoram2: return 10;  // pages 0-9
+        // pages 0-9 (Fig 2-4), and page A with a partition: a 32K page on ex32, one
+        // 16K cell on ex48. P=B-F are reserved.
+        case Card::Expandoram2: return partition_ == Partition::None ? 10 : 11;
         case Card::Expandoram3: return 10;  // pages 0-9 on two boards
     }
     return 8;
@@ -219,6 +227,10 @@ void MemBankBoard::rebuildSegments() {
         Segment s;
         s.lo = 0x0000;
         s.hi = bankedHi;
+        // ex48's page A is a single 16K cell: board 7 bank 3, at A=2 in Fig 2-4. The
+        // manual's text puts it at C000 instead (p. 12); the figure is the PROM program.
+        if (card_ == Card::Expandoram2 && partition_ == Partition::Ex48 && i == 10)
+            s.lo = 0x8000;
         switch (card_) {
             case Card::Vector:      s.key = (uint16_t)i;        break;  // plane index
             case Card::Cromemco:    s.key = (uint16_t)(1u << i); break;  // membership mask
@@ -229,8 +241,8 @@ void MemBankBoard::rebuildSegments() {
         // Reset default: exactly one plane comes up live so a machine has memory the
         // instant it powers on. On Cromemco that stands for a block strapped RESET=IN
         // (§4.3); on North Star it is a board jumpered "enable bank on reset" (JP1);
-        // on Vector it is the POC-forced bank 0; on the ExpandoRAM II it is the page-0
-        // approximation (the real reset-to-page behavior is unsourced).
+        // on Vector it is the POC-forced bank 0; on the ExpandoRAM II it is page 0, an
+        // approximation (the manual does not describe reset).
         s.resetEnabled = (i == 0);
         s.ram.assign((size_t)s.hi - s.lo + 1, 0x00);
         segs_.push_back(std::move(s));
@@ -340,25 +352,26 @@ void MemBankBoard::select(uint8_t data) {
             break;
         }
         case Card::Expandoram2: {
-            // APPROXIMATION. The real board decodes the page through an 82S130 PROM
-            // against the board-select switches and the top address bits into a 32K/48K
-            // partition; that per-cell map is not transcribable from the scan, so we
-            // model a binary page-select over 64K planes and say so loudly. Get a PROM
-            // dump and this is where the faithful decode goes.
-            int page = data;
-            if (page < 0 || page >= banks()) {
-                char buf[128];
-                std::snprintf(buf, sizeof buf,
-                              "bank: page %d out of range for expandoram2 (%s, %d page(s)). "
-                              "unchanged.",
-                              page, id.c_str(), banks());
-                log_.push_back(buf);
-                return;
-            }
-            // Only the banked window swaps; the common region (if any) stays live so the
-            // resident OS and the ?bank routine survive the switch.
+            // Only D0-D3 reach the PROM: latch U13 feeds BDO0-3 to PROM A2-A5, and BDO4-5
+            // go nowhere (schematic). So OUT FF,13 is page 3. The PROM spreads a page
+            // over banks on several boards; one segment per page shows software the
+            // same thing. Only the banked window swaps; the common region (if any) stays
+            // live so the resident OS and the ?bank routine survive the switch.
+            int page = data & 0x0F;
             for (size_t i = 0; i < segs_.size(); ++i)
                 if (!segs_[i].common) segs_[i].enabled = ((int)i == page);
+            if (page >= banks()) {
+                // No board carries the page, so the PROM drives no bank enable and
+                // nothing answers the switched window (Fig 2-4).
+                char buf[160];
+                std::snprintf(buf, sizeof buf,
+                              "bank: page %X has no RAM on expandoram2 (%s, pages 0-%X). "
+                              "Nothing answers 0000-%04X%s.",
+                              page, id.c_str(), banks() - 1,
+                              (unsigned)(partitionBankedSize() - 1),
+                              partitionCommonBase() ? "; common still does" : "");
+                log_.push_back(buf);
+            }
             break;
         }
         case Card::Expandoram3: {
@@ -571,39 +584,8 @@ std::vector<Property> MemBankBoard::properties() {
         p.push_back(std::move(x));
     }
     {
-        Property x;
-        x.name = "banks";
-        x.help = "how many switchable banks/planes/pages this subsystem carries (one per "
-                 "board). Card-capped: vector/cromemco 8, northstar 6, expandoram2 10. The "
-                 "common region (partition) is not a bank. Setting `ram` derives this. "
-                 "expandoram3 carries 5 pages per board, so it takes 5 or 10";
-        x.kind = Kind::Int;
-        x.min = 1;
-        x.max = 10;
-        x.get = [this] { return Value::ofInt(banks()); };
-        x.set = [this](const Value& v, std::string& err) {
-            if (card_ == Card::Expandoram3) {
-                if (v.i() != 5 && v.i() != 10) {
-                    err = "expandoram3 carries 5 pages per board, so banks is 5 or 10 "
-                          "(or set ram=256|512)";
-                    return false;
-                }
-                eram3Boards_ = (int)(v.i() / 5);
-                rebuildSegments();
-                return true;
-            }
-            if (v.i() < 1 || v.i() > cardMaxBanks()) {
-                err = std::string(cardName(card_)) + " takes 1.." +
-                      std::to_string(cardMaxBanks()) + " banks";
-                return false;
-            }
-            wantBanks_ = (int)v.i();
-            rebuildSegments();
-            return true;
-        };
-        p.push_back(std::move(x));
-    }
-    {
+        // Before banks: CONFIG SAVE writes properties in this order, and ex32/ex48
+        // raise the bank cap to 11.
         Property x;
         x.name = "partition";
         x.help = "ExpandoRAM II common-memory partition (the EX-48/EX-32 PROM): "
@@ -629,6 +611,40 @@ std::vector<Property> MemBankBoard::properties() {
             }
             partition_ = pt;
             if (wantBanks_ > cardMaxBanks()) wantBanks_ = cardMaxBanks();
+            rebuildSegments();
+            return true;
+        };
+        p.push_back(std::move(x));
+    }
+    {
+        Property x;
+        x.name = "banks";
+        x.help = "how many switchable banks/planes/pages this subsystem carries (one per "
+                 "board). Card-capped: vector/cromemco 8, northstar 6, expandoram2 10 (11 with a "
+                 "partition: page A). The "
+                 "common region (partition) is not a bank. Setting `ram` derives this. "
+                 "expandoram3 carries 5 pages per board, so it takes 5 or 10";
+        x.kind = Kind::Int;
+        x.min = 1;
+        x.max = 11;
+        x.get = [this] { return Value::ofInt(banks()); };
+        x.set = [this](const Value& v, std::string& err) {
+            if (card_ == Card::Expandoram3) {
+                if (v.i() != 5 && v.i() != 10) {
+                    err = "expandoram3 carries 5 pages per board, so banks is 5 or 10 "
+                          "(or set ram=256|512)";
+                    return false;
+                }
+                eram3Boards_ = (int)(v.i() / 5);
+                rebuildSegments();
+                return true;
+            }
+            if (v.i() < 1 || v.i() > cardMaxBanks()) {
+                err = std::string(cardName(card_)) + " takes 1.." +
+                      std::to_string(cardMaxBanks()) + " banks";
+                return false;
+            }
+            wantBanks_ = (int)v.i();
             rebuildSegments();
             return true;
         };
@@ -682,15 +698,16 @@ std::vector<Property> MemBankBoard::properties() {
         x.name = "ram";
         x.help = "total board RAM in KB. Sets the bank count from the current partition: "
                  "with ex48, 256 -> 5 banks; with none (whole plane), 256 -> 4 banks of "
-                 "64K. The real ExpandoRAM II is 64K (16K chips) or 256K (64K chips). "
+                 "64K. The real ExpandoRAM II is 64K (16K chips) or 256K (64K chips); "
+                 "with ex48 or ex32, ram counts 64K boards of 16K chips (ex48 512 = 8 boards, "
+                 "pages 0-A). "
                  "expandoram3: 256 (one board) or 512 (two boards)";
         x.kind = Kind::Int;
         x.min = 1;
         x.max = 640;                       // 10 whole-64K planes; the setter card-caps it
         x.get = [this] {
             if (card_ == Card::Expandoram3) return Value::ofInt(eram3Boards_ * 256);
-            uint32_t bytes = partitionCommonSize() + (uint32_t)banks() * partitionBankedSize();
-            return Value::ofInt((int)(bytes / 1024));
+            return Value::ofInt((int)(ramBytes(banks()) / 1024));
         };
         x.set = [this](const Value& v, std::string& err) {
             long long kb = v.i();
@@ -704,22 +721,24 @@ std::vector<Property> MemBankBoard::properties() {
                 rebuildSegments();
                 return true;
             }
-            if (card_ == Card::Expandoram2 && kb > 256) {
-                err = "the ExpandoRAM II board is at most 256K (64K chips in four banks)";
+            // With a partition, ram counts 64K boards of 16K chips: up to 8 on ex48 (512K)
+            // and 6 on ex32 (384K), the board counts of Fig 2-4. Without one, it is one
+            // board of 4164s.
+            if (card_ == Card::Expandoram2 && partition_ == Partition::None && kb > 256) {
+                err = "the ExpandoRAM II board is at most 256K (64K chips in four banks); "
+                      "with partition=ex48 or ex32, ram counts 64K boards";
                 return false;
             }
-            uint32_t bankedSize = partitionBankedSize();
-            uint32_t commonSize = partitionCommonSize();
-            long long banked = kb * 1024 - (long long)commonSize;
-            int n = (banked > 0) ? (int)(banked / bankedSize) : 0;
-            if (n < 1) n = 1;
-            if (n > cardMaxBanks()) {
+            if (kb * 1024 > (long long)ramBytes(cardMaxBanks())) {
                 err = std::string(cardName(card_)) + " tops out at " +
-                      std::to_string(cardMaxBanks()) + " banks";
+                      std::to_string(cardMaxBanks()) + " banks (" +
+                      std::to_string(ramBytes(cardMaxBanks()) / 1024) + "K)";
                 return false;
             }
+            int n = 1;
+            while (n < cardMaxBanks() && (long long)ramBytes(n + 1) <= kb * 1024) ++n;
             // Snap-down note: RAM that is not a whole number of banks lands on the bank below.
-            long long exact = (long long)commonSize + (long long)n * bankedSize;
+            long long exact = (long long)ramBytes(n);
             if (exact != kb * 1024) {
                 char buf[128];
                 std::snprintf(buf, sizeof buf,
@@ -846,7 +865,8 @@ std::vector<MapEntry> MemBankBoard::ioMap() const {
                       : card_ == Card::Cromemco  ? "8-bit bank mask"
                       : card_ == Card::Northstar ? "on/off + one-hot toggle"
                       : card_ == Card::Expandoram3 ? "page select, low nibble, PROM map"
-                                                 : "page select (approx)";
+                      : partition_ == Partition::None ? "page select, low nibble (approx)"
+                                                      : "page select, low nibble";
     e.note = std::string("bank select (") + cardName(card_) + ", " + how + ")";
     return {e};
 }
@@ -870,7 +890,7 @@ std::vector<std::string> MemBankBoard::statusLines() const {
     if (partition_ != Partition::None) {
         char buf[96];
         std::snprintf(buf, sizeof buf, "partition %s  ram %dK", partitionName(partition_),
-                      (int)((partitionCommonSize() + (uint32_t)banks() * partitionBankedSize()) / 1024));
+                      (int)(ramBytes(banks()) / 1024));
         out.push_back(buf);
     }
     for (size_t i = 0; i < segs_.size(); ++i) {

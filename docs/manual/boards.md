@@ -366,11 +366,11 @@ decoder:
 | `vector` | Vector Graphic 64K | `40` | **one bit for each bank**: `01`→bank 0, `02`→1, `04`→2 … `80`→7 |
 | `cromemco64kz` | Cromemco 64KZ / 64KZ-II | `40` | **8-bit mask**: bit *N* turns bank *N* on. **Several banks can be on** (`28`→banks 3 and 5) |
 | `northstar` | North Star HRAM | `C0` | bit 0 = on or off, bits 1–7 = which bank. Banks change **one at a time** |
-| `expandoram2` | SD Systems ExpandoRAM II | `FF` | the byte is a **page number** (see the note below) |
+| `expandoram2` | SD Systems ExpandoRAM II | `FF` | the low four bits are a **page number** (see the note below) |
 | `expandoram3` | SD Systems ExpandoRAM III | `FF` | the low four bits are a **page number** (see *The ExpandoRAM III* below) |
 
 `banks` sets the number of planes on the board: up to 8 for `vector` and `cromemco64kz`, 6 for
-`northstar`, and 10 for `expandoram2`. On `expandoram3`, `ram` sets the size instead. `fill` and `seed` work as they do on `memory`. The guest
+`northstar`, and 10 for `expandoram2` (11 with a partition). On `expandoram3`, `ram` sets the size instead. `fill` and `seed` work as they do on `memory`. The guest
 writes the select port. At the monitor, you can write it yourself with `OUT`, and `SHOW` lists
 every plane and which plane is on.
 
@@ -398,15 +398,25 @@ altairsim> DUMP 1000-1000
 `OUT 40 08` selects bank 3, because bit 3 is on. It does not select bank 8. The two `DUMP`
 commands read different bytes at the same address, because the plane changed.
 
-> **The `expandoram2` page decode is an approximation.** The real board uses only the low four
-> bits of the byte. A PROM on the board decodes them, with the board number and the top two
-> address bits, and selects one 16K bank on one of several boards. `bankmem` does not model that PROM. It
-> selects a plain page. The two stock partitions of the PROM are real: `partition = "ex48"`
-> gives 48K of banked RAM and 16K of common RAM at `C000`, and `partition = "ex32"` gives 32K of
-> banked RAM and 32K of common RAM at `8000`. `ram` sets the RAM, and the program calculates the
-> number of banks from it. With a partition, `ram` counts 64K boards of 16K chips, because the
-> PROM maps are for those boards. For example, `ram = 256` with `ex48` is four boards. The
-> `vector`, `cromemco64kz`, `northstar` and `expandoram3` cards are exact.
+> **The `expandoram2` pages.** The board uses only the low four bits of the byte, so `OUT FF 13`
+> selects page 3. A PROM on the board makes each page from 16K banks on several boards.
+> `bankmem` shows the guest the same pages, but it does not model each board. The two stock
+> PROMs set a partition:
+>
+> - `partition = "ex48"` gives 48K pages at `0000`–`BFFF` and 16K of common RAM at `C000`.
+>   Page `A` is only 16K, at `8000`–`BFFF`.
+> - `partition = "ex32"` gives 32K pages at `0000`–`7FFF` and 32K of common RAM at `8000`.
+>
+> `ram` sets the RAM, and the program calculates the number of pages from it. With a partition,
+> `ram` counts 64K boards of 16K chips, because the PROM maps are for those boards. For example,
+> `ram = 256` with `ex48` is four boards, with pages 0–4. `ram = 512` with `ex48` is eight
+> boards, with pages 0–9 and `A`. When the guest selects a page that has no RAM, nothing answers
+> in the addresses of the page, and the common RAM continues to answer.
+>
+> With `partition = "none"` (the default), each page is a whole 64K plane. `ram = 256` is one
+> board of 64K chips, with four pages. The ExpandoRAM II manual gives no page map for that
+> board, so this setting is an approximation.
+> The `vector`, `cromemco64kz`, `northstar` and `expandoram3` cards are exact.
 
 #### The ExpandoRAM III
 

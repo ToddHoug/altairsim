@@ -15,7 +15,9 @@ check-out steps, the memory test, the timing diagrams and the parts detail.
 The deramp.com copy of the manual (32 pp) is the one to use. Its Fig 2-4 is clean. An earlier
 copy (s100computers.com, 31 pp) was too blurred to read the map.
 
-Implemented as `bankmem card=expandoram2`.
+Implemented as `bankmem card=expandoram2`: the low-nibble page and the Fig 2-4 pages (with page A)
+for `partition=ex48|ex32`, as one segment per page for the whole subsystem. A page with no RAM
+leaves the switched window empty.
 
 ⚠ **This is the ExpandoRAM *II*.** The original [ExpandoRAM (I)](SD%20Systems%20ExpandoRAM.md)
 has no I/O port at all. The later [ExpandoRAM III](SD%20Systems%20ExpandoRAM%20III.md) keeps

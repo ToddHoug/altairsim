@@ -24,7 +24,7 @@ the write-only select port toggles those flags. Only the toggle rule differs, an
 | `vector` | Vector Graphic 64K | `40` | **one-hot select-one**: `0x01`→bank 0, `0x02`→1, `0x04`→2 … `0x80`→7 | ≤ 8 |
 | `cromemco64kz` | Cromemco 64KZ / 64KZ-II | `40` | **8-bit mask**: bit *N* enables bank *N*, **several at once** (`0x28`→banks 3 **and** 5) | ≤ 8 |
 | `northstar` | North Star HRAM | `C0` | bit 0 = on(0)/off(1), bits 1–7 = a **one-hot address** of which bank to toggle | ≤ 6 |
-| `expandoram2` | SD Systems ExpandoRAM II | `FF` | byte = **page number** (**approximation** — see the caveat) | ≤ 10 |
+| `expandoram2` | SD Systems ExpandoRAM II | `FF` | **low nibble** = page; one segment per page for the whole subsystem | ≤ 10 (11 with a partition) |
 | `expandoram3` | SD Systems ExpandoRAM III | `FF` | **low nibble** = page; the PROM map picks a 16K cell per CPU quarter | 5 or 10 pages |
 
 These are five different decoders, which is exactly why they are not one
@@ -53,13 +53,29 @@ switch the old bank off, *then* switch the new one on. One of bits 5/6/7 is spen
 real board, so ≤ 6 banks are usable. A byte with no single bank bit, or one targeting a bank this
 board does not carry, is logged and changes nothing.
 
-### `expandoram2` — SD Systems ExpandoRAM II (approximation)
-> ⚠ **The page decode is an approximation.** The real board latches only the low four bits of the
-> port-FF byte and runs them through an on-board 82S130 PROM, with the board number (S3) and bus
-> A15–A14, to pick one 16K bank on one board. The full map is now transcribed from a clean copy of
-> the manual (`reference/SD Systems ExpandoRAM II.md` §4, Fig 2-4). `bankmem` does not model it
-> yet: it takes the whole byte as a **binary page number**, and a page it does not carry is logged
-> and leaves the old page live.
+### `expandoram2` — SD Systems ExpandoRAM II
+The real board latches only the low four bits of the port-FF byte (U13 74LS174; BDO4–5 go to
+unconnected outputs) and runs them through an on-board 82S130 PROM, with the board number (S3)
+and bus A15–A14, to pick one 16K bank on one board (`reference/SD Systems ExpandoRAM II.md` §4,
+Fig 2-4). `bankmem` keeps **one segment per page for the whole subsystem**, not one per board.
+The guest sees the same pages at the same addresses. What it does not model is which board
+holds which 16K of a page, and the II's S3 bank enables.
+
+- **Select.** The page is `data & 0x0F`, so `OUT FF,13` is page 3.
+- **A page with no RAM.** If the subsystem carries no page by that number, the PROM drives no
+  bank enable and nothing answers the switched window. The common region still answers, and
+  the board logs one line. (Before, the whole byte was the page, and a page it did not carry
+  was logged and left the old page live.)
+- **Page A.** Fig 2-4 maps a page A that the manual's text ("0-9") leaves out. On `ex32` it is
+  a full 32K page (board 5), so the cap is 11 pages. On `ex48` it is a single 16K cell (board 7,
+  bank 3) at A=2, `8000-BFFF`. ⚠ The text (p. 12) puts it at `C000H`. The figure is the PROM
+  program, so the model follows the figure.
+- **Reset.** The manual does not describe reset. Page 0 at reset is an approximation.
+- ⚠ **Partial pages are not built.** The model counts whole pages. On the real board, two
+  `ex48` boards also hold one 16K cell of page 4 (board 1 bank 3). With `ram=128`, page 4 is
+  empty here.
+- ⚠ **`partition=none` is an approximation.** It is one board of 4164s ("4-64K banks"), and
+  page = bank. The manual gives no map for that board.
 
 **Common memory (`partition=`).** What the PROM's two stock variants *do* — carve a fixed common
 region shared by every page — is well documented (EX-48 = SD# 7010393, EX-32 = SD# 7010392), so that
@@ -82,9 +98,19 @@ and byte-for-byte unchanged from before.
 **Size (`ram=`).** `ram` is total board RAM in KB, and it derives the bank count from the current
 partition. A real board is 64K (16K chips) or 256K (64K chips) in four physical banks. The 32K and
 48K maps in the manual are drawn for **16K chips**, so with `ex48` or `ex32` the value counts
-64K boards: `ex48` with `ram=256` → 5 banks (16K common + 5×48K), the RAM of four 48K-PROM boards
-(pages 0–4 + common, Fig 2-4). The manual gives no 48K or 32K map for one 256K board of 4164s.
-With `none`, `ram=256` → the 4 physical 64K planes of one 4164 board ("4-64K banks"). `banks` still works as the direct count knob; the two are two views of the same geometry.
+64K boards:
+
+| `partition` | `ram` | Boards | Pages |
+|---|---|---|---|
+| `ex48` | `256` | 4 | 0–4 (16K common + 5×48K) |
+| `ex48` | `512` | 8 (the most) | 0–9 + the 16K page A |
+| `ex32` | `256` | 4 | 0–6 (32K common + 7×32K) |
+| `ex32` | `384` | 6 (the most) | 0–A |
+| `none` | `256` | 1 board of 4164s | 4 whole 64K planes ("4-64K banks"), the most |
+
+A value that is not a whole number of pages snaps down, with a log line. `banks` still works as
+the direct count knob; the two are two views of the same geometry. `partition` comes before
+`banks` in the property list, so a CONFIG SAVE file with `banks = 11` loads back.
 
 ### `expandoram3` — SD Systems ExpandoRAM III
 The III is modelled from its PROM map (Fig 2-2, printed 2-9 of the manual; see
@@ -147,9 +173,9 @@ the 48K PROM runs unchanged. The SD Systems CP/M 3 banked disk proves it
 |---|---|---|
 | `card` | enum | `vector \| cromemco64kz \| northstar \| expandoram2 \| expandoram3`. Sets the decode, the default port, and the bank cap. |
 | `port` | int (hex) | The write-only select port. Card default (40/40/C0/FF/FF), overridable — the real boards relocate it via PROM/straps. |
-| `banks` | int | How many switchable planes this subsystem carries (one per real board). Card-capped: vector/cromemco 8, northstar 6, expandoram2 10. On expandoram3 it reads the pages carried, and takes only 5 or 10 (one or two boards), so a CONFIG SAVE file loads back. The common region is not a bank. |
+| `banks` | int | How many switchable planes this subsystem carries (one per real board). Card-capped: vector/cromemco 8, northstar 6, expandoram2 10 (11 with a partition: page A). On expandoram3 it reads the pages carried, and takes only 5 or 10 (one or two boards), so a CONFIG SAVE file loads back. The common region is not a bank. |
 | `partition` | enum | **expandoram2 only** — `none \| ex48 \| ex32`. Carves a shared common region (see *Common memory* above). Refused on the other cards: vector, cromemco64kz and northstar are whole-64K planes, and the expandoram3 PROM fixes its own map. |
-| `ram` | int | Total board RAM in KB (≤ 256K on expandoram2). Derives `banks` from the partition; the other view of the same geometry. On expandoram3: `256` (one board) or `512` (two boards). |
+| `ram` | int | Total board RAM in KB (on expandoram2: ≤ 256K with `partition=none`; with a partition it counts 64K boards, ≤ 512K on ex48 and ≤ 384K on ex32). Derives `banks` from the partition; the other view of the same geometry. On expandoram3: `256` (one board) or `512` (two boards). |
 | `config` | enum | **expandoram3** — `cpm \| oasis`, S3 switch 5 (see the maps above). Default `cpm`. Other cards accept only `cpm`, the factory value, so a CONFIG SAVE file loads back. |
 | `bank_enable` | int (hex) | **expandoram3** — S3 switches 1–4 of each board: bit = board × 4 + bank, set = enabled. Default `FF`. A switched-off bank answers nothing. Other cards accept only `FF`. |
 | `active` | str | **Read-only** — the live bank(s), and `+ common` when a partition is set. On expandoram3: `page N + common`, or `page N (no RAM) + common`. The guest sets this by writing the select port. |
