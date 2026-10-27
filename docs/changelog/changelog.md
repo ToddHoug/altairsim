@@ -12,6 +12,12 @@ register, the bit or the command that was wrong.
 
 ## Unreleased
 
+**The manual now says how `bankmem card=expandoram2` counts `ram` with a partition.** The
+ExpandoRAM II's 32K and 48K PROM maps are for boards of 16K chips. With `ex48` or `ex32`,
+`ram` counts those 64K boards, so `ram = 256` with `ex48` is four boards. Before, the manual
+said that the PROM map could not be copied. The map is now read from a clean copy of the
+ExpandoRAM II manual, and the board still selects a plain page.
+
 **The manual now says when the printer's idle flush runs and what ends a job with `?idle=0`.**
 A job's idle timer runs on the host's clock, so the job prints `?idle=N` seconds after the
 last byte even while the machine is stopped at the `altairsim>` prompt. In a session run

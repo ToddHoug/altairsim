@@ -53,12 +53,12 @@ real board, so ≤ 6 banks are usable. A byte with no single bank bit, or one ta
 board does not carry, is logged and changes nothing.
 
 ### `expandoram2` — SD Systems ExpandoRAM II (approximation)
-> ⚠ **The page decode is a documented approximation.** The real board runs the port-FF page number
-> through an on-board 82S130 PROM, against the board-select switches and the top address bits, into
-> a 32K or 48K partition. That per-cell PROM map is **not transcribable** from the scanned manual
-> (`reference/SD Systems ExpandoRAM II.md` says so explicitly), and `DESIGN.md` §0.1 forbids
-> inventing hardware we cannot source. So `bankmem` models a plain **binary page-select** and states
-> the gap here. If an 82S130 dump turns up, the faithful decode replaces this.
+> ⚠ **The page decode is an approximation.** The real board latches only the low four bits of the
+> port-FF byte and runs them through an on-board 82S130 PROM, with the board number (S3) and bus
+> A15–A14, to pick one 16K bank on one board. The full map is now transcribed from a clean copy of
+> the manual (`reference/SD Systems ExpandoRAM II.md` §4, Fig 2-4). `bankmem` does not model it
+> yet: it takes the whole byte as a **binary page number**, and a page it does not carry is logged
+> and leaves the old page live.
 
 **Common memory (`partition=`).** What the PROM's two stock variants *do* — carve a fixed common
 region shared by every page — is well documented (EX-48 = SD# 7010393, EX-32 = SD# 7010392), so that
@@ -79,9 +79,11 @@ FF and puts common at `C000` (`COMBAS=C0` in its GENCPM), i.e. `partition=ex48`
 and byte-for-byte unchanged from before.
 
 **Size (`ram=`).** `ram` is total board RAM in KB, and it derives the bank count from the current
-partition — the real board is 64K (16K chips) or 256K (64K chips) in four physical banks. With
-`ex48`, `ram=256` → 5 banks (16K common + 5×48K); with `none`, `ram=256` → the 4 physical 64K
-planes. `banks` still works as the direct count knob; the two are two views of the same geometry.
+partition. A real board is 64K (16K chips) or 256K (64K chips) in four physical banks. The 32K and
+48K maps in the manual are drawn for **16K chips**, so with `ex48` or `ex32` the value counts
+64K boards: `ex48` with `ram=256` → 5 banks (16K common + 5×48K), the RAM of four 48K-PROM boards
+(pages 0–4 + common, Fig 2-4). The manual gives no 48K or 32K map for one 256K board of 4164s.
+With `none`, `ram=256` → the 4 physical 64K planes of one 4164 board ("4-64K banks"). `banks` still works as the direct count knob; the two are two views of the same geometry.
 
 ## Properties
 
@@ -113,8 +115,8 @@ correct in a matching machine (`DESIGN.md` §13), exactly as the `memory` board 
 
 Each decode is proven by unit tests (`tests/test_bankmem.cpp`), and the `expandoram2` card boots a
 real banked operating system: `tests/media/sdsys/cpm3-b.toml` runs **SD Systems CP/M Plus 3.0
-(banked)** on an SBC-200 + VersaFloppy II with this board as a 256K ExpandoRAM II
-(`partition=ex48`, `honors_phantom=read`). The CP/M 3 BIOS bank-switches port FF with its resident
+(banked)** on an SBC-200 + VersaFloppy II with this board as 256K of ExpandoRAM II
+(four 48K-PROM boards of 16K chips: `partition=ex48`, `honors_phantom=read`). The CP/M 3 BIOS bank-switches port FF with its resident
 half in the common region — `SHOW mem0` at the `A>` prompt reads `active = bank N + common`.
 
 The select port is also write-only and the guest owns it, but the monitor's `OUT` writes it too, so

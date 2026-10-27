@@ -397,13 +397,15 @@ altairsim> DUMP 1000-1000
 `OUT 40 08` selects bank 3, because bit 3 is on. It does not select bank 8. The two `DUMP`
 commands read different bytes at the same address, because the plane changed.
 
-> **The `expandoram2` page decode is an approximation.** The real board sends the page number
-> through a PROM on the board, and that PROM map is not published in a form that we can copy.
-> For this reason, `bankmem` selects a plain page. The two stock partitions of the PROM are
-> real: `partition = "ex48"` gives 48K of banked RAM and 16K of common RAM at `C000`, and
-> `partition = "ex32"` gives 32K of banked RAM and 32K of common RAM at `8000`. `ram` sets the
-> RAM on the board, and the program calculates the number of banks from it. The other three
-> cards are exact.
+> **The `expandoram2` page decode is an approximation.** The real board uses only the low four
+> bits of the byte. A PROM on the board decodes them, with the board number and the top two
+> address bits, and selects one 16K bank on one of several boards. `bankmem` does not model that PROM. It
+> selects a plain page. The two stock partitions of the PROM are real: `partition = "ex48"`
+> gives 48K of banked RAM and 16K of common RAM at `C000`, and `partition = "ex32"` gives 32K of
+> banked RAM and 32K of common RAM at `8000`. `ram` sets the RAM, and the program calculates the
+> number of banks from it. With a partition, `ram` counts 64K boards of 16K chips, because the
+> PROM maps are for those boards. For example, `ram = 256` with `ex48` is four boards. The other
+> three cards are exact.
 
 ### `v2z80rom`: the S100Computers V2 Z80 processor board's onboard monitor ROM
 
