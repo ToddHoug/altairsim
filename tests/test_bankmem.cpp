@@ -18,8 +18,30 @@ static MemBankBoard* addBank(Machine& m, const std::string& id, const char* card
 // Bit i set for each live bank -- see MemBankBoard::activeMask().
 static uint32_t active(MemBankBoard* b) { return b->activeMask(); }
 
+// A property's text, as SHOW prints it.
+static std::string prop(MemBankBoard* b, const std::string& name) {
+    for (const auto& p : b->properties())
+        if (p.name == name && p.get) return p.get().text(p.radix);
+    return "";
+}
+
+static bool answers(MemBankBoard* b, uint16_t addr) {
+    return b->decodes(BusCycle{Cycle::MemRead, addr, 0, false});
+}
+
+// An ExpandoRAM III subsystem with zeroed RAM, powered.
+static MemBankBoard* addEram3(Machine& m, const char* ram = "256", const char* config = "cpm") {
+    auto* b = addBank(m, "mem0", "expandoram3");
+    std::string e2;
+    setProperty(*b, "config", config, e2);
+    setProperty(*b, "ram", ram, e2);
+    setProperty(*b, "fill", "zero", e2);
+    m.power();
+    return b;
+}
+
 void test_bankmem() {
-    SECTION("bankmem -- one board, four decoders, each owning its own decode");
+    SECTION("bankmem -- one board, five decoders, each owning its own decode");
 
     {
         // Vector Graphic: port 40, ONE-HOT select-one. 0x04 -> bank 2, not bank 4.
@@ -223,6 +245,177 @@ void test_bankmem() {
         m.bus.ioWrite(0x40, 0x01);
         CHECK(!m.bus.drain().empty(), "and the I/O collision is REPORTED, naming both");
         (void)a; (void)c;
+    }
+
+    {
+        // ExpandoRAM III, CP/M map: reset is page 0, the 48K window swaps, C000 is common.
+        Machine m;
+        auto* b = addEram3(m);
+        CHECK(active(b) == 0x01, "eram3: reset puts page 0 in (U13 cleared)");
+        CHECK(b->banks() == 5, "eram3: one board carries pages 0-4");
+        CHECK(prop(b, "active") == "page 0 + common", "eram3: active reads page 0 + common");
+        m.bus.memWrite(0x1000, 0xA0);
+        m.bus.memWrite(0x9000, 0xA2);
+        m.bus.ioWrite(0xFF, 0x03);
+        CHECK(active(b) == 0x08, "eram3: OUT FF,03 selects page 3");
+        m.bus.memWrite(0x1000, 0xB3);
+        m.bus.memWrite(0xE000, 0x5A);
+        m.bus.ioWrite(0xFF, 0x04);           // page 4 lives in bank 3, beside common
+        m.bus.memWrite(0x9000, 0xC4);
+        m.bus.ioWrite(0xFF, 0x00);
+        CHECK(m.bus.memRead(0x1000) == 0xA0, "eram3: page 0 keeps its own byte at 1000");
+        CHECK(m.bus.memRead(0x9000) == 0xA2, "eram3: page 4's 8000-BFFF is not page 0's");
+        CHECK(m.bus.memRead(0xE000) == 0x5A, "eram3: C000-FFFF is common to every page");
+        m.bus.ioWrite(0xFF, 0x03);
+        CHECK(m.bus.memRead(0x1000) == 0xB3, "eram3: page 3 holds B3");
+        m.bus.ioWrite(0xFF, 0x04);
+        CHECK(m.bus.memRead(0x9000) == 0xC4, "eram3: page 4 holds C4");
+        CHECK(answers(b, 0x0000) && answers(b, 0x4000), "eram3: page 4 answers all of 0000-BFFF");
+
+        // Only D0-D3 are the page: the high nibble goes nowhere.
+        m.bus.ioWrite(0xFF, 0xF3);
+        CHECK(active(b) == 0x08, "eram3: OUT FF,F3 is page 3 (low nibble only)");
+        CHECK(prop(b, "active") == "page 3 + common", "eram3: active reads page 3");
+    }
+
+    {
+        // OASIS map: common is 0000-3FFF and the pages swap 4000-FFFF.
+        Machine m;
+        auto* b = addEram3(m, "256", "oasis");
+        m.bus.memWrite(0x2000, 0x11);
+        m.bus.memWrite(0xF000, 0xA0);
+        m.bus.ioWrite(0xFF, 0x02);
+        CHECK(m.bus.memRead(0x2000) == 0x11, "eram3/oasis: 0000-3FFF is common");
+        m.bus.memWrite(0xF000, 0xB2);
+        m.bus.ioWrite(0xFF, 0x04);
+        CHECK(answers(b, 0x4000) && answers(b, 0xF000), "eram3/oasis: page 4 answers 4000-FFFF");
+        m.bus.memWrite(0xF000, 0xC4);
+        m.bus.ioWrite(0xFF, 0x00);
+        CHECK(m.bus.memRead(0xF000) == 0xA0, "eram3/oasis: page 0 keeps its F000");
+        m.bus.ioWrite(0xFF, 0x02);
+        CHECK(m.bus.memRead(0xF000) == 0xB2, "eram3/oasis: page 2 keeps its F000");
+        m.bus.ioWrite(0xFF, 0x04);
+        CHECK(m.bus.memRead(0xF000) == 0xC4, "eram3/oasis: page 4 keeps its F000");
+    }
+
+    {
+        // A page with no cell on this subsystem: nothing answers the window, common does.
+        Machine m;
+        auto* b = addEram3(m);
+        m.drainBoardLog();
+        m.bus.ioWrite(0xFF, 0x07);
+        CHECK(active(b) == 0x00, "eram3: one board has no page 7");
+        CHECK(!answers(b, 0x0000) && !answers(b, 0xB000), "eram3: nothing answers 0000-BFFF");
+        CHECK(answers(b, 0xC000), "eram3: common still answers C000");
+        CHECK(prop(b, "active") == "page 7 (no RAM) + common", "eram3: active says no RAM");
+        CHECK(m.drainBoardLog().size() == 1, "eram3: ...and the board says so once");
+
+        m.bus.ioWrite(0xFF, 0x0A);
+        CHECK(!answers(b, 0x0000) && !m.drainBoardLog().empty(), "eram3: page A has no RAM");
+    }
+
+    {
+        // Two boards carry pages 0-9; pages A-F are still empty.
+        Machine m;
+        auto* b = addEram3(m, "512");
+        std::string e2;
+        CHECK(b->banks() == 10, "eram3: two boards carry pages 0-9");
+        CHECK(prop(b, "ram") == "512", "eram3: ram reads back 512");
+        m.bus.ioWrite(0xFF, 0x07);
+        CHECK(active(b) == 0x80, "eram3: two boards: page 7 is in");
+        m.bus.ioWrite(0xFF, 0x09);
+        CHECK(answers(b, 0x0000) && answers(b, 0x4000) && answers(b, 0x8000),
+              "eram3: page 9 answers all of 0000-BFFF");
+        m.bus.memWrite(0x8000, 0x99);
+        m.bus.ioWrite(0xFF, 0x08);
+        m.bus.memWrite(0x8000, 0x88);
+        m.bus.ioWrite(0xFF, 0x09);
+        CHECK(m.bus.memRead(0x8000) == 0x99, "eram3: pages 8 and 9 are separate RAM");
+
+        // Every page, in both maps, fills its whole 48K window with exactly one cell per
+        // quarter, and no page cell sits over common (that would be a bus fight).
+        for (const char* cfg : {"cpm", "oasis"}) {
+            std::string err;
+            setProperty(*b, "config", cfg, err);
+            bool full = true;
+            m.drainBoardLog();
+            for (int p = 0; p <= 9; ++p) {
+                m.bus.ioWrite(0xFF, (uint8_t)p);
+                for (uint16_t q = 0; q < 4; ++q) {
+                    if (!answers(b, (uint16_t)(q * 0x4000))) full = false;
+                    (void)m.bus.memRead((uint16_t)(q * 0x4000));
+                }
+            }
+            const std::string fill = std::string("eram3/") + cfg + ": pages 0-9 each fill all 64K";
+            const std::string fight = std::string("eram3/") + cfg + ": no page overlaps common";
+            CHECK(full, fill.c_str());
+            CHECK(m.drainBoardLog().empty(), fight.c_str());
+        }
+        setProperty(*b, "config", "cpm", e2);
+        m.drainBoardLog();
+        for (int p = 0x0A; p <= 0x0F; ++p) m.bus.ioWrite(0xFF, (uint8_t)p);
+        CHECK(m.drainBoardLog().size() == 6, "eram3: pages A-F have no RAM on two boards");
+        CHECK(!answers(b, 0x0000), "eram3: ...and nothing answers the window");
+    }
+
+    {
+        // The S3 bank enables: a bank switched off answers nothing.
+        Machine m;
+        auto* b = addEram3(m);
+        std::string err;
+        CHECK(setProperty(*b, "bank_enable", "FE", err), "eram3: bank_enable takes FE");
+        CHECK(!answers(b, 0x0000), "eram3: bank 0 off: page 0's 0000-3FFF is gone");
+        CHECK(answers(b, 0x4000) && answers(b, 0x8000) && answers(b, 0xC000),
+              "eram3: bank 0 off: 4000-BFFF and common stay");
+        CHECK(setProperty(*b, "bank_enable", "F7", err), "eram3: bank_enable takes F7");
+        CHECK(answers(b, 0x0000) && !answers(b, 0xC000), "eram3: bank 3 off: common is gone");
+        m.bus.ioWrite(0xFF, 0x04);
+        CHECK(!answers(b, 0x0000) && !answers(b, 0x8000), "eram3: bank 3 off: page 4 is gone");
+    }
+
+    {
+        // What the III refuses, and what the other cards refuse of the III's switches.
+        Machine m;
+        auto* b = addEram3(m);
+        std::string err;
+        CHECK(!setProperty(*b, "partition", "ex48", err) && err.find("config=") != std::string::npos,
+              "eram3: partition is refused, pointing to config");
+        CHECK(setProperty(*b, "partition", "none", err), "eram3: partition=none is accepted");
+        CHECK(!setProperty(*b, "ram", "300", err), "eram3: ram=300 is refused");
+        CHECK(!setProperty(*b, "banks", "7", err), "eram3: banks=7 is refused");
+        CHECK(setProperty(*b, "banks", "10", err) && prop(b, "ram") == "512",
+              "eram3: banks=10 is two boards (CONFIG SAVE writes banks before ram)");
+
+        auto* v = addBank(m, "mem1", "vector");
+        CHECK(!setProperty(*v, "config", "oasis", err), "vector: config=oasis is refused");
+        CHECK(!setProperty(*v, "bank_enable", "FE", err), "vector: bank_enable=FE is refused");
+        CHECK(setProperty(*v, "config", "cpm", err) && setProperty(*v, "bank_enable", "FF", err),
+              "vector: the factory values load back (CONFIG SAVE writes them)");
+    }
+
+    {
+        // SNAPSHOT / RESTORE of the III: the page and the RAM travel.
+        MemBankBoard src, dst;
+        src.id = "mem0";
+        dst.id = "mem0";
+        std::string e2;
+        for (MemBankBoard* b : {&src, &dst}) {
+            setProperty(*b, "card", "expandoram3", e2);
+            setProperty(*b, "ram", "512", e2);
+            setProperty(*b, "fill", "zero", e2);
+            b->power();
+        }
+        src.write(BusCycle{Cycle::IoWrite, 0xFF, 0x06, false});
+        src.write(BusCycle{Cycle::MemWrite, 0x5000, 0x66, false});
+        StateWriter w;
+        src.serialize(w);
+        StateReader r(w.data());
+        dst.deserialize(r);
+        CHECK(r.ok(), "eram3 snapshot: restore consumed the blob cleanly");
+        CHECK(active(&dst) == 0x40, "eram3 snapshot: page 6 travelled");
+        CHECK(prop(&dst, "active") == "page 6 + common", "eram3 snapshot: the latch travelled");
+        uint8_t v = 0;
+        CHECK(dst.peek(0x5000, v) && v == 0x66, "eram3 snapshot: the stored byte travelled");
     }
 
     {

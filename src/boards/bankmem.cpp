@@ -16,6 +16,7 @@ static const char* cardName(MemBankBoard::Card c) {
         case MemBankBoard::Card::Cromemco:    return "cromemco64kz";
         case MemBankBoard::Card::Northstar:   return "northstar";
         case MemBankBoard::Card::Expandoram2: return "expandoram2";
+        case MemBankBoard::Card::Expandoram3: return "expandoram3";
     }
     return "vector";
 }
@@ -25,6 +26,7 @@ static bool parseCard(const std::string& s, MemBankBoard::Card& out) {
     if (s == "cromemco64kz") { out = MemBankBoard::Card::Cromemco; return true; }
     if (s == "northstar") { out = MemBankBoard::Card::Northstar; return true; }
     if (s == "expandoram2") { out = MemBankBoard::Card::Expandoram2; return true; }
+    if (s == "expandoram3") { out = MemBankBoard::Card::Expandoram3; return true; }
     return false;
 }
 
@@ -71,6 +73,7 @@ uint8_t MemBankBoard::cardDefaultPort() const {
         case Card::Cromemco:    return 0x40;
         case Card::Northstar:   return 0xC0;
         case Card::Expandoram2: return 0xFF;
+        case Card::Expandoram3: return 0xFF;
     }
     return 0x40;
 }
@@ -81,8 +84,113 @@ int MemBankBoard::cardMaxBanks() const {
         case Card::Cromemco:    return 8;   // 8-bit mask, BANK 0-7
         case Card::Northstar:   return 6;   // bits 1-7, one spent on parity -> <=6
         case Card::Expandoram2: return 10;  // pages 0-9
+        case Card::Expandoram3: return 10;  // pages 0-9 on two boards
     }
     return 8;
+}
+
+// ---------------------------------------------------------------------------
+// The ExpandoRAM III PROM map -- Fig 2-2 page 1 (printed 2-9), transcribed in
+// reference/SD Systems ExpandoRAM III.md 4. The figure draws each board as banks 0-3 by
+// RAM quarters 0-3 (the two PROM outputs that drive RAM A14-A15); each cell names the
+// page P and the CPU quarter A (bus A15-A14) it answers. Cells marked FIXED are printed
+// wrong in the figure: the page needs three different quarters, and the figure repeats
+// the common quarter three times. The II's Fig 2-4 draws its own pages 4 and 8 with
+// three different quarters, which supports the fix. Which RAM quarter holds which CPU
+// quarter is invisible to software unless a bank is switched off, and these fixes keep
+// every cell in the bank the figure prints. A PROM dump (COSMOS-48K, SD 7010479)
+// replaces this table and changes nothing else.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+constexpr int8_t kCommon = -1;   // the common cell: live for every page
+constexpr int8_t kNoCell = -2;   // a cell the figure does not settle -- not built
+
+struct Eram3Cell {
+    int8_t page;                 // 0-9, kCommon or kNoCell
+    int8_t a;                    // CPU quarter: 0 = 0000-3FFF ... 3 = C000-FFFF
+};
+
+// [board][bank][RAM quarter]. CP/M, MP/M, COSMOS: pages in 0000-BFFF, common C000-FFFF.
+const Eram3Cell kEram3Cpm[2][4][4] = {
+    {   // board 0
+        {{0, 0}, {1, 0}, {2, 0}, {3, 0}},
+        {{0, 1}, {1, 1}, {2, 1}, {3, 1}},
+        {{0, 2}, {1, 2}, {2, 2}, {3, 2}},
+        {{kCommon, 3}, {4, 0}, {4, 1}, {4, 2}},          // page 4 FIXED: printed A=3 x3
+    },
+    {   // board 1
+        {{5, 0}, {6, 0}, {7, 0}, {8, 0}},                // page 8 FIXED: printed A=3 x3,
+        {{5, 1}, {6, 1}, {7, 1}, {8, 1}},                //   given the A of pages 5-7
+        {{5, 2}, {6, 2}, {7, 2}, {8, 2}},
+        // Quarter 0 is printed "A=3 P=0", a second common cell. Two boards cannot both
+        // answer C000-FFFF, and a one-board system must carry common on board 0, so the
+        // cell is not built. (The II puts a page A in the same place.)
+        {{kNoCell, 3}, {9, 2}, {9, 1}, {9, 0}},
+    },
+};
+
+// OASIS: pages in 4000-FFFF, common 0000-3FFF. The CP/M map turned upside down.
+const Eram3Cell kEram3Oasis[2][4][4] = {
+    {   // board 0
+        {{kCommon, 0}, {4, 1}, {4, 2}, {4, 3}},          // page 4 FIXED: printed A=0 x3
+        {{0, 1}, {1, 1}, {2, 1}, {3, 1}},
+        {{0, 2}, {1, 2}, {2, 2}, {3, 2}},
+        {{0, 3}, {1, 3}, {2, 3}, {3, 3}},
+    },
+    {   // board 1
+        // Quarter 3 is printed "A=2, A=1, P=A" -- two quarters and a page the text does
+        // not list. Not built.
+        {{9, 3}, {9, 2}, {9, 1}, {kNoCell, 0}},
+        {{5, 1}, {6, 1}, {7, 1}, {8, 1}},                // page 8 FIXED: printed A=0 x3,
+        {{5, 2}, {6, 2}, {7, 2}, {8, 2}},                //   given the A of pages 5-7
+        {{5, 3}, {6, 3}, {7, 3}, {8, 3}},
+    },
+};
+
+} // namespace
+
+int MemBankBoard::eram3Pages() const { return eram3Boards_ * 5; }
+
+// One segment per built cell: a 16K window at the cell's CPU quarter, keyed by its page.
+void MemBankBoard::rebuildEram3() {
+    const auto& map = (config_ == Config::Cpm) ? kEram3Cpm : kEram3Oasis;
+    segs_.clear();
+    for (int bd = 0; bd < eram3Boards_; ++bd)
+        for (int bk = 0; bk < 4; ++bk)
+            for (int q = 0; q < 4; ++q) {
+                const Eram3Cell& c = map[bd][bk][q];
+                if (c.page == kNoCell) continue;
+                Segment s;
+                s.lo = (uint16_t)(c.a * 0x4000);
+                s.hi = (uint16_t)(s.lo + 0x3FFF);
+                s.common = (c.page == kCommon);
+                s.key = s.common ? 0 : (uint16_t)c.page;
+                s.bank = (uint8_t)(bd * 4 + bk);
+                s.quarter = (uint8_t)q;
+                s.ram.assign(0x4000, 0x00);
+                segs_.push_back(std::move(s));
+            }
+}
+
+// The PROM drives a bank enable for each cell of the page (and for the common cell, on
+// every page); the S3 bank-enable switch then passes it or not. A page with no cell drives
+// no enable, so nothing on the board answers the switched window (manual 2-4).
+bool MemBankBoard::selectEram3Page(int page) {
+    bool carried = false;
+    for (Segment& s : segs_) {
+        bool on = ((bankEnable_ >> s.bank) & 1) != 0;
+        if (s.common) {
+            s.enabled = on;
+        } else {
+            bool mine = (s.key == (uint16_t)page);
+            carried = carried || mine;
+            s.enabled = mine && on;
+        }
+    }
+    decodeChanged();
+    return carried;
 }
 
 // ---------------------------------------------------------------------------
@@ -90,6 +198,12 @@ int MemBankBoard::cardMaxBanks() const {
 // ---------------------------------------------------------------------------
 
 void MemBankBoard::rebuildSegments() {
+    if (card_ == Card::Expandoram3) {
+        rebuildEram3();
+        fillSegments();
+        applyReset();
+        return;
+    }
     int n = wantBanks_;
     int hi = cardMaxBanks();
     if (n < 1) n = 1;
@@ -110,6 +224,7 @@ void MemBankBoard::rebuildSegments() {
             case Card::Cromemco:    s.key = (uint16_t)(1u << i); break;  // membership mask
             case Card::Northstar:   s.key = (uint16_t)(i + 1);  break;  // one-hot bit 1..N
             case Card::Expandoram2: s.key = (uint16_t)i;        break;  // page index
+            case Card::Expandoram3: break;  // built by rebuildEram3()
         }
         // Reset default: exactly one plane comes up live so a machine has memory the
         // instant it powers on. On Cromemco that stands for a block strapped RESET=IN
@@ -150,8 +265,10 @@ void MemBankBoard::fillSegments() {
 }
 
 void MemBankBoard::applyReset() {
-    for (Segment& s : segs_) s.enabled = s.resetEnabled;
     latch_ = 0;
+    // ExpandoRAM III: the board reset clears latch U13 (schematic), so page 0 is in.
+    if (card_ == Card::Expandoram3) { selectEram3Page(0); return; }
+    for (Segment& s : segs_) s.enabled = s.resetEnabled;
     decodeChanged();
 }
 
@@ -242,6 +359,21 @@ void MemBankBoard::select(uint8_t data) {
             // resident OS and the ?bank routine survive the switch.
             for (size_t i = 0; i < segs_.size(); ++i)
                 if (!segs_[i].common) segs_[i].enabled = ((int)i == page);
+            break;
+        }
+        case Card::Expandoram3: {
+            // Only D0-D3 reach the PROM: latch U13 feeds BDO0-3 to PROM A2-A5, BDO4-5 go
+            // nowhere and D6-D7 are not latched (schematic). So OUT FF,F3 is page 3.
+            int page = data & 0x0F;
+            if (!selectEram3Page(page)) {
+                char buf[160];
+                std::snprintf(buf, sizeof buf,
+                              "bank: page %X has no RAM on expandoram3 (%s, pages 0-%d). "
+                              "Nothing answers %s; common still does.",
+                              page, id.c_str(), eram3Pages() - 1,
+                              config_ == Config::Cpm ? "0000-BFFF" : "4000-FFFF");
+                log_.push_back(buf);
+            }
             break;
         }
     }
@@ -370,6 +502,7 @@ void MemBankBoard::deserialize(StateReader& r) {
 // ---------------------------------------------------------------------------
 
 int MemBankBoard::banks() const {
+    if (card_ == Card::Expandoram3) return eram3Pages();
     int n = 0;
     for (const Segment& s : segs_)
         if (!s.common) ++n;
@@ -381,6 +514,11 @@ uint32_t MemBankBoard::activeMask() const {
     // occupy segs_[0..banks()-1] (the common segment, if any, is appended last), so the
     // segment index doubles as the bank index here.
     uint32_t m = 0;
+    if (card_ == Card::Expandoram3) {   // bit p for each live PAGE (its cells are many)
+        for (const Segment& s : segs_)
+            if (!s.common && s.enabled) m |= (1u << s.key);
+        return m;
+    }
     for (size_t i = 0; i < segs_.size(); ++i)
         if (!segs_[i].common && segs_[i].enabled) m |= (1u << i);
     return m;
@@ -392,9 +530,9 @@ std::vector<Property> MemBankBoard::properties() {
         Property x;
         x.name = "card";
         x.help = "which banked card this is -- each owns its own decode: "
-                 "vector | cromemco64kz | northstar | expandoram2";
+                 "vector | cromemco64kz | northstar | expandoram2 | expandoram3";
         x.kind = Kind::Enum;
-        x.choices = {"vector", "cromemco64kz", "northstar", "expandoram2"};
+        x.choices = {"vector", "cromemco64kz", "northstar", "expandoram2", "expandoram3"};
         x.get = [this] { return Value::ofStr(cardName(card_)); };
         x.set = [this](const Value& v, std::string& err) {
             Card c;
@@ -405,6 +543,11 @@ std::vector<Property> MemBankBoard::properties() {
             // The common-memory partition is an ExpandoRAM II concept -- drop it if the
             // card is no longer that board.
             if (card_ != Card::Expandoram2) partition_ = Partition::None;
+            // The S3 switches are ExpandoRAM III ones -- back to factory on any other card.
+            if (card_ != Card::Expandoram3) {
+                config_ = Config::Cpm;
+                bankEnable_ = 0xFF;
+            }
             rebuildSegments();
             return true;
         };
@@ -414,7 +557,7 @@ std::vector<Property> MemBankBoard::properties() {
         Property x;
         x.name = "port";
         x.help = "the write-only bank-select port. Card default (vector/cromemco 40, "
-                 "northstar C0, expandoram2 FF); overridable, as the real boards relocate it";
+                 "northstar C0, expandoram2/expandoram3 FF); overridable, as the real boards relocate it";
         x.kind = Kind::Int;
         x.radix = 16;
         x.min = 0;
@@ -432,12 +575,23 @@ std::vector<Property> MemBankBoard::properties() {
         x.name = "banks";
         x.help = "how many switchable banks/planes/pages this subsystem carries (one per "
                  "board). Card-capped: vector/cromemco 8, northstar 6, expandoram2 10. The "
-                 "common region (partition) is not a bank. Setting `ram` derives this";
+                 "common region (partition) is not a bank. Setting `ram` derives this. "
+                 "expandoram3 carries 5 pages per board, so it takes 5 or 10";
         x.kind = Kind::Int;
         x.min = 1;
         x.max = 10;
         x.get = [this] { return Value::ofInt(banks()); };
         x.set = [this](const Value& v, std::string& err) {
+            if (card_ == Card::Expandoram3) {
+                if (v.i() != 5 && v.i() != 10) {
+                    err = "expandoram3 carries 5 pages per board, so banks is 5 or 10 "
+                          "(or set ram=256|512)";
+                    return false;
+                }
+                eram3Boards_ = (int)(v.i() / 5);
+                rebuildSegments();
+                return true;
+            }
             if (v.i() < 1 || v.i() > cardMaxBanks()) {
                 err = std::string(cardName(card_)) + " takes 1.." +
                       std::to_string(cardMaxBanks()) + " banks";
@@ -463,6 +617,11 @@ std::vector<Property> MemBankBoard::properties() {
         x.set = [this](const Value& v, std::string& err) {
             Partition pt;
             if (!parsePartition(v.s(), pt)) { err = "partition is none|ex48|ex32"; return false; }
+            if (pt != Partition::None && card_ == Card::Expandoram3) {
+                err = "the ExpandoRAM III's PROM sets its own common area; "
+                      "use config=cpm|oasis";
+                return false;
+            }
             if (pt != Partition::None && card_ != Card::Expandoram2) {
                 err = "partition (common memory) is an expandoram2 concept; "
                       "the other cards are whole-64K planes";
@@ -477,19 +636,74 @@ std::vector<Property> MemBankBoard::properties() {
     }
     {
         Property x;
+        x.name = "config";
+        x.help = "ExpandoRAM III S3 switch 5, which PROM map is in force: cpm (ON, the "
+                 "factory setting) = pages in 0000-BFFF under a common 16K at C000; oasis "
+                 "(OFF) = pages in 4000-FFFF over a common 16K at 0000";
+        x.kind = Kind::Enum;
+        x.choices = {"cpm", "oasis"};
+        x.get = [this] { return Value::ofStr(config_ == Config::Cpm ? "cpm" : "oasis"); };
+        x.set = [this](const Value& v, std::string& err) {
+            Config c = (v.s() == "oasis") ? Config::Oasis : Config::Cpm;
+            if (c != Config::Cpm && card_ != Card::Expandoram3) {
+                err = "config is an expandoram3 switch";
+                return false;
+            }
+            config_ = c;
+            rebuildSegments();
+            return true;
+        };
+        p.push_back(std::move(x));
+    }
+    {
+        Property x;
+        x.name = "bank_enable";
+        x.help = "ExpandoRAM III S3 bank enables: bit = board x 4 + bank, set = enabled "
+                 "(factory FF). On each board, S3 switch 4 is bank 0 and switch 1 is bank 3. "
+                 "A switched-off bank answers nothing";
+        x.kind = Kind::Int;
+        x.radix = 16;
+        x.min = 0;
+        x.max = 0xFF;
+        x.get = [this] { return Value::ofInt(bankEnable_); };
+        x.set = [this](const Value& v, std::string& err) {
+            if (v.i() != 0xFF && card_ != Card::Expandoram3) {
+                err = "bank_enable is an expandoram3 switch";
+                return false;
+            }
+            bankEnable_ = (uint8_t)v.i();
+            if (card_ == Card::Expandoram3) selectEram3Page(latch_ & 0x0F);
+            return true;
+        };
+        p.push_back(std::move(x));
+    }
+    {
+        Property x;
         x.name = "ram";
         x.help = "total board RAM in KB. Sets the bank count from the current partition: "
                  "with ex48, 256 -> 5 banks; with none (whole plane), 256 -> 4 banks of "
-                 "64K. The real ExpandoRAM II is 64K (16K chips) or 256K (64K chips)";
+                 "64K. The real ExpandoRAM II is 64K (16K chips) or 256K (64K chips). "
+                 "expandoram3: 256 (one board) or 512 (two boards)";
         x.kind = Kind::Int;
         x.min = 1;
         x.max = 640;                       // 10 whole-64K planes; the setter card-caps it
         x.get = [this] {
+            if (card_ == Card::Expandoram3) return Value::ofInt(eram3Boards_ * 256);
             uint32_t bytes = partitionCommonSize() + (uint32_t)banks() * partitionBankedSize();
             return Value::ofInt((int)(bytes / 1024));
         };
         x.set = [this](const Value& v, std::string& err) {
             long long kb = v.i();
+            if (card_ == Card::Expandoram3) {
+                if (kb != 256 && kb != 512) {
+                    err = "the ExpandoRAM III is 256K per board: ram is 256 (one board) "
+                          "or 512 (two boards)";
+                    return false;
+                }
+                eram3Boards_ = (int)(kb / 256);
+                rebuildSegments();
+                return true;
+            }
             if (card_ == Card::Expandoram2 && kb > 256) {
                 err = "the ExpandoRAM II board is at most 256K (64K chips in four banks)";
                 return false;
@@ -550,6 +764,17 @@ std::vector<Property> MemBankBoard::properties() {
                  "port. Read-only here";
         x.kind = Kind::Str;
         x.get = [this] {
+            if (card_ == Card::Expandoram3) {
+                bool page = false, common = false;
+                for (const Segment& sg : segs_) {
+                    if (!sg.enabled) continue;
+                    if (sg.common) common = true; else page = true;
+                }
+                char buf[48];
+                std::snprintf(buf, sizeof buf, "page %X%s%s", latch_ & 0x0F,
+                              page ? "" : " (no RAM)", common ? " + common" : "");
+                return Value::ofStr(buf);
+            }
             std::string s;
             for (size_t i = 0; i < segs_.size(); ++i)
                 if (!segs_[i].common && segs_[i].enabled) {
@@ -599,7 +824,12 @@ std::vector<MapEntry> MemBankBoard::memMap() const {
         e.lo = segs_[i].lo;
         e.hi = segs_[i].hi;
         e.what = "ram";
-        if (segs_[i].common)
+        if (card_ == Card::Expandoram3) {
+            const Segment& s = segs_[i];
+            e.note = (s.common ? std::string("common") : "page " + std::to_string(s.key)) +
+                     ", board " + std::to_string(s.bank / 4) + " bank " +
+                     std::to_string(s.bank % 4) + (s.enabled ? " (live)" : "");
+        } else if (segs_[i].common)
             e.note = "common (always live)";
         else
             e.note = "bank " + std::to_string(i) + (segs_[i].enabled ? " (live)" : "");
@@ -615,6 +845,7 @@ std::vector<MapEntry> MemBankBoard::ioMap() const {
     const char* how = card_ == Card::Vector      ? "one-hot select"
                       : card_ == Card::Cromemco  ? "8-bit bank mask"
                       : card_ == Card::Northstar ? "on/off + one-hot toggle"
+                      : card_ == Card::Expandoram3 ? "page select, low nibble, PROM map"
                                                  : "page select (approx)";
     e.note = std::string("bank select (") + cardName(card_) + ", " + how + ")";
     return {e};
@@ -622,6 +853,20 @@ std::vector<MapEntry> MemBankBoard::ioMap() const {
 
 std::vector<std::string> MemBankBoard::statusLines() const {
     std::vector<std::string> out;
+    if (card_ == Card::Expandoram3) {
+        char buf[96];
+        std::snprintf(buf, sizeof buf, "config %s  ram %dK  page %X  bank_enable %02X",
+                      config_ == Config::Cpm ? "cpm" : "oasis", eram3Boards_ * 256,
+                      latch_ & 0x0F, bankEnable_);
+        out.push_back(buf);
+        for (const Segment& s : segs_) {
+            std::snprintf(buf, sizeof buf, "%-7s  %04X-%04X  board %d bank %d  %s",
+                          s.common ? "common" : ("page " + std::to_string(s.key)).c_str(),
+                          s.lo, s.hi, s.bank / 4, s.bank % 4, s.enabled ? "live" : "off");
+            out.push_back(buf);
+        }
+        return out;
+    }
     if (partition_ != Partition::None) {
         char buf[96];
         std::snprintf(buf, sizeof buf, "partition %s  ram %dK", partitionName(partition_),

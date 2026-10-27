@@ -66,7 +66,7 @@ namespace altair {
 std::vector<BoardType> boardTypes() {
     return {
         {"memory", "RAM/ROM board: plain, unbanked memory regions", "RAM/ROM board: a list of regions and PHANTOM* -- plain, unbanked memory (bank switching is its own board, `bankmem`)"},
-        {"bankmem", "Bank-switched RAM (Vector, Cromemco, North Star, ExpandoRAM)", "S-100 bank-switched RAM. One card, four decoders (card=vector|cromemco64kz|northstar|expandoram2): a write-only select port swaps which RAM plane(s) drive the bus. Each card owns its own decode -- one-hot select (Vector 40), 8-bit bank mask (Cromemco 40), on/off+one-hot toggle (North Star C0), or PROM page-select (ExpandoRAM II FF, approximated)"},
+        {"bankmem", "Bank-switched RAM (Vector, Cromemco, North Star, ExpandoRAM)", "S-100 bank-switched RAM. One card, five decoders (card=vector|cromemco64kz|northstar|expandoram2|expandoram3): a write-only select port swaps which RAM plane(s) drive the bus. Each card owns its own decode -- one-hot select (Vector 40), 8-bit bank mask (Cromemco 40), on/off+one-hot toggle (North Star C0), PROM page-select (ExpandoRAM II FF, approximated), or the ExpandoRAM III PROM map (FF, low nibble)"},
         {"8080", "MITS 88-CPU: 8080A CPU board", "MITS 88-CPU: an 8080A CPU board. Decodes nothing -- it drives the bus"},
         {"z80", "Generic Z80 CPU board", "Generic Z80 CPU board. Decodes nothing -- it drives the bus. The 88-CPU's twin, with a Z80 core"},
         {"8085", "Generic 8085 CPU board", "Generic 8085 CPU board. Decodes nothing -- it drives the bus. The 88-CPU's twin, with an 8085 core (RIM/SIM + TRAP/RST 5.5/6.5/7.5)"},
