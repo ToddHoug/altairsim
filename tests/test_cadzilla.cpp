@@ -98,7 +98,7 @@ struct Rig {
         mode_reg(interleaved ? 0x04 : 0x00);
         const uint32_t org = (uint32_t)(md.height - 1) * (uint32_t)mw;
         cmd(0x0400, {(uint16_t)(0x4000 | ((org >> 12) & 0xFF)), (uint16_t)((org & 0xFFF) << 4)});
-        cmd(0x1800, {2, 0xFFFF});                             // pattern row 0 all ones
+        cmd(0x1800, {1, 0xFFFF});                             // pattern row 0 all ones
         cmd(0x0806, {0x0000});                                // PRC: PSX = PSY = 0
         cmd(0x0807, {0x00F0});                                // PEX = 15, PEY = 0
         cmd(0x0805, {0x0000});                                // PPX = PPY = 0

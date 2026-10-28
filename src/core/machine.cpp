@@ -227,7 +227,8 @@ constexpr char     kMagic[8]     = {'A', 'L', 'T', 'R', 'S', 'N', 'P', '1'};
 // 3: the `sbc` board gained its auto-start latch and the onboard 1K RAM in its state.
 // 4: the `ss1` 8253 keeps each counter's phase in pin-49 ticks, not its load T-state.
 // 5: the `cadzilla` board gained its overlay SRAM in its state.
-constexpr uint32_t kFormatVersion = 5;
+// 6: the `cadzilla` ACRTC keeps the Pr06/Pr0C/Pr0D bits that RPR reads back.
+constexpr uint32_t kFormatVersion = 6;
 
 // The format in which each board's state last changed in a way that a length check cannot
 // see. RESTORE does not trust such a board's section in an older file; the board starts at
@@ -238,7 +239,7 @@ uint32_t stateSince(const std::string& type) {
     static const struct {
         const char* type;
         uint32_t    since;
-    } kRows[] = {{"acr", 2}, {"sol", 2}, {"sbc", 3}, {"ss1", 4}, {"cadzilla", 5}};
+    } kRows[] = {{"acr", 2}, {"sol", 2}, {"sbc", 3}, {"ss1", 4}, {"cadzilla", 6}};
     for (const auto& row : kRows)
         if (type == row.type) return row.since;
     return 1;

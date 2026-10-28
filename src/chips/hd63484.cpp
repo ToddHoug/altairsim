@@ -97,6 +97,7 @@ void Hd63484::power() {
     xmin_ = ymin_ = xmax_ = ymax_ = 0;
     rwp_   = 0;
     rwpDn_ = 0;
+    prc6Extra_ = rwpHiExtra_ = rwpLoExtra_ = 0;
     orgDpa_ = 0;
     orgDpd_ = 0;
     orgDn_  = 0;
@@ -362,6 +363,8 @@ void Hd63484::commandWord(uint16_t w) {
         return;
     }
 
+    // OMR STR = 0 does not hold a command back: the real chip runs a CLR to its end with STR
+    // clear, although the manual says drawing halts. So nothing here looks at STR.
     if (!inCommand_) {
         cmd_ = w;
         params_.clear();
@@ -381,8 +384,8 @@ void Hd63484::commandWord(uint16_t w) {
     params_.push_back(w);
     if (params_.size() == 1) {
         uint16_t top = (uint16_t)(cmd_ & 0xFF00);
-        if ((cmd_ & ~0x000F) == 0x1800)        // WPTN: in 8-bit mode n counts BYTES (manual WPTN-1)
-            paramsWanted_ = 1 + (int)(w / 2);
+        if ((cmd_ & ~0x000F) == 0x1800)        // WPTN: n counts WORDS, on the 8-bit bus too --
+            paramsWanted_ = 1 + (int)w;        // the real chip and WPTN-2's example; WPTN-1's "x 2" is wrong
         else if (top == 0x9800 || top == 0x9C00 || top == 0xA000 || top == 0xA400)
             paramsWanted_ = 1 + 2 * (int)w;    // polyline/polygon: n points
     }
@@ -444,6 +447,7 @@ void Hd63484::execute() {
             break;
         case 0x06:
             psy_ = (uint8_t)(d >> 12); psx_ = (uint8_t)((d >> 4) & 0xF);
+            prc6Extra_ = (uint16_t)(d & 0x0F0F);
             break;
         case 0x07:
             pey_ = (uint8_t)(d >> 12); pzy_ = (uint8_t)((d >> 8) & 0xF);
@@ -456,9 +460,11 @@ void Hd63484::execute() {
         case 0x0C:                             // RWP high: DN and the top 8 address bits
             rwpDn_ = (uint8_t)(d >> 14);
             rwp_   = (rwp_ & 0x00FFF) | ((uint32_t)(d & 0xFF) << 12);
+            rwpHiExtra_ = (uint16_t)(d & 0x3F00);
             break;
         case 0x0D:                             // RWP low: the bottom 12 address bits
             rwp_ = (rwp_ & 0xFF000) | (uint32_t)(d >> 4);
+            rwpLoExtra_ = (uint16_t)(d & 0x000F);
             break;
         default:                               // Pr0E/0F undefined, Pr10-13 read-only
             commandError();
@@ -477,14 +483,14 @@ void Hd63484::execute() {
         case 0x03: v = edg_; break;
         case 0x04: v = mask_; break;
         case 0x05: v = (uint16_t)((ppy_ << 12) | (pzcy_ << 8) | (ppx_ << 4) | pzcx_); break;
-        case 0x06: v = (uint16_t)((psy_ << 12) | (psx_ << 4)); break;
+        case 0x06: v = (uint16_t)((psy_ << 12) | (psx_ << 4) | prc6Extra_); break;
         case 0x07: v = (uint16_t)((pey_ << 12) | (pzy_ << 8) | (pex_ << 4) | pzx_); break;
         case 0x08: v = (uint16_t)xmin_; break;
         case 0x09: v = (uint16_t)ymin_; break;
         case 0x0A: v = (uint16_t)xmax_; break;
         case 0x0B: v = (uint16_t)ymax_; break;
-        case 0x0C: v = (uint16_t)((rwpDn_ << 14) | ((rwp() >> 12) & 0xFF)); break;
-        case 0x0D: v = (uint16_t)((rwp() & 0xFFF) << 4); break;
+        case 0x0C: v = (uint16_t)((rwpDn_ << 14) | rwpHiExtra_ | ((rwp() >> 12) & 0xFF)); break;
+        case 0x0D: v = (uint16_t)(((rwp() & 0xFFF) << 4) | rwpLoExtra_); break;
         case 0x10: case 0x11: {                // DP: where CP is, physically
             uint32_t addr = 0;
             int      shift = 0;
@@ -1517,14 +1523,14 @@ uint16_t Hd63484::param(uint8_t rn) const {
     case 0x03: return edg_;
     case 0x04: return mask_;
     case 0x05: return (uint16_t)((ppy_ << 12) | (pzcy_ << 8) | (ppx_ << 4) | pzcx_);
-    case 0x06: return (uint16_t)((psy_ << 12) | (psx_ << 4));
+    case 0x06: return (uint16_t)((psy_ << 12) | (psx_ << 4) | prc6Extra_);
     case 0x07: return (uint16_t)((pey_ << 12) | (pzy_ << 8) | (pex_ << 4) | pzx_);
     case 0x08: return (uint16_t)xmin_;
     case 0x09: return (uint16_t)ymin_;
     case 0x0A: return (uint16_t)xmax_;
     case 0x0B: return (uint16_t)ymax_;
-    case 0x0C: return (uint16_t)((rwpDn_ << 14) | ((rwp() >> 12) & 0xFF));
-    case 0x0D: return (uint16_t)((rwp() & 0xFFF) << 4);
+    case 0x0C: return (uint16_t)((rwpDn_ << 14) | rwpHiExtra_ | ((rwp() >> 12) & 0xFF));
+    case 0x0D: return (uint16_t)(((rwp() & 0xFFF) << 4) | rwpLoExtra_);
     case 0x12: return (uint16_t)cpx_;
     case 0x13: return (uint16_t)cpy_;
     default: return 0;
@@ -1587,6 +1593,9 @@ void Hd63484::serialize(StateWriter& w) const {
     w.boolean(busy_);
     w.u64(busyUntil_);
     w.u8(pendingSr_);
+    w.u16(prc6Extra_);
+    w.u16(rwpHiExtra_);
+    w.u16(rwpLoExtra_);
 }
 
 void Hd63484::deserialize(StateReader& r) {
@@ -1641,6 +1650,9 @@ void Hd63484::deserialize(StateReader& r) {
     busy_      = r.boolean();
     busyUntil_ = r.u64();
     pendingSr_ = r.u8();
+    prc6Extra_  = (uint16_t)(r.u16() & 0x0F0F);
+    rwpHiExtra_ = (uint16_t)(r.u16() & 0x3F00);
+    rwpLoExtra_ = (uint16_t)(r.u16() & 0x000F);
     timelineStale_ = true;
     if (wfifoN_ < 0 || wfifoN_ > kFifoBytes) wfifoN_ = 0;
     if (rfifoN_ < 0 || rfifoN_ > kFifoBytes) rfifoN_ = 0;
