@@ -35,6 +35,21 @@ ExpandoRAM II's 32K and 48K PROM maps are for boards of 16K chips. With `ex48` o
 said that the PROM map could not be copied. The map is now read from a clean copy of the
 ExpandoRAM II manual.
 
+**Two CADzilla ACRTC command errors are corrected.** These were found on two real boards.
+
+- WPTN read its count *n* as a count of bytes, as the HD63484 manual says on page WPTN-1. The
+  real chip reads *n* as a count of words. A guest that sent the correct count loaded only half
+  of its pattern words. The ACRTC read the other half as commands. Now `WPTN` with *n* = 1 and
+  one word ends after that word, as on the board.
+- RPR returned 0 in some bits of Pr06, Pr0C and Pr0D, as Figure 5.25 of the manual shows. The
+  real chip returns all 16 bits that the guest wrote. RPR now returns them also.
+
+The test disk of drawdemo now sends the count of words. The pictures that drawdemo draws do not
+change.
+
+**Snapshots are now version 6.** A snapshot now holds the new ACRTC register bits of a CADzilla
+board. `RESTORE` reads a snapshot from 1.3.5, and the CADzilla board in it starts as at power-on.
+
 **The manual now says when the printer's idle flush runs and what ends a job with `?idle=0`.**
 A job's idle timer runs on the host's clock, so the job prints `?idle=N` seconds after the
 last byte even while the machine is stopped at the `altairsim>` prompt. In a session run

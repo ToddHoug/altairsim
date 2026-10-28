@@ -34,7 +34,7 @@ out=$ex/cpm22b23-56k-drawdemo.dsk
 
 # The SHA-256 of the DRAWDEMO.COM that LOAD makes from DRAWDEMO.HEX. If the program is rebuilt,
 # commit the new .ASM and .HEX and change this line with them.
-EXPECT=2c31535afb916a859351cfb71bc62e5a87b383fb78842600dc9a78f1b18dad37
+EXPECT=4088fa67d45d339c76363b118b20b665ed3d51afeb6407030f82e7865479fc67
 
 [ -x "$sim" ] || { echo "make-drawdemo-disk: no $sim -- build first." >&2; exit 1; }
 [ -f "$src" ] || { echo "make-drawdemo-disk: no $src" >&2; exit 1; }

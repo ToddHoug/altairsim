@@ -64,7 +64,7 @@ struct Rig {
         cmd(0x0400, {0x4000, (uint16_t)(kOrg << 4)});   // ORG: DN = 01 (base), DPA = $100, DPD = 0
         cmd(0x0801, {0xFFFF});        // WPR CL1 = all ones in every field
         cmd(0x0800, {0x0000});        // WPR CL0 = zero
-        cmd(0x1800, {4, 0xFFFF, 0xFFFF});   // WPTN pattern rows 0-1 all ones (n = 2 words x 2)
+        cmd(0x1800, {2, 0xFFFF, 0xFFFF});   // WPTN pattern rows 0-1 all ones (n = 2 words)
         cmd(0x0806, {0x0000});        // PRC: PSX = PSY = 0
         cmd(0x0807, {0x00F0});        // PRC: PEX = 15, PEY = 0, no zoom
         cmd(0x0805, {0x0000});        // PRC: PPX = PPY = 0
@@ -164,12 +164,52 @@ void test_hd63484() {
     SECTION("HD63484 -- WPTN/RPTN: the manual's example, $2314 $5713 at pattern address $B");
     {
         Rig g;
-        // 8-bit mode: n counts BYTES (manual WPTN-1), so two words is n = 4.
-        g.cmd(0x180B, {4, 0x2314, 0x5713});
+        // n counts WORDS, on the 8-bit bus too: WPTN-2 sends 180B 0002 2314 5713, and so does
+        // the real chip. WPTN-1's "n = words x 2" for the 8-bit interface is wrong.
+        g.cmd(0x180B, {2, 0x2314, 0x5713});
         CHECK(g.c.pattern(0xB) == 0x2314 && g.c.pattern(0xC) == 0x5713, "two pattern words landed at $B, $C");
         CHECK((g.sr() & 0x20) != 0, "CED after the last data word");
         g.cmd(0x1C0B, {2});                       // RPTN (PRA = $B) n = 2
         CHECK(g.readWord() == 0x2314 && g.readWord() == 0x5713, "read back in order, high byte first (manual RPTN-2)");
+    }
+
+    SECTION("HD63484 -- WPTN n = 1 takes one word, and the next word is a command (the real chip)");
+    {
+        Rig g;
+        g.cmd(0x1801, {1, 0x5555});               // WPTN (PRA = 1) n = 1, as on the board
+        CHECK((g.sr() & 0x20) != 0, "CED after the one data word");
+        CHECK(g.c.pattern(1) == 0x5555, "the word landed at pattern address 1");
+        g.cmd(0x0801, {0x1234});                  // WPR CL1: a command, not pattern data
+        CHECK(g.c.param(0x01) == 0x1234 && g.c.pattern(2) == 0, "the next word ran as a command");
+    }
+
+    SECTION("HD63484 -- RPR returns all 16 bits written to Pr06, Pr0C and Pr0D (the real chip)");
+    {
+        // Figure 5.25 marks Pr06 bits 11-8/3-0, Pr0C bits 13-8 and Pr0D bits 3-0 "always 0";
+        // on the board WPR then RPR returned 1234, FFFF, 7FFF and FFFF as written.
+        Rig g;
+        g.cmd(0x0806, {0x1234});
+        g.cmd(0x0C06);
+        CHECK(g.readWord() == 0x1234, "Pr06 = 1234 reads back as 1234");
+        g.cmd(0x080C, {0xFFFF});
+        g.cmd(0x0C0C);
+        CHECK(g.readWord() == 0xFFFF, "Pr0C = FFFF reads back as FFFF");
+        g.cmd(0x080D, {0x7FFF});
+        g.cmd(0x0C0D);
+        CHECK(g.readWord() == 0x7FFF, "Pr0D = 7FFF reads back as 7FFF");
+        g.cmd(0x080D, {0xFFFF});
+        g.cmd(0x0C0D);
+        CHECK(g.readWord() == 0xFFFF, "Pr0D = FFFF reads back as FFFF");
+        CHECK(g.c.param(0x06) == 0x1234 && g.c.param(0x0C) == 0xFFFF && g.c.param(0x0D) == 0xFFFF,
+              "and the debugger's view agrees");
+
+        // The drawing uses only the real fields: Pr0C/Pr0D = 3F00/056F is word $056.
+        g.cmd(0x080C, {0x3F00});                  // DN = 0, extra bits 13-8 set, RWPH = 00
+        g.cmd(0x080D, {0x056F});                  // RWPL = $056, extra bits 3-0 set
+        g.cmd(0x4800, {0xBEEF});                  // WT
+        CHECK(g.c.peekWord(0x56) == 0xBEEF, "WT lands at the RWP address, not moved by the extra bits");
+        // ASSUMPTION, not measured on the chip: an RWP increment leaves the extra bits alone.
+        CHECK(g.c.param(0x0D) == 0x057F && g.c.param(0x0C) == 0x3F00, "the increment moves only the address");
     }
 
     SECTION("HD63484 -- RWP, WT, RD, MOD: one word at a time, RWP incrementing");
@@ -266,7 +306,7 @@ void test_hd63484() {
     {
         Rig g;
         g.screen4bpp();
-        g.cmd(0x1800, {2, 0x0005});               // pattern row 0 = ...0101: bit 0 on, bit 1 off
+        g.cmd(0x1800, {1, 0x0005});               // pattern row 0 = ...0101: bit 0 on, bit 1 off
         g.cmd(0x0807, {0x0010});                  // PEX = 1: a two-bit pattern
         g.cmd(0x8800, {8, 0});                    // COL 00: bit 1 -> CL1 (F), bit 0 -> CL0 (0)
         CHECK(g.c.peekWord(Rig::kOrg) == 0x0F0F && g.c.peekWord(Rig::kOrg + 1) == 0x0F0F,
@@ -391,7 +431,7 @@ void test_hd63484() {
     {
         Rig g;
         g.screen4bpp();
-        g.cmd(0x1800, {2, 0x0005});               // row 0 = ...0101
+        g.cmd(0x1800, {1, 0x0005});               // row 0 = ...0101
         g.cmd(0x0807, {0x0010});                  // PEX = 1: a two-bit dash
         g.cmd(0x9800, {2, 3, 0, 3, 3});           // APLL (0,0)->(3,0)->(3,3)
         CHECK(g.nib(0, 0) == 0xF && g.nib(1, 0) == 0 && g.nib(2, 0) == 0xF, "first segment: on off on");
@@ -412,7 +452,7 @@ void test_hd63484() {
     {
         Rig g;
         g.screen4bpp();
-        g.cmd(0x1800, {2, 0x0005});
+        g.cmd(0x1800, {1, 0x0005});
         g.cmd(0x0807, {0x0011});                  // PEX = 1, PZX = 1: each bit twice
         g.cmd(0x8800, {8, 0});
         CHECK(g.c.peekWord(Rig::kOrg) == 0x00FF && g.c.peekWord(Rig::kOrg + 1) == 0x00FF,
@@ -429,7 +469,7 @@ void test_hd63484() {
     {
         Rig g;
         g.screen4bpp();
-        g.cmd(0x1800, {2, 0x0005});
+        g.cmd(0x1800, {1, 0x0005});
         g.cmd(0x0807, {0x0010});
         g.cmd(0x0800, {0xAAAA});                  // CL0 = A
         g.c.pokeWord(Rig::kOrg, 0x2222);
@@ -440,7 +480,7 @@ void test_hd63484() {
         h.screen4bpp();
         // Pattern RAM direct (manual 6.6.2, Figure 6.11(d)): words 0-3 are row 0 of the tile,
         // 4-7 row 1, each a color replicated across the word.
-        h.cmd(0x1800, {16, 0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888});
+        h.cmd(0x1800, {8, 0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888});
         h.cmd(0x0807, {0x1030});                  // PEX = 3, PEY = 1
         h.cmd(0x8818, {8, 0});                    // ALINE COL 11
         CHECK(h.c.peekWord(Rig::kOrg) == 0x4321 && h.c.peekWord(Rig::kOrg + 1) == 0x4321,
@@ -456,7 +496,7 @@ void test_hd63484() {
     {
         Rig g;
         g.screen4bpp();
-        g.cmd(0x1800, {4, 0x0005, 0x000A});       // row 0 = 0101, row 1 = 1010
+        g.cmd(0x1800, {2, 0x0005, 0x000A});       // row 0 = 0101, row 1 = 1010
         g.cmd(0x0807, {0x1030});                  // PEX = 3, PEY = 1
         g.cmd(0xC000, {3, 0});                    // one raster: row 0
         CHECK(g.c.peekWord(Rig::kOrg) == 0x0F0F, "first fill uses pattern row 0");
@@ -546,7 +586,7 @@ void test_hd63484() {
     SECTION("HD63484 -- a read bigger than the FIFO waits for room, and so does the command stream");
     {
         Rig g;
-        g.cmd(0x1800, {24, 0x100, 0x101, 0x102, 0x103, 0x104, 0x105, 0x106, 0x107, 0x108, 0x109, 0x10A, 0x10B});
+        g.cmd(0x1800, {12, 0x100, 0x101, 0x102, 0x103, 0x104, 0x105, 0x106, 0x107, 0x108, 0x109, 0x10A, 0x10B});
         g.cmd(0x1C00, {12});                      // RPTN n = 12 words
         CHECK(g.c.readFifoWords() == 8 && (g.sr() & 0x08) != 0, "8 words in, RFF");
         CHECK((g.sr() & 0x20) == 0, "CED clear: the command is still delivering");
@@ -651,7 +691,7 @@ void test_hd63484() {
     {
         Rig g;
         g.screen4bpp();
-        g.cmd(0x1800, {2, 0x0005});               // pattern row 0 = 0101
+        g.cmd(0x1800, {1, 0x0005});               // pattern row 0 = 0101
         g.cmd(0x0807, {0x0030});                  // PEX = 3, PEY = 0: a 4x1 pattern
         g.cmd(0xC000, {3, 1});                    // AFRCT to (3,1): 4 x 2 pixels
         CHECK(g.c.peekWord(Rig::kOrg) == 0x0F0F, "row 0: on off on off");
@@ -878,7 +918,7 @@ void test_hd63484() {
 
         Rig t;
         box(t);
-        t.cmd(0x1800, {2, 0x0005});               // pattern row 0 = 0101
+        t.cmd(0x1800, {1, 0x0005});               // pattern row 0 = 0101
         t.cmd(0x0807, {0x0010});                  // PEX = 1
         t.cmd(0x0800, {0xAAAA});                  // CL0 = A, CL1 = F
         t.cmd(0x0801, {0xFFFF});
@@ -916,7 +956,7 @@ void test_hd63484() {
         const auto bit = [&](int c, int r) { return (rows[r] >> c) & 1; };
         const auto rig = [&](Rig& g) {
             g.screen4bpp();
-            g.cmd(0x1800, {16, rows[0], rows[1], rows[2], rows[3], rows[4], rows[5], rows[6], rows[7]});
+            g.cmd(0x1800, {8, rows[0], rows[1], rows[2], rows[3], rows[4], rows[5], rows[6], rows[7]});
             g.cmd(0x0806, {0x0000});              // PS = (0,0)
             g.cmd(0x0807, {0x7050});              // PE = (5,7), no zoom
         };
@@ -972,7 +1012,7 @@ void test_hd63484() {
         const auto bit = [&](int c, int r) { return (rows[r] >> c) & 1; };
         const auto rig = [&](Rig& g) {
             g.screen4bpp();
-            g.cmd(0x1800, {16, rows[0], rows[1], rows[2], rows[3], rows[4], rows[5], rows[6], rows[7]});
+            g.cmd(0x1800, {8, rows[0], rows[1], rows[2], rows[3], rows[4], rows[5], rows[6], rows[7]});
             g.cmd(0x0806, {0x0000});
             g.cmd(0x0807, {0x7050});
         };
@@ -1150,7 +1190,7 @@ void test_hd63484() {
 
         Rig d;
         d.screen4bpp();
-        d.cmd(0x1800, {2, 0x0005});
+        d.cmd(0x1800, {1, 0x0005});
         d.cmd(0x0807, {0x0010});                  // PEX = 1: on, off, on, off...
         d.cmd(0x8000, {20, 8});
         d.cmd(0xA800, {7});
@@ -1330,6 +1370,9 @@ void test_hd63484() {
         g.cmd(0x9000, {3, 2});
         g.cmd(0x8000, {5, 6});
         g.reg(0x84, 0x0003);
+        g.cmd(0x0806, {0x1234});                  // bits the real chip keeps beyond Figure 5.25's
+        g.cmd(0x080C, {0x3F00});
+        g.cmd(0x080D, {0x000F});
         g.word(0x0400);                           // a command left half-issued
         g.word(0x0000);
 
@@ -1343,6 +1386,8 @@ void test_hd63484() {
         CHECK(d.cpx() == 5 && d.cpy() == 6, "and the current pointer");
         CHECK(d.reg(0x84) == 0x0003 && d.ccr() == 0x0200, "and the control registers");
         CHECK(d.param(1) == 0xFFFF && d.pattern(0) == 0xFFFF, "and the drawing parameters and pattern RAM");
+        CHECK(d.param(0x06) == 0x1234 && d.param(0x0C) == 0x3F00 && d.param(0x0D) == 0x000F,
+              "and the Pr06/Pr0C/Pr0D bits that RPR reads back");
         CHECK((d.status() & 0x20) == 0, "the half-issued ORG is still pending");
         d.write(false, 0);
         d.write(true, 0x00);
@@ -1361,7 +1406,7 @@ void test_hd63484() {
         };
         CHECK(cy(0x0400, {0, 0}) == 8, "ORG 8");
         CHECK(cy(0x0801, {0}) == 6 && cy(0x0C12, {}) == 6, "WPR 6, RPR 6");
-        CHECK(cy(0x1800, {4, 1, 2}) == 16, "WPTN 4n+8, n = the 2 data words");
+        CHECK(cy(0x1800, {2, 1, 2}) == 16, "WPTN 4n+8, n = the 2 data words");
         CHECK(cy(0x1C00, {3}) == 22, "RPTN 4n+10");
         CHECK(cy(0x2400, {0, 0}) == 62 && cy(0x2800, {0, 0}) == 34 && cy(0x2C01, {0, 0}) == 34,
               "DRD / DWT / DMOD: their constants (each word is charged as it moves)");

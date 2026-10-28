@@ -257,7 +257,7 @@ do not.
 | `$0400` | ORG | DPH, DPL | set the origin: screen number, word address, dot address; CP = (0,0) |
 | `$0800+RN` | WPR | D | write drawing-parameter register RN (CL0 `00`, CL1 `01`, CCMP `02`, EDG `03`, MASK `04`, PRC `05`–`07`, area `08`–`0B`, RWP `0C`–`0D`) |
 | `$0C00+RN` | RPR | — | read it into the read FIFO (DP `10`–`11` and CP `12`–`13` too); clears ARD |
-| `$1800+PRA` | WPTN | n, D1..Dn | write the pattern RAM from word PRA; **in 8-bit mode n counts bytes** |
+| `$1800+PRA` | WPTN | n, D1..Dn | write the pattern RAM from word PRA; **n counts words, in 8-bit mode also** |
 | `$1C00+PRA` | RPTN | n | read n pattern words into the read FIFO |
 | `$4400` / `$4800` / `$4C00+MM` | RD / WT / MOD | — / D / D | one word at RWP; RWP++ (MOD under MASK) |
 | `$5800` / `$5C00+MM` | CLR / SCLR | D, AX, AY | fill (AX+1)×(AY+1) words from RWP; RWPe = RWP's column on the last raster |
@@ -353,7 +353,8 @@ and the same three for *inside*).
 | A plane fill (AFRCT/RFRCT) starts **every row** from the PPX/PZCX it found and steps PPY once per row; it leaves PPY on the row after its last, so a fill drawn at the new CP continues the tiling. The row restart is inferred from PTN-4, not stated | stacked fills show a seam, or a tile skewed one bit per row |
 | AREA 001/101 leave **CP where the drawing crossed** the area boundary, not at Pe ("drawing is executed as long as the CP resides in the defined area", 6.6.3) | a driver that resumes from CP after a hit starts from the wrong place |
 | RWPe after CLR/DRD/DWT is RWP's column on the **last raster** (CLR-4: `$56`, AY = −6, MW `$10` → `$B6`) — MAME leaves it one raster further | a driver that clears in strips by chaining CLRs skips or overlaps a raster |
-| In 8-bit mode WPTN's *n* counts **bytes**, so it is twice the word count (WPTN-1) | half the pattern loads and the other half is parsed as the next command |
+| WPTN's *n* counts **words**, in 8-bit mode also. The real chip does this, and so does the WPTN-2 example (`180B 0002 2314 5713`). The note on WPTN-1 that *n* is the word count × 2 for the 8-bit interface is wrong | with *n* = 2 × the word count, WPTN takes the words of the next commands as pattern data |
+| RPR returns **all 16 bits** written to Pr06, Pr0C and Pr0D. Figure 5.25 shows Pr06 bits 11-8 and 3-0, Pr0C bits 13-8 and Pr0D bits 3-0 as "always 0", but the real chip keeps them. The drawing does not use them. An RWP increment is assumed to leave them as they are (not measured) | a driver that reads a register back to check it gets a value different from what it wrote |
 | A DRD "goes into an indefinite wait state after the last transfer" — CED never sets; ABT ends it (manual 6.5) | a driver waiting on CED after a DRD hangs on real silicon and would not here |
 | A read that does not fit the 8-word read FIFO (RPTN *n* > 8, RD or RPR onto a full FIFO) **waits for room** (RD-1), and the commands behind it wait in the write FIFO; CED sets when its last word is in | an RPTN of the whole pattern RAM returns half of it, and the command after it runs early |
 | **RWP is one register**; DN rides in its high word, so rewriting Pr0C to change screens keeps RWPL (5.10.2.8) | a driver that selects the screen after setting the address transfers to address 0 |

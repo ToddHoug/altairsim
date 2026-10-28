@@ -444,6 +444,10 @@ private:
     int16_t  xmin_ = 0, ymin_ = 0, xmax_ = 0, ymax_ = 0;
     uint32_t rwp_ = 0;              // ONE register; DN rides in its high word (manual 5.10.2.8)
     uint8_t  rwpDn_ = 0;
+    // The bits Figure 5.25 marks "always 0" in Pr06 (11-8, 3-0), Pr0C (13-8) and Pr0D (3-0).
+    // The real chip keeps them: RPR returns all 16 bits as written. Nothing draws with them,
+    // and an RWP increment is ASSUMED to leave them alone (not measured on the chip).
+    uint16_t prc6Extra_ = 0, rwpHiExtra_ = 0, rwpLoExtra_ = 0;
     uint32_t orgDpa_ = 0;           // ORG: the origin's word address...
     uint8_t  orgDpd_ = 0;           // ...and dot address
     uint8_t  orgDn_ = 0;            // ...on which screen
